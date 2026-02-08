@@ -175,7 +175,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
               <div key={ex.id} className="bg-[#1a1721] border border-white/5 p-5 rounded-[32px] flex justify-between items-center group hover:border-white/20 transition-all shadow-xl">
                 <div className="flex gap-4">
                   <div className="w-14 h-14 bg-[#0f0d15] rounded-2xl flex items-center justify-center border border-white/10 overflow-hidden">
-                     <img src={ex.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${ex.name}`} className="w-full h-full object-cover p-1 opacity-40 group-hover:opacity-80 transition-opacity" />
+                     <img src={ex.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${ex.name}`} className="w-full h-full object-cover p-1 opacity-40 group-hover:opacity-80 transition-opacity" alt={ex.name} />
                   </div>
                   <div className="flex flex-col justify-center">
                     <div className="flex items-center gap-2">
@@ -332,7 +332,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Bild / GIF URL</label>
                   <div className="flex gap-4 items-center">
                     <div className="flex-1 relative"><Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" /><input type="text" value={editingEx.imageUrl || ''} onChange={(e) => setEditingEx({ ...editingEx, imageUrl: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 pl-12 font-bold text-xs outline-none focus:border-accent-pink" placeholder="https://..." /></div>
-                    {editingEx.imageUrl && <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 bg-black/50"><img src={editingEx.imageUrl} className="w-full h-full object-cover" /></div>}
+                    {editingEx.imageUrl && <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 bg-black/50"><img src={editingEx.imageUrl} className="w-full h-full object-cover" alt="Preview"/></div>}
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -362,7 +362,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
           <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
             <div className="w-full h-72 bg-black/50 relative">
               {infoExercise.imageUrl ? (
-                  <img src={infoExercise.imageUrl} className="w-full h-full object-cover" />
+                  <img src={infoExercise.imageUrl} className="w-full h-full object-cover" alt={infoExercise.name}/>
               ) : (
                   <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30"><Dumbbell size={64} /><span className="font-black uppercase tracking-widest text-xs">Ingen bild tillgänglig</span></div>
               )}
@@ -396,6 +396,16 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
                         </div>
                     </div>
                   )}
+                  {infoExercise.equipment && infoExercise.equipment.length > 0 && (
+                    <div>
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-3">Utrustning</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {infoExercise.equipment.map(eq => (
+                                <span key={eq} className="px-3 py-1.5 border border-white/10 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-tight text-white/80">{eq}</span>
+                            ))}
+                        </div>
+                    </div>
+                  )}
               </div>
               {infoExercise.alternativeExIds && infoExercise.alternativeExIds.length > 0 && (
                   <div className="pt-6 border-t border-white/5">
@@ -405,7 +415,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
                               const altEx = allExercises.find(e => e.id === altId);
                               return altEx ? (
                                   <div key={altId} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden"><img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50"/></div>
+                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden"><img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50" alt={altEx.name}/></div>
                                       <span className="text-xs font-black uppercase italic tracking-tight">{altEx.name}</span>
                                   </div>
                               ) : null;

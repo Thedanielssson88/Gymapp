@@ -13,8 +13,8 @@ export const MeasurementsView: React.FC<MeasurementsViewProps> = ({ profile, onU
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<UserProfile>(profile);
 
-  const handleSave = () => {
-    storage.setUserProfile(formData);
+  const handleSave = async () => {
+    await storage.setUserProfile(formData);
     onUpdate();
     setIsModalOpen(false);
   };

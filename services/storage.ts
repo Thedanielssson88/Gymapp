@@ -1,7 +1,7 @@
 
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, GoalTarget, WorkoutRoutine, Goal } from '../types';
-import { EXERCISE_DATABASE, INITIAL_ZONES, INITIAL_GOAL_TARGETS } from '../constants';
+import { EXERCISE_DATABASE, INITIAL_GOAL_TARGETS } from '../constants';
 
 const DEFAULT_PROFILE: UserProfile = {
   name: "Atlet",
@@ -22,7 +22,6 @@ export const storage = {
     const exCount = await db.exercises.count();
     if (exCount === 0) {
       await db.exercises.bulkAdd(EXERCISE_DATABASE);
-      await db.zones.bulkAdd(INITIAL_ZONES);
       await db.goalTargets.bulkAdd(INITIAL_GOAL_TARGETS);
     }
     

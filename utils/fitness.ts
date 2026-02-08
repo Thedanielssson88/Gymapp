@@ -91,6 +91,31 @@ export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]
 };
 
 /**
+ * Hämtar de senaste passen där en specifik övning utfördes.
+ */
+export const getExerciseHistory = (exerciseId: string, allHistory: WorkoutSession[], limit = 5) => {
+  // 1. Filtrera ut pass som innehåller övningen
+  const relevantSessions = allHistory.filter(session => 
+    session.exercises.some(e => e.exerciseId === exerciseId)
+  );
+
+  // 2. Sortera nyast först
+  relevantSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // 3. Returnera de X senaste med detaljer om just den övningen
+  return relevantSessions.slice(0, limit).map(session => {
+    const exData = session.exercises.find(e => e.exerciseId === exerciseId);
+    return {
+      date: session.date,
+      sets: exData?.sets || [],
+      // Vi kan behöva sessionens namn eller rpe också om vi vill visa det
+      sessionName: session.name
+    };
+  });
+};
+
+
+/**
  * 2. PROGRESSION LOGIC
  * Skapar nya set baserat på historik, med valfri överbelastning.
  */
@@ -136,10 +161,7 @@ export const generateWorkoutSession = (
     // Måste ha utrustning som finns i zonen
     ex.equipment.every(eq => zone.inventory.includes(eq)) &&
     // Måste träffa någon av målmusklerna (Primär eller Sekundär)
-    (
-       ex.primaryMuscles?.some(m => targetMuscles.includes(m)) || 
-       ex.muscleGroups.some(m => targetMuscles.includes(m))
-    )
+    ex.muscleGroups.some(m => targetMuscles.includes(m))
   );
 
   // Strategi: 1 Tung Basövning, 2-3 Komplement, 1-2 Isolering

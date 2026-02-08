@@ -12,6 +12,7 @@ import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
 import { calculateMuscleRecovery } from './utils/recovery';
 import { RecoveryMap } from './components/RecoveryMap';
+import { OnboardingWizard } from './components/OnboardingWizard';
 import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight } from 'lucide-react';
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
 
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r] = await Promise.all([
@@ -42,6 +44,13 @@ export default function App() {
       storage.getGoalTargets(),
       storage.getRoutines(),
     ]);
+
+    if (z.length === 0 || p.name === "Atlet") {
+       setShowOnboarding(true);
+    } else {
+       setShowOnboarding(false);
+    }
+
     setUser(p);
     setZones(z);
     setHistory(h);
@@ -73,8 +82,8 @@ export default function App() {
 
   const handleCancelWorkout = async () => {
     await storage.setActiveSession(null);
-    await refreshData();
-    setActiveTab('body');
+    setCurrentSession(null); // Rensa state direkt för omedelbar UI-uppdatering
+    setActiveTab('workout');
   };
 
   const handleStartWorkout = async (exercises: PlannedExercise[], name: string) => {
@@ -154,7 +163,15 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#0f0d15] selection:bg-accent-pink selection:text-white relative overflow-x-hidden">
+      {showOnboarding && isReady && (
+        <OnboardingWizard onComplete={() => {
+           setShowOnboarding(false);
+           refreshData();
+        }} />
+      )}
+
       {renderContent()}
+      
       {showStartMenu && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 flex flex-col overflow-y-auto scrollbar-hide">
           <header className="flex justify-between items-center mb-10"><h3 className="text-3xl font-black uppercase italic tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3><button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim p-2"><X size={32}/></button></header>

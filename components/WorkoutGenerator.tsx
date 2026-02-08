@@ -40,7 +40,7 @@ export const WorkoutGenerator: React.FC<WorkoutGeneratorProps> = ({ activeZone, 
               onClick={() => toggleMuscle(m)}
               className={`p-6 rounded-[24px] border text-left transition-all ${
                 selectedMuscles.includes(m)
-                  ? 'bg-accent-blue text-black border-accent-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
+                  ? 'bg-accent-blue text-white border-accent-blue shadow-[0_0_15px_rgba(59,130,246,0.3)]'
                   : 'bg-white/5 text-text-dim border-white/5 hover:bg-white/10'
               }`}
             >
@@ -54,7 +54,7 @@ export const WorkoutGenerator: React.FC<WorkoutGeneratorProps> = ({ activeZone, 
          <button
            disabled={selectedMuscles.length === 0}
            onClick={() => onGenerate(selectedMuscles)}
-           className="w-full py-5 bg-accent-blue disabled:opacity-50 disabled:grayscale text-black rounded-[24px] font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"
+           className="w-full py-5 bg-accent-blue disabled:opacity-50 disabled:grayscale text-white rounded-[24px] font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"
          >
            <Zap size={24} fill="currentColor" /> Generera Pass
          </button>

@@ -30,14 +30,43 @@ export type MuscleGroup =
   | 'Nacke';
 
 export enum Equipment {
+  // --- FRIA VIKTER & STÄNGER ---
   BARBELL = 'Skivstång',
+  EZ_BAR = 'EZ-stång',
+  TRAP_BAR = 'Trap-bar / Hex-bar',
   DUMBBELL = 'Hantlar',
   KETTLEBELL = 'Kettlebell',
+  PLATE = 'Viktskiva',
+
+  // --- MASKINER (BEN) ---
+  LEG_PRESS = 'Benpress',
+  HACK_SQUAT = 'Hack Squat',
+  LEG_EXTENSION = 'Benspark',
+  LEG_CURL = 'Lårcurl',
+  CALF_RAISE = 'Vadpress',
+  SMITH_MACHINE = 'Smith-maskin',
+
+  // --- MASKINER (ÖVERKROPP) ---
   CABLES = 'Kabelmaskin',
-  BANDS = 'Gummiband',
+  LAT_PULLDOWN = 'Latsdrag',
+  SEATED_ROW = 'Sittande Rodd',
+  CHEST_PRESS = 'Bröstpress',
+  SHOULDER_PRESS = 'Axelpress',
+  PEC_DECK = 'Pec Deck / Flyes',
+  ASSISTED_MACHINE = 'Assisterad Chins/Dips',
+
+  // --- KROPPSVIKT & FUNKTIONELLT ---
   BODYWEIGHT = 'Kroppsvikt',
-  MACHINES = 'Maskiner',
-  PULLUP_BAR = 'Räckhävsstång'
+  PULLUP_BAR = 'Räckhävsstång',
+  DIP_STATION = 'Dipsställning',
+  TRX = 'TRX / Ringar',
+  BANDS = 'Gummiband',
+  MEDICINE_BALL = 'Medicinboll',
+  BOX = 'Box / Låda',
+  BENCH = 'Träningsbänk',
+
+  // --- LEGACY / ÖVRIGT ---
+  MACHINES = 'Maskiner (Övriga)'
 }
 
 export enum Goal {
@@ -85,7 +114,7 @@ export interface BodyMeasurements {
 }
 
 export interface UserProfile {
-  id?: string; // Alltid 'current' i DB
+  id?: string;
   name: string;
   weight: number;
   height: number;
