@@ -22,13 +22,12 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
   const userProfile = storage.getUserProfile();
   const now = new Date().getTime();
 
-  // Sortera historik för att processa äldsta först så utmattning ackumuleras rätt
   const sortedHistory = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   sortedHistory.forEach(session => {
     const sessionTime = new Date(session.date).getTime();
     const hoursSince = (now - sessionTime) / (1000 * 60 * 60);
-    if (hoursSince > 168) return; // 7 dagars fönster
+    if (hoursSince > 168) return;
 
     session.exercises.forEach(plannedEx => {
       const exData = allExercises.find(e => e.id === plannedEx.exerciseId);
@@ -37,20 +36,16 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
       const completedSets = plannedEx.sets.filter(s => s.completed);
       if (completedSets.length === 0) return;
 
-      // Beräkna Biomekanisk Volym
       const totalEffectiveVolume = completedSets.reduce((sum, s) => {
         const bodyweightLoad = userProfile.weight * (exData.bodyweightCoefficient || 0);
         const effectiveLoad = bodyweightLoad + s.weight;
         return sum + (effectiveLoad * s.reps);
       }, 0);
 
-      // Aggressivare utmattning: (Volym / 250 + 10 bas) * svårighet
-      // Detta gör att även kroppsviktsträning (låg volym i KG) ger utslag pga +10 bas per set-ish logic här
       const fatiguePerSet = (totalEffectiveVolume / 250 + (completedSets.length * 2)) * exData.difficultyMultiplier;
 
       exData.muscleGroups.forEach(muscle => {
         if (status[muscle] !== undefined) {
-          // Linjär återhämtning över 72 timmar
           const recoveryRate = hoursSince / MUSCLE_RECOVERY_HOURS;
           const remainingFatigue = fatiguePerSet * Math.max(0, 1 - recoveryRate);
           
@@ -65,9 +60,17 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
 
 export const getRecoveryColor = (score: number, isSelected?: boolean) => {
   if (isSelected) return '#ff2d55'; 
-  if (score >= 95) return 'rgba(255, 255, 255, 0.05)'; // Helt fräsch
-  if (score >= 80) return '#ffd6dd'; // Minimalt påverkad
-  if (score >= 65) return '#ff8095'; // Trött (Rosa)
-  if (score >= 45) return '#ff2d55'; // Mycket trött (Röd)
-  return '#990022'; // Helt slut (Mörkröd)
+  if (score >= 95) return 'rgba(255, 255, 255, 0.2)'; 
+  if (score >= 80) return '#ffd6dd'; 
+  if (score >= 65) return '#ff8095'; 
+  if (score >= 45) return '#ff2d55'; 
+  return '#990022'; 
+};
+
+export const getRecoveryStatus = (score: number): string => {
+  if (score >= 95) return 'Fräsch';
+  if (score >= 80) return 'OK';
+  if (score >= 65) return 'Trött';
+  if (score >= 45) return 'Sliten';
+  return 'Maximal utmattning';
 };

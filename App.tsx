@@ -61,7 +61,8 @@ export default function App() {
   const handleCancelWorkout = () => {
     setCurrentSession(null);
     storage.setActiveSession(null);
-    setActiveTab('body');
+    setActiveTab('workout');
+    refreshData();
   };
 
   const handleStartWorkout = (exercises: PlannedExercise[], name: string) => {
@@ -172,7 +173,7 @@ export default function App() {
           <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
           <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
           <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
-          <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
+          <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log'} icon={<Calendar size={24} />} label="Logg" />
         </div>
       </nav>
     </div>
@@ -180,4 +181,8 @@ export default function App() {
 }
 
 const NavButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (
-  <button onClick={onClick} className={`flex flex
+  <button onClick={onClick} className={`flex flex-col items-center gap-2 transition-all flex-1 ${active ? 'text-white' : 'text-text-dim'}`}>
+    <div className={`p-1.5 transition-all ${active ? 'text-accent-pink scale-110 drop-shadow-[0_0_10px_rgba(255,45,85,0.5)]' : ''}`}>{icon}</div>
+    <span className="text-[7px] font-black uppercase tracking-[0.2em]">{label}</span>
+  </button>
+);

@@ -90,11 +90,21 @@ export const storage = {
     db.execSync('CREATE TABLE IF NOT EXISTS goal_targets (id TEXT PRIMARY KEY, data TEXT)');
     db.execSync('CREATE TABLE IF NOT EXISTS workout_routines (id TEXT PRIMARY KEY, data TEXT)');
 
-    const existing = db.getAllSync('SELECT * FROM exercises');
-    if (existing.length === 0) {
+    const existingExercises = db.getAllSync('SELECT * FROM exercises');
+    
+    // Om databasen är tom, kör initial seed
+    if (existingExercises.length === 0) {
       EXERCISE_DATABASE.forEach(ex => db.runSync('INSERT INTO exercises (id, data) VALUES (?, ?)', [ex]));
       INITIAL_ZONES.forEach(zone => db.runSync('INSERT INTO zones (id, data) VALUES (?, ?)', [zone]));
       INITIAL_GOAL_TARGETS.forEach(target => db.runSync('INSERT INTO goal_targets (id, data) VALUES (?, ?)', [target]));
+    } else {
+      // MIGRERING: Lägg till övningar från databasen som inte redan finns (så användarens edits bevaras)
+      EXERCISE_DATABASE.forEach(ex => {
+        const exists = existingExercises.some(existing => existing.id === ex.id);
+        if (!exists) {
+          db.runSync('INSERT INTO exercises (id, data) VALUES (?, ?)', [ex]);
+        }
+      });
     }
     
     if (!db.getFirstSync('SELECT * FROM user_profile')) {

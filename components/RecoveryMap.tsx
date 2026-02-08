@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import { MuscleGroup } from '../types';
-import { MuscleStatus, getRecoveryColor } from '../utils/recovery';
-import { RotateCcw } from 'lucide-react';
+import { MuscleStatus, getRecoveryColor, getRecoveryStatus, ALL_MUSCLE_GROUPS } from '../utils/recovery';
+import { Activity, Zap, Info } from 'lucide-react';
 
 interface RecoveryMapProps {
   status?: MuscleStatus;
@@ -13,8 +13,6 @@ interface RecoveryMapProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-type ViewSide = 'front' | 'back';
-
 export const RecoveryMap: React.FC<RecoveryMapProps> = ({ 
   status, 
   loadMap,
@@ -23,31 +21,28 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
   interactive = false,
   size = 'md'
 }) => {
-  const [side, setSide] = useState<ViewSide>('front');
+  
+  // Prepare the list of muscle scores, sorted by most fatigued (lowest score)
+  const muscleScores = useMemo(() => {
+    const list = ALL_MUSCLE_GROUPS.map(muscle => {
+      let score = 100;
+      let loadCount = 0;
+      
+      if (status) {
+        score = Math.round(status[muscle] ?? 100);
+      } else if (loadMap) {
+        loadCount = loadMap[muscle] || 0;
+        // Map load (0-3+) to a "reverse" score for visualization 
+        score = Math.max(0, 100 - (loadCount * 33));
+      }
 
-  const getFill = (muscle: MuscleGroup | MuscleGroup[]) => {
-    const muscles = Array.isArray(muscle) ? muscle : [muscle];
-    
-    if (interactive) {
-      return muscles.some(m => selectedMuscles.includes(m)) ? '#ff2d55' : 'rgba(255,255,255,0.05)';
-    }
-    
-    if (loadMap) {
-      const count = muscles.reduce((acc, m) => acc + (loadMap[m] || 0), 0);
-      if (count === 0) return 'rgba(255,255,255,0.03)';
-      if (count === 1) return '#ff2d5588';
-      if (count >= 2) return '#ff2d55';
-      return 'rgba(255,255,255,0.05)';
-    }
-    
-    if (status) {
-      const scores = muscles.map(m => status[m] ?? 100);
-      const minScore = Math.min(...scores);
-      return getRecoveryColor(minScore);
-    }
-    
-    return 'rgba(255,255,255,0.05)';
-  };
+      return { muscle, score, loadCount };
+    });
+
+    // If we are showing recovery, sort by lowest score (most sliten first)
+    // If we are showing load (in workout), sort by highest load (lowest score)
+    return list.sort((a, b) => a.score - b.score);
+  }, [status, loadMap]);
 
   const handleClick = (muscle: MuscleGroup) => {
     if (interactive && onToggleMuscle) {
@@ -55,106 +50,86 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
     }
   };
 
-  const dimensions = {
-    sm: 'w-48 h-72',
-    md: 'w-72 h-[400px]',
-    lg: 'w-full h-[500px]'
-  }[size];
-
-  const renderFront = () => (
-    <svg viewBox="0 0 200 400" className="w-full h-full animate-in fade-in zoom-in-95 duration-500">
-      {/* Head & Neck */}
-      <path d="M90 20 q10 -15 20 0 v20 h-20 z" fill={getFill('Nacke')} onClick={() => handleClick('Nacke')} className="cursor-pointer" />
-      
-      {/* Shoulders (Front) */}
-      <circle cx="55" cy="65" r="12" fill={getFill('Axlar')} onClick={() => handleClick('Axlar')} className="cursor-pointer" />
-      <circle cx="145" cy="65" r="12" fill={getFill('Axlar')} onClick={() => handleClick('Axlar')} className="cursor-pointer" />
-      
-      {/* Chest */}
-      <path d="M68 62 h28 v35 q-14 10 -28 0 z" fill={getFill('Bröst')} onClick={() => handleClick('Bröst')} className="cursor-pointer" />
-      <path d="M104 62 h28 v35 q-14 10 -28 0 z" fill={getFill('Bröst')} onClick={() => handleClick('Bröst')} className="cursor-pointer" />
-      
-      {/* Abs */}
-      <path d="M80 105 h40 v50 q-20 8 -40 0 z" fill={getFill('Mage')} onClick={() => handleClick('Mage')} className="cursor-pointer" />
-      
-      {/* Biceps */}
-      <path d="M38 78 q-8 20 2 40 h8 q8 -20 0 -40 z" fill={getFill('Biceps')} onClick={() => handleClick('Biceps')} className="cursor-pointer" />
-      <path d="M162 78 q8 20 -2 40 h-8 q-8 -20 0 -40 z" fill={getFill('Biceps')} onClick={() => handleClick('Biceps')} className="cursor-pointer" />
-      
-      {/* Forearms */}
-      <path d="M35 125 v40 q2 8 8 0 l2 -40 z" fill={getFill('Underarmar')} onClick={() => handleClick('Underarmar')} className="cursor-pointer" />
-      <path d="M165 125 v40 q-2 8 -8 0 l-2 -40 z" fill={getFill('Underarmar')} onClick={() => handleClick('Underarmar')} className="cursor-pointer" />
-      
-      {/* Quads */}
-      <path d="M72 165 h25 v85 q-20 5 -25 -10 z" fill={getFill('Framsida lår')} onClick={() => handleClick('Framsida lår')} className="cursor-pointer" />
-      <path d="M103 165 h25 v85 q0 15 -25 10 z" fill={getFill('Framsida lår')} onClick={() => handleClick('Framsida lår')} className="cursor-pointer" />
-
-      {/* Adduktorer (Small inner thigh) */}
-      <path d="M97 170 h6 v50 q-3 5 -6 0 z" fill={getFill('Adduktorer')} onClick={() => handleClick('Adduktorer')} className="cursor-pointer" />
-      
-      {/* Outline */}
-      <path d="M100 20 q20 0 20 20 v10 q40 0 50 15 q10 10 10 30 v100 q0 20 -10 20 h-10 v180 h-30 v-180 h-60 v 180 h-30 v -180 h-10 q-10 0 -10 -20 v-100 q0 -20 10 -30 q10 -15 50 -15 v-10 q0 -20 20 -20" 
-            fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1.5" />
-    </svg>
-  );
-
-  const renderBack = () => (
-    <svg viewBox="0 0 200 400" className="w-full h-full animate-in fade-in zoom-in-95 duration-500">
-      {/* Trapezius / Neck Back */}
-      <path d="M85 45 q15 -10 30 0 v15 h-30 z" fill={getFill('Trapezius')} onClick={() => handleClick('Trapezius')} className="cursor-pointer" />
-      
-      {/* Upper Back / Lats */}
-      <path d="M65 65 h70 v45 q-35 15 -70 0 z" fill={getFill('Rygg')} onClick={() => handleClick('Rygg')} className="cursor-pointer" />
-      
-      {/* Triceps */}
-      <path d="M40 78 q-10 25 0 50 h8 q10 -25 0 -50 z" fill={getFill('Triceps')} onClick={() => handleClick('Triceps')} className="cursor-pointer" />
-      <path d="M160 78 q10 25 0 50 h-8 q-10 -25 0 -50 z" fill={getFill('Triceps')} onClick={() => handleClick('Triceps')} className="cursor-pointer" />
-      
-      {/* Lower Back */}
-      <path d="M80 115 h40 v25 q-20 5 -40 0 z" fill={getFill('Ryggslut')} onClick={() => handleClick('Ryggslut')} className="cursor-pointer" />
-      
-      {/* Glutes (Säte) */}
-      <path d="M72 145 h27 v30 q-15 10 -27 0 z" fill={getFill('Säte')} onClick={() => handleClick('Säte')} className="cursor-pointer" />
-      <path d="M101 145 h27 v30 q-12 10 -27 0 z" fill={getFill('Säte')} onClick={() => handleClick('Säte')} className="cursor-pointer" />
-      
-      {/* Hamstrings */}
-      <path d="M72 180 h25 v75 q-20 5 -25 -10 z" fill={getFill('Baksida lår')} onClick={() => handleClick('Baksida lår')} className="cursor-pointer" />
-      <path d="M103 180 h25 v75 q0 15 -25 10 z" fill={getFill('Baksida lår')} onClick={() => handleClick('Baksida lår')} className="cursor-pointer" />
-      
-      {/* Calves (Vader) */}
-      <path d="M75 270 h18 v65 q-18 0 -18 -15 z" fill={getFill('Vader')} onClick={() => handleClick('Vader')} className="cursor-pointer" />
-      <path d="M107 270 h18 v65 q0 15 -18 15 z" fill={getFill('Vader')} onClick={() => handleClick('Vader')} className="cursor-pointer" />
-      
-      {/* Outline */}
-      <path d="M100 20 q20 0 20 20 v10 q40 0 50 15 q10 10 10 30 v100 q0 20 -10 20 h-10 v180 h-30 v-180 h-60 v 180 h-30 v -180 h-10 q-10 0 -10 -20 v-100 q0 -20 10 -30 q10 -15 50 -15 v-10 q0 -20 20 -20" 
-            fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1.5" />
-    </svg>
-  );
-
   return (
-    <div className="flex flex-col items-center gap-6 w-full">
-      <div className={`relative ${dimensions} flex items-center justify-center`}>
-        {side === 'front' ? renderFront() : renderBack()}
-
-        {/* Legend Overlay */}
-        {!interactive && !loadMap && (
-          <div className="absolute top-0 right-0 flex flex-col gap-1.5 bg-black/40 p-3 rounded-2xl backdrop-blur-md border border-white/5">
-             <div className="w-2 h-2 rounded-full bg-[#ff2d55] shadow-[0_0_8px_#ff2d55]" />
-             <div className="w-2 h-2 rounded-full bg-[#ff8095]" />
-             <div className="w-2 h-2 rounded-full bg-white/10" />
-          </div>
+    <div className="w-full space-y-6">
+      {/* Header Info */}
+      <div className="flex justify-between items-end px-2">
+        <div>
+          <h3 className="text-[10px] font-black uppercase text-accent-pink tracking-[0.3em] mb-1">
+            {loadMap ? 'Passets Belastning' : 'Aktiv Återhämtning'}
+          </h3>
+          <p className="text-xl font-black italic uppercase tracking-tighter">
+            {loadMap ? 'Muskelengagemang' : 'Status per zon'}
+          </p>
+        </div>
+        {!loadMap && (
+           <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+              <Activity size={12} className="text-accent-pink" />
+              <span className="text-[8px] font-black uppercase tracking-widest text-text-dim">Real-time update</span>
+           </div>
         )}
       </div>
 
-      <button 
-        onClick={() => setSide(side === 'front' ? 'back' : 'front')}
-        className="flex items-center gap-3 px-8 py-3 bg-white/5 rounded-full border border-white/10 hover:bg-white/10 transition-all active:scale-95 group shadow-xl"
-      >
-        <RotateCcw size={16} className={`text-accent-pink transition-transform duration-500 ${side === 'back' ? 'rotate-180' : ''}`} />
-        <span className="text-[10px] font-black uppercase tracking-[0.2em] italic">
-          Visa {side === 'front' ? 'Baksida' : 'Framsida'}
-        </span>
-      </button>
+      {/* Heatmap List */}
+      <div className={`grid gap-2 ${size === 'lg' ? 'max-h-[60vh]' : 'max-h-[40vh]'} overflow-y-auto scrollbar-hide pr-1`}>
+        {muscleScores.map(({ muscle, score, loadCount }) => {
+          const isSelected = selectedMuscles.includes(muscle);
+          const color = getRecoveryColor(score, isSelected);
+          const statusText = loadMap 
+            ? (loadCount > 0 ? `${loadCount} Set` : 'Ingen belastning')
+            : getRecoveryStatus(score);
+
+          return (
+            <div 
+              key={muscle}
+              onClick={() => handleClick(muscle)}
+              className={`p-4 rounded-2xl transition-all border flex flex-col gap-2 ${
+                isSelected 
+                  ? 'bg-accent-pink/10 border-accent-pink shadow-[0_0_20px_rgba(255,45,85,0.1)]' 
+                  : 'bg-white/5 border-white/5 hover:border-white/10'
+              } ${interactive ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className={`w-1.5 h-1.5 rounded-full`} style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
+                  <span className="font-black uppercase italic text-xs tracking-tight">{muscle}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{statusText}</span>
+                  {!loadMap && <span className="text-[11px] font-black italic text-white/80">{score}%</span>}
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden relative">
+                <div 
+                  className="h-full transition-all duration-1000 ease-out rounded-full"
+                  style={{ 
+                    width: `${score}%`, 
+                    backgroundColor: color,
+                    opacity: score < 20 ? 0.3 : 1
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend / Tips */}
+      {!loadMap && (
+        <div className="bg-white/5 rounded-[24px] p-4 border border-white/5 flex items-start gap-4 mx-2">
+          <div className="bg-accent-pink/20 p-2 rounded-xl text-accent-pink">
+            <Info size={18} />
+          </div>
+          <div className="flex-1">
+             <p className="text-[9px] font-black uppercase text-white/40 tracking-widest mb-1">Coach-tips</p>
+             <p className="text-[11px] font-bold text-white/70 leading-relaxed italic">
+               Dina mest "slitna" muskler visas överst. Överväg att byta fokusområde idag för att undvika överträning.
+             </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

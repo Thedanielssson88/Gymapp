@@ -58,10 +58,16 @@ export interface Exercise {
   id: string;
   name: string;
   pattern: MovementPattern;
-  muscleGroups: MuscleGroup[];
+  muscleGroups: MuscleGroup[]; 
+  primaryMuscles?: MuscleGroup[]; 
+  secondaryMuscles?: MuscleGroup[];
   equipment: Equipment[];
   difficultyMultiplier: number;
   bodyweightCoefficient: number;
+  imageUrl?: string;
+  description?: string;
+  instructions?: string[];
+  alternativeExIds?: string[];
 }
 
 export interface BodyMeasurements {
