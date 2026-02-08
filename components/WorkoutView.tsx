@@ -173,10 +173,18 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             <span className="text-xl font-black italic">{Math.floor(timer/60)}:{String(timer%60).padStart(2,'0')}</span>
           </div>
         </div>
-        <button onClick={saveAsRoutine} className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95">
-           <Save size={18} />
-           <span className="text-[10px] font-black uppercase">Spara Mall</span>
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => { if(confirm("Är du säker på att du vill avbryta passet? Inga framsteg sparas.")) onCancel(); }}
+            className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20 active:scale-95 transition-all"
+          >
+            <Trash2 size={18} />
+          </button>
+          <button onClick={saveAsRoutine} className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95">
+             <Save size={18} />
+             <span className="text-[10px] font-black uppercase">Spara Mall</span>
+          </button>
+        </div>
       </header>
 
       {/* REST TIMER OVERLAY */}
