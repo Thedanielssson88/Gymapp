@@ -129,6 +129,8 @@ export interface WorkoutSession {
   exercises: PlannedExercise[];
   isCompleted: boolean;
   duration?: number;
+  rpe?: number;
+  feeling?: string;
 }
 
 export interface BiometricLog {

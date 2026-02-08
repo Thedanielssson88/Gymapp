@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, MovementPattern, PlannedExercise, WorkoutRoutine } from '../types';
-import { findReplacement, adaptVolume } from '../utils/fitness';
+import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { RecoveryMap } from './RecoveryMap';
 import { ALL_MUSCLE_GROUPS, calculateExerciseImpact } from '../utils/recovery';
-import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, Check, RefreshCw, Activity, ShieldCheck, Save, Timer, Play, Pause, RotateCcw, BarChart3, Info, FileText, Dumbbell } from 'lucide-react';
+import { WorkoutSummaryModal } from './WorkoutSummaryModal';
+import { WorkoutGenerator } from './WorkoutGenerator';
+import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, Check, RefreshCw, Activity, ShieldCheck, Save, Timer, Play, Pause, RotateCcw, BarChart3, Info, FileText, Dumbbell, Sparkles } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
@@ -29,12 +31,14 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [restTimer, setRestTimer] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showGenerator, setShowGenerator] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeLibraryTab, setActiveLibraryTab] = useState<LibraryTab>('all');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isLoadMapOpen, setIsLoadMapOpen] = useState(false);
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   const allExercises = storage.getAllExercises();
   const userProfile = useMemo(() => storage.getUserProfile(), []);
@@ -60,68 +64,168 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
-    const newExercises = localSession.exercises.map(item => {
-      const currentEx = allExercises.find(e => e.id === item.exerciseId)!;
-      const replacement = findReplacement(currentEx, targetZone);
-      if (replacement.id === currentEx.id) return item;
-      const newSets = adaptVolume(item.sets, currentEx, replacement, userProfile.goal);
-      return { ...item, exerciseId: replacement.id, sets: newSets };
+    setLocalSession(prev => {
+      const newExercises = prev.exercises.map(item => {
+        const currentEx = allExercises.find(e => e.id === item.exerciseId)!;
+        const replacement = findReplacement(currentEx, targetZone);
+        if (replacement.id === currentEx.id) return item;
+        const newSets = adaptVolume(item.sets, currentEx, replacement, userProfile.goal);
+        return { ...item, exerciseId: replacement.id, sets: newSets };
+      });
+      const updatedSession = { ...prev, zoneId: targetZone.id, exercises: newExercises };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
     });
-    const updatedSession = { ...localSession, zoneId: targetZone.id, exercises: newExercises };
-    setLocalSession(updatedSession);
-    storage.setActiveSession(updatedSession);
     onZoneChange(targetZone);
   };
 
   const updateSet = (exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => {
-    const newSession = { ...localSession };
-    newSession.exercises[exIdx].sets[setIdx] = {
-      ...newSession.exercises[exIdx].sets[setIdx],
-      ...updates
-    };
-    if (updates.completed) setRestTimer(90); // Default rest timer 90s
-    setLocalSession(newSession);
-    storage.setActiveSession(newSession);
+    setLocalSession(prev => {
+      const updatedExercises = [...prev.exercises];
+      const updatedSets = [...updatedExercises[exIdx].sets];
+      
+      updatedSets[setIdx] = {
+        ...updatedSets[setIdx],
+        ...updates
+      };
+      
+      updatedExercises[exIdx] = {
+        ...updatedExercises[exIdx],
+        sets: updatedSets
+      };
+
+      const updatedSession = { ...prev, exercises: updatedExercises };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
+    });
+    
+    if (updates.completed) setRestTimer(90); 
   };
 
   const updateNotes = (exIdx: number, notes: string) => {
-    const newSession = { ...localSession };
-    newSession.exercises[exIdx].notes = notes;
-    setLocalSession(newSession);
-    storage.setActiveSession(newSession);
-  };
+    setLocalSession(prev => {
+      const updatedExercises = [...prev.exercises];
+      updatedExercises[exIdx] = {
+        ...updatedExercises[exIdx],
+        notes: notes
+      };
 
-  const saveAsRoutine = () => {
-    const name = prompt("Vad ska rutinen heta?", localSession.name);
-    if (!name) return;
-    
-    const routine: WorkoutRoutine = {
-      id: `routine-${Date.now()}`,
-      name,
-      exercises: localSession.exercises.map(pe => ({
-        exerciseId: pe.exerciseId,
-        notes: pe.notes,
-        sets: pe.sets.map(s => ({ 
-          reps: s.reps, 
-          weight: s.weight, 
-          completed: false 
-        }))
-      }))
-    };
-    
-    storage.saveRoutine(routine);
-    alert("Rutinen sparad i 'Mina Rutiner'!");
-  };
-
-  const addNewExercise = (ex: Exercise) => {
-    const newSession = { ...localSession };
-    newSession.exercises.push({
-      exerciseId: ex.id,
-      sets: [{ reps: 10, weight: 0, completed: false }, { reps: 10, weight: 0, completed: false }, { reps: 10, weight: 0, completed: false }]
+      const updatedSession = { ...prev, exercises: updatedExercises };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
     });
-    setLocalSession(newSession);
-    storage.setActiveSession(newSession);
+  };
+
+  // Kritiskt: Använd funktionell uppdatering för att garantera att vi inte muterar state
+  const removeExercise = (exIdx: number) => {
+    if (window.confirm("Vill du ta bort denna övning från passet?")) {
+      setLocalSession(prev => {
+        const updatedExercises = [...prev.exercises];
+        updatedExercises.splice(exIdx, 1);
+        const updatedSession = { ...prev, exercises: updatedExercises };
+        storage.setActiveSession(updatedSession);
+        return updatedSession;
+      });
+      setOpenNotesIdx(null);
+    }
+  };
+
+  const addSetToExercise = (exIdx: number) => {
+    setLocalSession(prev => {
+      const updatedExercises = [...prev.exercises];
+      const currentSets = updatedExercises[exIdx].sets;
+      const lastSet = currentSets[currentSets.length - 1];
+      
+      const newSet: WorkoutSet = {
+        reps: lastSet?.reps || 10,
+        weight: lastSet?.weight || 0,
+        completed: false
+      };
+
+      updatedExercises[exIdx] = {
+        ...updatedExercises[exIdx],
+        sets: [...currentSets, newSet]
+      };
+
+      const updatedSession = { ...prev, exercises: updatedExercises };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
+    });
+  };
+
+  const addNewExercise = (ex: Exercise, autoGenerate = false) => {
+    const history = storage.getHistory();
+    const lastSetData = getLastPerformance(ex.id, history);
+    
+    let newSets: WorkoutSet[] = [];
+
+    if (lastSetData && lastSetData.length > 0) {
+      let useOverload = true;
+      if (!autoGenerate) {
+         useOverload = window.confirm(`Hittade historik för ${ex.name}!\nVill du applicera progressiv överbelastning (öka vikt/reps)?\n\nOK = Öka\nAvbryt = Samma som sist`);
+      }
+      newSets = createSmartSets(lastSetData, useOverload);
+    } else {
+      newSets = [
+        { reps: 10, weight: 0, completed: false }, 
+        { reps: 10, weight: 0, completed: false }, 
+        { reps: 10, weight: 0, completed: false }
+      ];
+    }
+
+    setLocalSession(prev => {
+      const updatedSession = { 
+        ...prev,
+        exercises: [
+          ...prev.exercises,
+          {
+            exerciseId: ex.id,
+            sets: newSets,
+            notes: lastSetData ? 'Baserat på föregående pass' : ''
+          }
+        ]
+      };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
+    });
+    
     setShowAddModal(false);
+  };
+
+  const handleGenerate = (muscles: MuscleGroup[]) => {
+     const generated = generateWorkoutSession(muscles, activeZone, allExercises);
+     
+     if (generated.length === 0) {
+       alert("Hittade inga övningar i denna zon för valda muskler.");
+       return;
+     }
+
+     const history = storage.getHistory();
+     
+     setLocalSession(prev => {
+       const newExercises = [...prev.exercises];
+       generated.forEach(plan => {
+          const ex = allExercises.find(e => e.id === plan.exerciseId);
+          if (ex) {
+             const lastSetData = getLastPerformance(ex.id, history);
+             const smartSets = lastSetData 
+                ? createSmartSets(lastSetData, true)
+                : plan.sets;
+             
+             newExercises.push({
+                exerciseId: ex.id,
+                sets: smartSets,
+                notes: 'Auto-genererad'
+             });
+          }
+       });
+
+       const updatedSession = { ...prev, exercises: newExercises };
+       storage.setActiveSession(updatedSession);
+       return updatedSession;
+     });
+
+     setShowGenerator(false);
   };
 
   const muscleStats = useMemo(() => {
@@ -132,10 +236,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       const ex = allExercises.find(e => e.id === item.exerciseId);
       if (!ex) return;
 
-      // Använd den avancerade fatigue-formeln för live-vyn
       const impact = calculateExerciseImpact(ex, item.sets, userProfile.weight);
 
-      // Primära muskler
       const primaries = (ex.primaryMuscles && ex.primaryMuscles.length > 0) 
         ? ex.primaryMuscles 
         : (ex.muscleGroups || []);
@@ -145,7 +247,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         totalLoadPoints += impact;
       });
 
-      // Sekundära muskler (50% av impact)
       ex.secondaryMuscles?.forEach(m => {
         const secondaryImpact = impact * 0.5;
         load[m] = (load[m] || 0) + secondaryImpact;
@@ -173,6 +274,20 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       return matchesSearch && matchesCategory;
     });
   }, [searchQuery, allExercises, activeLibraryTab, selectedCategory]);
+
+  const handleFinishClick = () => {
+    setShowSummary(true);
+    setIsTimerActive(false);
+  };
+
+  const handleConfirmedSave = (rpe: number, feeling: string) => {
+    const finalSession = { 
+        ...localSession, 
+        rpe, 
+        feeling 
+    };
+    onComplete(finalSession, timer);
+  };
 
   return (
     <div className="space-y-4 pb-80 animate-in fade-in duration-500">
@@ -202,7 +317,30 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           >
             <Trash2 size={24} />
           </button>
-          <button onClick={saveAsRoutine} className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95">
+          <button 
+            onClick={() => {
+              const name = window.prompt("Vad ska rutinen heta?", localSession.name);
+              if (!name) return;
+              
+              const routine: WorkoutRoutine = {
+                id: `routine-${Date.now()}`,
+                name,
+                exercises: localSession.exercises.map(pe => ({
+                  exerciseId: pe.exerciseId,
+                  notes: pe.notes,
+                  sets: pe.sets.map(s => ({ 
+                    reps: s.reps, 
+                    weight: s.weight, 
+                    completed: false 
+                  }))
+                }))
+              };
+              
+              storage.saveRoutine(routine);
+              alert("Rutinen sparad i 'Mina Rutiner'!");
+            }} 
+            className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95"
+          >
              <Save size={18} />
              <span className="text-[10px] font-black uppercase">Spara Mall</span>
           </button>
@@ -322,7 +460,12 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   >
                     <FileText size={18} />
                   </button>
-                  <button onClick={() => {if(confirm("Ta bort?")){const n={...localSession}; n.exercises.splice(exIdx,1); setLocalSession(n); storage.setActiveSession(n);}}} className="p-2 text-text-dim/20 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                  <button 
+                    onClick={() => removeExercise(exIdx)} 
+                    className="p-2 text-text-dim/20 hover:text-red-500 transition-colors active:scale-95"
+                  >
+                    <Trash2 size={18}/>
+                  </button>
                 </div>
               </div>
 
@@ -363,8 +506,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               </div>
 
               <button 
-                onClick={() => { const n = {...localSession}; n.exercises[exIdx].sets.push({...n.exercises[exIdx].sets[n.exercises[exIdx].sets.length-1], completed: false}); setLocalSession(n); }}
-                className="w-full py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mt-4"
+                onClick={() => addSetToExercise(exIdx)}
+                className="w-full py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mt-4 active:scale-[0.98] transition-all"
               >
                 + Lägg till set
               </button>
@@ -373,10 +516,24 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         })}
       </div>
 
-      <button onClick={() => setShowAddModal(true)} className="mx-2 w-[calc(100%-16px)] py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50">
-        <Plus size={32} />
-        <span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span>
-      </button>
+      {/* GENERATE & ADD BUTTONS */}
+      <div className="flex gap-2 mx-2">
+        <button 
+          onClick={() => setShowGenerator(true)}
+          className="flex-1 py-12 bg-accent-blue/10 border-2 border-dashed border-accent-blue/30 rounded-[40px] flex flex-col items-center justify-center gap-4 text-accent-blue hover:bg-accent-blue/20 transition-all active:scale-95"
+        >
+          <Sparkles size={32} />
+          <span className="font-black uppercase tracking-widest text-[10px] italic">Föreslå Pass</span>
+        </button>
+
+        <button 
+          onClick={() => setShowAddModal(true)} 
+          className="flex-1 py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50 active:scale-95 transition-all"
+        >
+          <Plus size={32} />
+          <span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span>
+        </button>
+      </div>
 
       {/* FOOTER ACTIONS */}
       <div className="fixed bottom-32 left-0 right-0 px-4 z-[70] max-w-md mx-auto space-y-3">
@@ -397,7 +554,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         )}
         
         <button 
-          onClick={() => onComplete(localSession, timer)} 
+          onClick={handleFinishClick} 
           className="w-full bg-accent-pink py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:opacity-90"
         >
           Slutför Pass <Check size={20} strokeWidth={3} />
@@ -413,21 +570,21 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
       {/* MODAL FOR ADDING EXERCISES */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[120] flex flex-col p-6 animate-in slide-in-from-bottom-4">
+        <div className="fixed inset-0 bg-[#0f0d15] z-[120] flex flex-col p-6 animate-in slide-in-from-bottom-4 duration-500">
            <header className="flex justify-between items-center mb-6">
               <h3 className="text-2xl font-black italic uppercase">Övningar</h3>
-              <button onClick={() => setShowAddModal(false)}><X size={32}/></button>
+              <button onClick={() => setShowAddModal(false)} className="p-3 bg-white/5 rounded-2xl"><X size={32}/></button>
            </header>
            <div className="relative mb-6">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={20} />
-              <input type="text" placeholder="Sök..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 pl-12 rounded-3xl outline-none" />
+              <input type="text" placeholder="Sök..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 pl-12 rounded-3xl outline-none focus:border-accent-pink transition-all" />
            </div>
-           <div className="flex-1 overflow-y-auto space-y-3">
+           <div className="flex-1 overflow-y-auto space-y-3 scrollbar-hide">
               {filteredExercises.map(ex => (
                 <div key={ex.id} className="w-full p-5 bg-[#1a1721] border border-white/5 rounded-[32px] flex justify-between items-center group shadow-lg">
                    <div className="text-left flex-1" onClick={() => addNewExercise(ex)}>
-                      <span className="font-black italic uppercase text-lg block">{ex.name}</span>
-                      <span className="text-[10px] font-black text-text-dim uppercase">{ex.pattern}</span>
+                      <span className="font-black italic uppercase text-lg block leading-none">{ex.name}</span>
+                      <span className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{ex.pattern}</span>
                    </div>
                    <div className="flex gap-2">
                      <button onClick={() => setInfoExercise(ex)} className="p-3 bg-white/5 rounded-2xl text-text-dim hover:text-accent-blue transition-all">
@@ -443,12 +600,19 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         </div>
       )}
 
+      {/* GENERATOR MODAL */}
+      {showGenerator && (
+         <WorkoutGenerator 
+            activeZone={activeZone}
+            onClose={() => setShowGenerator(false)}
+            onGenerate={handleGenerate}
+         />
+      )}
+
       {/* EXERCISE INFO MODAL */}
       {infoExercise && (
         <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[200] p-6 overflow-y-auto animate-in fade-in">
           <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
-            
-            {/* IMAGE HEADER */}
             <div className="w-full h-72 bg-black/50 relative">
               {infoExercise.imageUrl ? (
                   <img src={infoExercise.imageUrl} className="w-full h-full object-cover" />
@@ -476,7 +640,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   </div>
               </div>
 
-              {/* DESCRIPTION */}
               <div className="space-y-3">
                   <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Instruktioner</h4>
                   {infoExercise.description ? (
@@ -488,7 +651,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   )}
               </div>
 
-              {/* ANATOMY badges */}
               <div className="space-y-6">
                   <div>
                       <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-pink mb-3">Primära Muskler</h4>
@@ -510,7 +672,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   )}
               </div>
 
-              {/* ALTERNATIVES */}
               {infoExercise.alternativeExIds && infoExercise.alternativeExIds.length > 0 && (
                   <div className="pt-6 border-t border-white/5">
                       <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-4">Bra Alternativ</h4>
@@ -532,6 +693,14 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showSummary && (
+          <WorkoutSummaryModal 
+             duration={timer}
+             onCancel={() => setShowSummary(false)}
+             onConfirm={handleConfirmedSave}
+          />
       )}
     </div>
   );

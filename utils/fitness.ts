@@ -1,5 +1,5 @@
 
-import { Exercise, Equipment, MovementPattern, PlannedExercise, WorkoutSet, Zone, Goal } from '../types';
+import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal } from '../types';
 import { storage } from '../services/storage';
 
 /**
@@ -72,4 +72,98 @@ export const suggestOverload = (lastSet: WorkoutSet): { weight: number; reps: nu
     weight: newWeight,
     reps: lastSet.reps
   };
+};
+
+/**
+ * 1. HISTORY LOOKUP
+ * Hittar senaste passet där övningen utfördes.
+ */
+export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]): WorkoutSet[] | null => {
+  // Sortera pass nyast först
+  const sortedHistory = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  
+  for (const session of sortedHistory) {
+    const ex = session.exercises.find(e => e.exerciseId === exerciseId);
+    // Vi vill ha set som faktiskt utfördes (completed) och har vikt eller reps
+    if (ex && ex.sets.some(s => s.completed)) {
+      return ex.sets.filter(s => s.completed); // Returnera bara de genomförda seten
+    }
+  }
+  return null;
+};
+
+/**
+ * 2. PROGRESSION LOGIC
+ * Skapar nya set baserat på historik, med valfri överbelastning.
+ */
+export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean): WorkoutSet[] => {
+  return lastSets.map(s => {
+    let newWeight = s.weight;
+    let newReps = s.reps;
+
+    if (applyOverload) {
+      // Enkel progressiv överbelastning: Öka vikten med 2.5kg om man gjorde >= 8 reps
+      // Eller öka reps om vikten är låg.
+      if (newReps >= 8) {
+         newWeight += 2.5; 
+      } else {
+         newReps += 1;
+      }
+    }
+
+    return {
+      reps: newReps,
+      weight: newWeight,
+      completed: false,
+      rpe: undefined // Nollställ RPE för nya passet
+    };
+  });
+};
+
+/**
+ * 3. WORKOUT GENERATOR
+ * Genererar ett pass baserat på muskler och utrustning.
+ */
+export const generateWorkoutSession = (
+  targetMuscles: MuscleGroup[], 
+  zone: Zone, 
+  allExercises: Exercise[]
+): PlannedExercise[] => {
+  
+  const plannedExercises: PlannedExercise[] = [];
+  const selectedIds = new Set<string>();
+
+  // Filtrera övningar som går att göra i zonen OCH träffar rätt muskler
+  const availableExercises = allExercises.filter(ex => 
+    // Måste ha utrustning som finns i zonen
+    ex.equipment.every(eq => zone.inventory.includes(eq)) &&
+    // Måste träffa någon av målmusklerna (Primär eller Sekundär)
+    (
+       ex.primaryMuscles?.some(m => targetMuscles.includes(m)) || 
+       ex.muscleGroups.some(m => targetMuscles.includes(m))
+    )
+  );
+
+  // Strategi: 1 Tung Basövning, 2-3 Komplement, 1-2 Isolering
+  // Sortera efter "Difficulty" (Tungst först)
+  availableExercises.sort((a, b) => b.difficultyMultiplier - a.difficultyMultiplier);
+
+  // Välj övningar
+  availableExercises.forEach(ex => {
+    if (plannedExercises.length >= 6) return; // Max 6 övningar
+    if (selectedIds.has(ex.id)) return;
+
+    // Undvik att bomba samma muskel för många gånger direkt, sprid ut det
+    plannedExercises.push({
+      exerciseId: ex.id,
+      sets: [
+        { reps: 10, weight: 0, completed: false },
+        { reps: 10, weight: 0, completed: false },
+        { reps: 10, weight: 0, completed: false }
+      ]
+    });
+    selectedIds.add(ex.id);
+  });
+
+  return plannedExercises;
 };

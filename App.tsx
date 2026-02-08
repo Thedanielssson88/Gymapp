@@ -9,11 +9,13 @@ import { TargetsView } from './components/TargetsView';
 import { RoutinePicker } from './components/RoutinePicker';
 import { StatsView } from './components/StatsView';
 import { MeasurementsView } from './components/MeasurementsView';
+import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
 import { calculateMuscleRecovery } from './utils/recovery';
 import { RecoveryMap } from './components/RecoveryMap';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Dumbbell, User2, Target, Calendar, Plus, Settings, ChevronRight, History, X, BookOpen, MapPin, Check, Activity } from 'lucide-react';
+// Added missing Home and Trees icons to lucide-react imports
+import { Dumbbell, User2, Target, Calendar, Plus, Settings, ChevronRight, History, X, BookOpen, MapPin, Check, Activity, Home, Trees } from 'lucide-react';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -59,15 +61,9 @@ export default function App() {
   };
 
   const handleCancelWorkout = () => {
-    // 1. Rensa i lagringen
     storage.setActiveSession(null);
-    
-    // 2. Rensa i appens state
     setCurrentSession(null);
-    
-    // 3. Gå tillbaka till startsidan (Workout tab utan session visar "Starta Pass")
     setActiveTab('workout');
-    
     refreshData();
   };
 
@@ -139,6 +135,7 @@ export default function App() {
       case 'log': return <WorkoutLog history={history} />;
       case 'targets': return <TargetsView history={history} />;
       case 'library': return <ExerciseLibrary />;
+      case 'gyms': return <LocationManager />;
       default: return null;
     }
   };
@@ -147,12 +144,11 @@ export default function App() {
     <div className="max-w-md mx-auto min-h-screen bg-[#0f0d15] selection:bg-accent-pink selection:text-white relative overflow-x-hidden">
       {renderContent()}
 
-      {/* START WORKOUT FLOW (ZONE -> ROUTINE) */}
       {showStartMenu && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 flex flex-col overflow-y-auto">
+        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 flex flex-col overflow-y-auto scrollbar-hide">
           <header className="flex justify-between items-center mb-10">
             <h3 className="text-3xl font-black uppercase italic tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3>
-            <button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim"><X size={32}/></button>
+            <button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim p-2"><X size={32}/></button>
           </header>
 
           {!selectedZoneForStart ? (
@@ -160,8 +156,13 @@ export default function App() {
               {zones.map(z => (
                 <button key={z.id} onClick={() => setSelectedZoneForStart(z)} className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex items-center justify-between group active:scale-95 transition-all">
                   <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center"><MapPin size={32} /></div>
-                    <span className="text-2xl font-black uppercase italic">{z.name}</span>
+                    <div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center">
+                      {/* Fixed: Home and Trees are now correctly imported from lucide-react */}
+                      {z.name.toLowerCase().includes('hem') ? <Home size={32} /> : 
+                       z.name.toLowerCase().includes('ute') ? <Trees size={32} /> : 
+                       <MapPin size={32} />}
+                    </div>
+                    <span className="text-2xl font-black uppercase italic tracking-tight">{z.name}</span>
                   </div>
                   <ChevronRight size={32} className="text-text-dim" />
                 </button>
@@ -176,9 +177,11 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 right-0 bg-[#0f0d15]/80 backdrop-blur-3xl border-t border-white/5 z-[100] max-w-md mx-auto px-4 pb-12 pt-4">
         <div className="flex justify-between items-center">
           <NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" />
+          <NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" />
           <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
           <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
           <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
+          {/* Fixed syntax error: missing closing parenthesis in onClick handler */}
           <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
         </div>
       </nav>

@@ -64,6 +64,9 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
     
     if (hoursSince > 120) return; // Ignorera pass äldre än 5 dagar
 
+    // HÄMTA PASS-RPE (Default 7 om det saknas för att normalisera)
+    const sessionRpeFactor = session.rpe ? (session.rpe / 7) : 1.0;
+
     session.exercises.forEach(plannedEx => {
       const exData = allExercises.find(e => e.id === plannedEx.exerciseId);
       if (!exData) return;
@@ -75,13 +78,16 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
       if (setsToCount.length === 0) return;
 
       const fatigueAmount = calculateExerciseImpact(exData, setsToCount, userProfile.weight);
+      
+      // Applicera passets RPE-faktor på fatiguesumman
+      const adjustedFatigue = fatigueAmount * sessionRpeFactor;
 
       // Applicera på Primära (100%)
       const primaries = exData.primaryMuscles?.length ? exData.primaryMuscles : exData.muscleGroups;
-      primaries?.forEach(m => applyFatigue(status, m, fatigueAmount, hoursSince));
+      primaries?.forEach(m => applyFatigue(status, m, adjustedFatigue, hoursSince));
 
       // Applicera på Sekundära (50%)
-      exData.secondaryMuscles?.forEach(m => applyFatigue(status, m, fatigueAmount * 0.5, hoursSince));
+      exData.secondaryMuscles?.forEach(m => applyFatigue(status, m, adjustedFatigue * 0.5, hoursSince));
     });
   });
 

@@ -92,13 +92,11 @@ export const storage = {
 
     const existingExercises = db.getAllSync('SELECT * FROM exercises');
     
-    // Om databasen är tom, kör initial seed
     if (existingExercises.length === 0) {
       EXERCISE_DATABASE.forEach(ex => db.runSync('INSERT INTO exercises (id, data) VALUES (?, ?)', [ex]));
       INITIAL_ZONES.forEach(zone => db.runSync('INSERT INTO zones (id, data) VALUES (?, ?)', [zone]));
       INITIAL_GOAL_TARGETS.forEach(target => db.runSync('INSERT INTO goal_targets (id, data) VALUES (?, ?)', [target]));
     } else {
-      // MIGRERING: Lägg till övningar från databasen som inte redan finns (så användarens edits bevaras)
       EXERCISE_DATABASE.forEach(ex => {
         const exists = existingExercises.some(existing => existing.id === ex.id);
         if (!exists) {
@@ -131,6 +129,12 @@ export const storage = {
   getBiometricLogs: (): BiometricLog[] => db.getAllSync('SELECT * FROM biometric_logs'),
   getZones: (): Zone[] => db.getAllSync('SELECT * FROM zones'),
   saveZones: (zones: Zone[]) => zones.forEach(z => db.runSync('REPLACE INTO zones (id, data) VALUES (?, ?)', [z])),
+  saveZone: (zone: Zone) => {
+    db.runSync('REPLACE INTO zones (id, data) VALUES (?, ?)', [zone]);
+  },
+  deleteZone: (id: string) => {
+    db.runSync('DELETE FROM zones WHERE id = ?', [id]);
+  },
   getHistory: (): WorkoutSession[] => db.getAllSync('SELECT * FROM workout_history'),
   saveToHistory: (session: WorkoutSession) => {
     db.runSync('INSERT INTO workout_history (id, data) VALUES (?, ?)', [{ ...session, isCompleted: true, date: session.date || new Date().toISOString() }]);
@@ -147,7 +151,6 @@ export const storage = {
   getGoalTargets: (): GoalTarget[] => db.getAllSync('SELECT * FROM goal_targets'),
   saveGoalTarget: (target: GoalTarget) => db.runSync('REPLACE INTO goal_targets (id, data) VALUES (?, ?)', [target]),
   
-  // Routine Management
   getRoutines: (): WorkoutRoutine[] => db.getAllSync('SELECT * FROM workout_routines'),
   saveRoutine: (routine: WorkoutRoutine) => db.runSync('REPLACE INTO workout_routines (id, data) VALUES (?, ?)', [routine]),
   deleteRoutine: (id: string) => db.runSync('DELETE FROM workout_routines WHERE id = ?', [id])
