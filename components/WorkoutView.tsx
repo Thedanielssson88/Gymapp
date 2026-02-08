@@ -174,11 +174,16 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           </div>
         </div>
         <div className="flex gap-2">
+          {/* AVBRYT-KNAPP (Papperskorg) */}
           <button 
-            onClick={() => { if(confirm("Är du säker på att du vill avbryta passet? Inga framsteg sparas.")) onCancel(); }}
-            className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20 active:scale-95 transition-all"
+            onClick={() => {
+              if (window.confirm("Är du säker på att du vill avbryta passet? All data går förlorad.")) {
+                onCancel();
+              }
+            }}
+            className="p-3 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 active:scale-95 transition-all"
           >
-            <Trash2 size={18} />
+            <Trash2 size={24} />
           </button>
           <button onClick={saveAsRoutine} className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95">
              <Save size={18} />
@@ -382,10 +387,10 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         </button>
 
         <button 
-          onClick={() => { if(confirm("Vill du avbryta passet? Inga framsteg sparas.")) onCancel(); }}
+          onClick={() => { if(window.confirm("Är du säker på att du vill avbryta passet? All data går förlorad.")) onCancel(); }}
           className="w-full py-4 bg-white/5 border border-white/10 rounded-[24px] font-black italic text-[10px] tracking-widest uppercase text-white/40 hover:text-red-400 hover:border-red-400/20 transition-all flex items-center justify-center gap-2"
         >
-          <X size={14} /> Avbryt Pass
+          <Trash2 size={16} /> Avbryt Pass
         </button>
       </div>
 

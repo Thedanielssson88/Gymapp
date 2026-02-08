@@ -59,9 +59,15 @@ export default function App() {
   };
 
   const handleCancelWorkout = () => {
-    setCurrentSession(null);
+    // 1. Rensa i lagringen
     storage.setActiveSession(null);
+    
+    // 2. Rensa i appens state
+    setCurrentSession(null);
+    
+    // 3. Gå tillbaka till startsidan (Workout tab utan session visar "Starta Pass")
     setActiveTab('workout');
+    
     refreshData();
   };
 
@@ -173,7 +179,7 @@ export default function App() {
           <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
           <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
           <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
-          <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log'} icon={<Calendar size={24} />} label="Logg" />
+          <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
         </div>
       </nav>
     </div>
