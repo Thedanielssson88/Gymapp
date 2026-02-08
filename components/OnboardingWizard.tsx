@@ -8,6 +8,12 @@ interface OnboardingWizardProps {
   onComplete: () => void;
 }
 
+const EQUIPMENT_CATEGORIES = [
+  { title: "Grundläggande", items: [Equipment.BODYWEIGHT, Equipment.PULLUP_BAR, Equipment.BENCH, Equipment.DIP_STATION] },
+  { title: "Fria Vikter", items: [Equipment.BARBELL, Equipment.DUMBBELL, Equipment.KETTLEBELL, Equipment.EZ_BAR] },
+  { title: "Maskiner", items: [Equipment.LEG_PRESS, Equipment.LEG_EXTENSION, Equipment.LEG_CURL, Equipment.CABLES, Equipment.LAT_PULLDOWN, Equipment.CHEST_PRESS] }
+];
+
 export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }) => {
   const [step, setStep] = useState(0);
   
@@ -46,7 +52,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
       id: `zone-${Date.now()}`,
       name: gymName,
       icon: 'dumbell',
-      inventory: gymInventory
+      inventory: gymInventory.length > 0 ? gymInventory : [Equipment.BODYWEIGHT, Equipment.DUMBBELL]
     };
     await storage.saveZone(firstZone);
 
@@ -64,10 +70,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
 
   // Välj alla/inga för snabbval
   const toggleAllEquipment = () => {
-    if (gymInventory.length === Object.values(Equipment).length) {
+    const allEq = Object.values(Equipment);
+    if (gymInventory.length === allEq.length) {
       setGymInventory([]);
     } else {
-      setGymInventory(Object.values(Equipment));
+      setGymInventory(allEq);
     }
   };
 
@@ -170,23 +177,30 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
               placeholder="Vad heter gymmet?"
             />
 
-            <div className="flex-1 overflow-y-auto min-h-0 bg-black/20 rounded-3xl p-2 border border-white/5 scrollbar-hide">
-               <div className="grid grid-cols-2 gap-2">
-                  {Object.values(Equipment).map(eq => (
-                    <button
-                      key={eq}
-                      onClick={() => toggleEquipment(eq)}
-                      className={`p-3 rounded-xl border text-left flex flex-col gap-2 transition-all ${
-                        gymInventory.includes(eq)
-                          ? 'bg-accent-pink/20 border-accent-pink text-white'
-                          : 'bg-white/5 border-transparent text-text-dim opacity-60'
-                      }`}
-                    >
-                       <span className="text-[10px] font-black uppercase">{eq}</span>
-                       {gymInventory.includes(eq) && <Check size={14} className="self-end" />}
-                    </button>
-                  ))}
-               </div>
+            <div className="flex-1 overflow-y-auto min-h-0 bg-black/20 rounded-3xl p-4 border border-white/5 scrollbar-hide space-y-4">
+               {EQUIPMENT_CATEGORIES.map(cat => (
+                 <div key={cat.title}>
+                   <h4 className="text-xs font-black uppercase tracking-widest text-text-dim mb-2">{cat.title}</h4>
+                   <div className="grid grid-cols-2 gap-2">
+                      {cat.items.map(eq => (
+                        <button
+                          key={eq}
+                          onClick={() => toggleEquipment(eq)}
+                          className={`p-3 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                            gymInventory.includes(eq)
+                              ? 'bg-accent-pink/20 border-accent-pink text-white'
+                              : 'bg-white/5 border-transparent text-text-dim opacity-70'
+                          }`}
+                        >
+                           <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${gymInventory.includes(eq) ? 'border-accent-pink bg-accent-pink text-black' : 'border-white/20'}`}>
+                              {gymInventory.includes(eq) && <Check size={10} strokeWidth={4} />}
+                           </div>
+                           <span className="text-[10px] font-bold uppercase">{eq}</span>
+                        </button>
+                      ))}
+                   </div>
+                 </div>
+               ))}
             </div>
             
             <button onClick={toggleAllEquipment} className="text-xs text-text-dim underline text-center">

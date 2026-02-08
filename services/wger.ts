@@ -27,14 +27,15 @@ const CATEGORY_MAP: Record<number, MuscleGroup[]> = {
 // Mappning: Wger ID -> Dina Equipment
 const EQUIPMENT_MAP: Record<number, Equipment> = {
   1: Equipment.BARBELL,
-  2: Equipment.MACHINES, // SZ-Bar (Mapped to Machines)
+  2: Equipment.EZ_BAR,
   3: Equipment.DUMBBELL,
   4: Equipment.BODYWEIGHT, // Gym mat
+  6: Equipment.KETTLEBELL,
   7: Equipment.BODYWEIGHT,
-  8: Equipment.BARBELL, // Bench
-  6: Equipment.PULLUP_BAR,
-  9: Equipment.MACHINES,
-  10: Equipment.KETTLEBELL
+  8: Equipment.BENCH,
+  9: Equipment.PULLUP_BAR,
+  10: Equipment.MACHINES, // Swiss ball etc.
+  13: Equipment.CABLES
 };
 
 export const searchWger = async (query: string): Promise<any[]> => {

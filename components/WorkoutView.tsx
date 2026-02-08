@@ -9,7 +9,7 @@ import { WorkoutGenerator } from './WorkoutGenerator';
 import { WorkoutHeader } from './WorkoutHeader';
 import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
-import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, Calendar, Dumbbell } from 'lucide-react';
+import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, Calendar, Dumbbell, MapPin, Check, ArrowRightLeft } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
@@ -50,6 +50,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [infoTab, setInfoTab] = useState<'instructions' | 'history'>('instructions');
+  const [showZonePicker, setShowZonePicker] = useState(false);
 
   useEffect(() => {
     let interval: any;
@@ -223,6 +224,54 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     }
   };
 
+  const handleSwapExercise = (alternativeExerciseId: string) => {
+    if (!infoExercise) return;
+
+    const originalExerciseIndex = localSession.exercises.findIndex(e => e.exerciseId === infoExercise.id);
+    if (originalExerciseIndex === -1) {
+      alert("Kunde inte hitta övningen som skulle bytas ut i ditt nuvarande pass.");
+      return;
+    }
+
+    const alternativeExercise = allExercises.find(ex => ex.id === alternativeExerciseId);
+    if (!alternativeExercise) {
+      alert("Alternativ övning kunde inte hittas.");
+      return;
+    }
+    
+    if (!confirm(`Är du säker på att du vill byta ut "${infoExercise.name}" mot "${alternativeExercise.name}"?`)) {
+        return;
+    }
+
+    const historyForAlternative = getLastPerformance(alternativeExercise.id, history);
+    
+    let newSets: WorkoutSet[];
+    let notes: string;
+
+    if (historyForAlternative) {
+      newSets = createSmartSets(historyForAlternative, true);
+      notes = `Bytt från ${infoExercise.name}. Set baserade på tidigare prestation.`;
+    } else {
+      const originalPlannedExercise = localSession.exercises[originalExerciseIndex];
+      newSets = adaptVolume(originalPlannedExercise.sets, infoExercise, alternativeExercise, userProfile.goal);
+      notes = `Bytt från ${infoExercise.name}. Volym anpassad.`;
+    }
+
+    setLocalSession(prev => {
+      const updatedExercises = [...prev.exercises];
+      updatedExercises[originalExerciseIndex] = {
+        exerciseId: alternativeExercise.id,
+        sets: newSets,
+        notes: notes
+      };
+      const updatedSession = { ...prev, exercises: updatedExercises };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
+    });
+
+    setInfoExercise(null);
+  };
+
   return (
     <div className="space-y-4 pb-80 animate-in fade-in duration-500">
       <WorkoutHeader 
@@ -250,18 +299,25 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         />
       </div>
 
-      <div className="flex justify-center gap-2 px-2 overflow-x-auto scrollbar-hide py-2">
-        {allZones.map(z => (
-          <button 
-            key={z.id}
-            onClick={() => handleSwitchZone(z)}
-            className={`flex flex-col items-center justify-center min-w-[100px] py-4 rounded-2xl border transition-all ${activeZone.id === z.id ? 'bg-white/10 border-white/20 scale-105' : 'bg-white/5 border-white/5 opacity-40'}`}
-          >
-            <RefreshCw size={14} className={`mb-1 ${activeZone.id === z.id ? 'text-accent-pink' : 'text-text-dim'}`} />
-            <span className="text-[8px] font-black uppercase tracking-tighter italic">Byt till</span>
-            <span className="text-[10px] font-black uppercase italic">{z.name}</span>
-          </button>
-        ))}
+      <div className="px-4">
+        <button 
+          onClick={() => setShowZonePicker(true)}
+          className="w-full py-4 bg-[#1a1721] border border-white/5 rounded-2xl flex items-center justify-between px-6 shadow-sm active:scale-[0.98] transition-all"
+        >
+          <div className="flex items-center gap-4">
+             <div className="p-3 bg-white/5 rounded-xl text-accent-blue border border-white/5">
+               <MapPin size={20} />
+             </div>
+             <div className="text-left">
+               <span className="text-[9px] font-black uppercase tracking-widest text-text-dim block mb-1">Nuvarande Plats</span>
+               <span className="text-lg font-black italic uppercase text-white">{activeZone.name}</span>
+             </div>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/5">
+             <span className="text-[10px] font-bold uppercase text-white/60">Byt</span>
+             <RefreshCw size={12} className="text-white/60" />
+          </div>
+        </button>
       </div>
 
       <div className="space-y-4 px-2">
@@ -286,19 +342,45 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         })}
       </div>
 
-      <div className="fixed bottom-28 left-0 right-0 max-w-md mx-auto px-4 z-50 flex flex-col gap-3">
-         <button 
+      {/* --- KNAPPAR: FÖRESLÅ & LÄGG TILL --- */}
+      <div className="flex gap-2 mx-2 mt-4 mb-32">
+        {/* GENERATOR KNAPPEN (Som försvann) */}
+        <button 
+           onClick={() => setShowGenerator(true)}
+           className="flex-1 py-12 bg-accent-blue/10 border-2 border-dashed border-accent-blue/30 rounded-[40px] flex flex-col items-center justify-center gap-4 text-accent-blue hover:bg-accent-blue/20 transition-all active:scale-95"
+        >
+          <Sparkles size={32} />
+          <span className="font-black uppercase tracking-widest text-[10px] italic">Föreslå Pass</span>
+        </button>
+
+        {/* LÄGG TILL KNAPPEN */}
+        <button 
            onClick={() => setShowAddModal(true)} 
-           className="w-full py-5 bg-accent-blue/90 backdrop-blur-sm border border-white/5 text-white rounded-[24px] font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"
-         >
-           <Plus size={24} strokeWidth={3}/> Lägg till Övning
-         </button>
-         <button 
-            onClick={() => setShowSummary(true)}
-            className="w-full py-5 bg-accent-green text-[#0f0d15] rounded-[24px] font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"
-          >
-            <Dumbbell size={24} /> Avsluta Pass
-          </button>
+           className="flex-1 py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50 active:scale-95 transition-all"
+        >
+          <Plus size={32} />
+          <span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span>
+        </button>
+      </div>
+
+      {/* --- FOOTER ACTIONS --- */}
+      <div className="fixed bottom-32 left-0 right-0 px-4 z-[70] max-w-md mx-auto space-y-3">
+        
+        {/* Timer/Start Knapp (Behåll denna som den är) */}
+        <button 
+          onClick={() => { setIsTimerActive(!isTimerActive); if(!isTimerActive && timer === 0) setIsTimerActive(true); }} 
+          className={`w-full py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all ${isTimerActive ? 'bg-white/10 text-white' : 'bg-white text-black'}`}
+        >
+          {isTimerActive ? 'Pausa Pass' : (timer === 0 ? 'Starta Pass' : 'Återuppta Pass')}
+        </button>
+
+        {/* SLUTFÖR KNAPP (Här är fixen för färgen) */}
+        <button 
+          onClick={() => setShowSummary(true)} 
+          className="w-full bg-accent-pink text-white py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:opacity-90"
+        >
+          Slutför Pass <Check size={20} strokeWidth={3} />
+        </button>
       </div>
 
       {showSummary && (
@@ -338,6 +420,57 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                     </button>
                 ))}
             </div>
+        </div>
+      )}
+
+      {showZonePicker && (
+        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[150] flex flex-col p-6 animate-in fade-in duration-200">
+           <header className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-black italic uppercase text-white">Välj Gym</h3>
+                <p className="text-xs text-text-dim font-bold uppercase tracking-widest">Var tränar du idag?</p>
+              </div>
+              <button onClick={() => setShowZonePicker(false)} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-colors">
+                <X size={24} className="text-white"/>
+              </button>
+           </header>
+           
+           <div className="flex-1 overflow-y-auto space-y-3">
+              {allZones.map(z => {
+                 const isActive = activeZone.id === z.id;
+                 return (
+                   <button 
+                     key={z.id}
+                     onClick={() => { handleSwitchZone(z); setShowZonePicker(false); }}
+                     className={`w-full p-5 rounded-3xl border text-left flex items-center justify-between transition-all group ${
+                        isActive 
+                        ? 'bg-white text-black border-white' 
+                        : 'bg-[#1a1721] border-white/5 text-text-dim hover:border-white/20'
+                     }`}
+                   >
+                      <div className="flex items-center gap-4">
+                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${
+                            isActive ? 'bg-black/10 border-transparent text-black' : 'bg-white/5 border-white/5 text-white'
+                         }`}>
+                            <MapPin size={20} />
+                         </div>
+                         <div>
+                            <span className="text-lg font-black italic uppercase block leading-none mb-1.5">{z.name}</span>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-black/60' : 'text-white/30'}`}>
+                              {z.inventory.length} Redskap
+                            </span>
+                         </div>
+                      </div>
+                      
+                      {isActive && (
+                        <div className="bg-black text-white p-2 rounded-full">
+                           <Check size={16} strokeWidth={4} />
+                        </div>
+                      )}
+                   </button>
+                 );
+              })}
+           </div>
         </div>
       )}
 
@@ -431,10 +564,22 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                           {infoExercise.alternativeExIds.map(altId => {
                               const altEx = allExercises.find(e => e.id === altId);
                               return altEx ? (
-                                  <div key={altId} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden"><img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50" alt={altEx.name}/></div>
+                                  <button 
+                                    key={altId}
+                                    onClick={() => handleSwapExercise(altEx.id)}
+                                    className="w-full flex items-center justify-between gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-accent-blue/50 group active:scale-[0.98] transition-all"
+                                  >
+                                    <div className="flex items-center gap-4 text-left">
+                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                                          <img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity" alt={altEx.name}/>
+                                      </div>
                                       <span className="text-xs font-black uppercase italic tracking-tight">{altEx.name}</span>
-                                  </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 text-text-dim group-hover:bg-accent-blue group-hover:text-white transition-all">
+                                      <span className="text-[9px] font-bold uppercase">Byt</span>
+                                      <ArrowRightLeft size={12} />
+                                    </div>
+                                  </button>
                               ) : null;
                           })}
                       </div>

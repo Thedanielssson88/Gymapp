@@ -232,7 +232,7 @@ export const EXERCISE_DATABASE: Exercise[] = [
     primaryMuscles: ['Framsida lår', 'Säte'],
     secondaryMuscles: ['Ryggslut', 'Mage', 'Vader'],
     muscleGroups: ['Framsida lår', 'Säte', 'Ryggslut'],
-    equipment: [Equipment.BARBELL], // RACK?
+    equipment: [Equipment.BARBELL],
     difficultyMultiplier: 1.2,
     bodyweightCoefficient: 0.0,
     description: 'Ha stången på nacken, böj benen tills låren är parallella med golvet.',
@@ -521,7 +521,7 @@ export const EXERCISE_DATABASE: Exercise[] = [
     primaryMuscles: ['Rygg'],
     secondaryMuscles: ['Biceps', 'Mage'],
     muscleGroups: ['Rygg', 'Biceps'],
-    equipment: [Equipment.BODYWEIGHT], // Kan vara BOX eller bord
+    equipment: [Equipment.BODYWEIGHT],
     difficultyMultiplier: 0.6,
     bodyweightCoefficient: 0.5,
     description: 'Ligg under ett stadigt bord, håll i kanten och dra bröstet mot bordsskivan.',

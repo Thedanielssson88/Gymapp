@@ -188,7 +188,6 @@ const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, 
   const applyPreset = (type: 'gym' | 'home' | 'body') => {
     let newInv: Equipment[] = [];
     if (type === 'gym') {
-      // Välj nästan allt för gym
       newInv = Object.values(Equipment).filter(e => e !== Equipment.TRX && e !== Equipment.BANDS); 
     } else if (type === 'home') {
       newInv = [
@@ -248,7 +247,7 @@ const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, 
           {EQUIPMENT_CATEGORIES.map((category, idx) => (
             <div key={idx} className="space-y-3">
                <div className="sticky top-0 bg-[#0f0d15]/95 backdrop-blur-sm py-2 z-10 border-b border-white/5">
-                 <h4 className={`text-sm font-black uppercase tracking-wider ${idx === 0 ? 'text-accent-green' : 'text-white'}`}>
+                 <h4 className={`text-sm font-black uppercase tracking-wider text-white`}>
                    {category.title}
                  </h4>
                  <p className="text-[10px] text-text-dim">{category.description}</p>
