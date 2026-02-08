@@ -1,13 +1,15 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, MovementPattern, PlannedExercise, WorkoutRoutine } from '../types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, WorkoutRoutine } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
 import { storage } from '../services/storage';
-import { RecoveryMap } from './RecoveryMap';
-import { ALL_MUSCLE_GROUPS, calculateExerciseImpact } from '../utils/recovery';
+import { calculateExerciseImpact } from '../utils/recovery';
 import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { WorkoutGenerator } from './WorkoutGenerator';
-import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, Check, RefreshCw, Activity, ShieldCheck, Save, Timer, Play, Pause, RotateCcw, BarChart3, Info, FileText, Dumbbell, Sparkles } from 'lucide-react';
+import { WorkoutHeader } from './WorkoutHeader';
+import { WorkoutStats } from './WorkoutStats';
+import { ExerciseCard } from './ExerciseCard';
+import { Search, X, Plus, RefreshCw, Info, Sparkles } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
@@ -79,189 +81,106 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     onZoneChange(targetZone);
   };
 
-  const updateSet = (exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => {
+  const updateSet = useCallback((exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => {
     setLocalSession(prev => {
       const updatedExercises = [...prev.exercises];
       const updatedSets = [...updatedExercises[exIdx].sets];
-      
-      updatedSets[setIdx] = {
-        ...updatedSets[setIdx],
-        ...updates
-      };
-      
-      updatedExercises[exIdx] = {
-        ...updatedExercises[exIdx],
-        sets: updatedSets
-      };
-
+      updatedSets[setIdx] = { ...updatedSets[setIdx], ...updates };
+      updatedExercises[exIdx] = { ...updatedExercises[exIdx], sets: updatedSets };
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
-    
     if (updates.completed) setRestTimer(90); 
-  };
+  }, []);
 
-  const updateNotes = (exIdx: number, notes: string) => {
+  const updateNotes = useCallback((exIdx: number, notes: string) => {
     setLocalSession(prev => {
       const updatedExercises = [...prev.exercises];
-      updatedExercises[exIdx] = {
-        ...updatedExercises[exIdx],
-        notes: notes
-      };
-
+      updatedExercises[exIdx] = { ...updatedExercises[exIdx], notes };
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
-  };
+  }, []);
 
-  // Kritiskt: Använd funktionell uppdatering för att garantera att vi inte muterar state
-  const removeExercise = (exIdx: number) => {
+  const removeExercise = useCallback((exIdx: number) => {
     if (window.confirm("Vill du ta bort denna övning från passet?")) {
       setLocalSession(prev => {
-        const updatedExercises = [...prev.exercises];
-        updatedExercises.splice(exIdx, 1);
-        const updatedSession = { ...prev, exercises: updatedExercises };
-        storage.setActiveSession(updatedSession);
-        return updatedSession;
+        const n = { ...prev };
+        n.exercises = [...prev.exercises]; 
+        n.exercises.splice(exIdx, 1);
+        storage.setActiveSession(n);
+        return n;
       });
       setOpenNotesIdx(null);
     }
-  };
+  }, []);
 
-  const addSetToExercise = (exIdx: number) => {
+  const addSetToExercise = useCallback((exIdx: number) => {
     setLocalSession(prev => {
       const updatedExercises = [...prev.exercises];
       const currentSets = updatedExercises[exIdx].sets;
       const lastSet = currentSets[currentSets.length - 1];
-      
       const newSet: WorkoutSet = {
         reps: lastSet?.reps || 10,
         weight: lastSet?.weight || 0,
         completed: false
       };
-
-      updatedExercises[exIdx] = {
-        ...updatedExercises[exIdx],
-        sets: [...currentSets, newSet]
-      };
-
+      updatedExercises[exIdx] = { ...updatedExercises[exIdx], sets: [...currentSets, newSet] };
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
-  };
+  }, []);
 
   const addNewExercise = (ex: Exercise, autoGenerate = false) => {
     const history = storage.getHistory();
     const lastSetData = getLastPerformance(ex.id, history);
-    
-    let newSets: WorkoutSet[] = [];
-
-    if (lastSetData && lastSetData.length > 0) {
-      let useOverload = true;
-      if (!autoGenerate) {
-         useOverload = window.confirm(`Hittade historik för ${ex.name}!\nVill du applicera progressiv överbelastning (öka vikt/reps)?\n\nOK = Öka\nAvbryt = Samma som sist`);
-      }
-      newSets = createSmartSets(lastSetData, useOverload);
-    } else {
-      newSets = [
-        { reps: 10, weight: 0, completed: false }, 
-        { reps: 10, weight: 0, completed: false }, 
-        { reps: 10, weight: 0, completed: false }
-      ];
-    }
+    let newSets: WorkoutSet[] = lastSetData && lastSetData.length > 0
+      ? createSmartSets(lastSetData, autoGenerate || window.confirm(`Hittade historik för ${ex.name}!\nVill du applicera progressiv överbelastning?`))
+      : [{ reps: 10, weight: 0, completed: false }, { reps: 10, weight: 0, completed: false }, { reps: 10, weight: 0, completed: false }];
 
     setLocalSession(prev => {
-      const updatedSession = { 
-        ...prev,
-        exercises: [
-          ...prev.exercises,
-          {
-            exerciseId: ex.id,
-            sets: newSets,
-            notes: lastSetData ? 'Baserat på föregående pass' : ''
-          }
-        ]
-      };
+      const updatedSession = { ...prev, exercises: [...prev.exercises, { exerciseId: ex.id, sets: newSets, notes: lastSetData ? 'Baserat på föregående pass' : '' }] };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
-    
     setShowAddModal(false);
   };
 
   const handleGenerate = (muscles: MuscleGroup[]) => {
      const generated = generateWorkoutSession(muscles, activeZone, allExercises);
-     
-     if (generated.length === 0) {
-       alert("Hittade inga övningar i denna zon för valda muskler.");
-       return;
-     }
-
+     if (generated.length === 0) { alert("Hittade inga övningar i denna zon för valda muskler."); return; }
      const history = storage.getHistory();
-     
      setLocalSession(prev => {
        const newExercises = [...prev.exercises];
        generated.forEach(plan => {
           const ex = allExercises.find(e => e.id === plan.exerciseId);
           if (ex) {
              const lastSetData = getLastPerformance(ex.id, history);
-             const smartSets = lastSetData 
-                ? createSmartSets(lastSetData, true)
-                : plan.sets;
-             
-             newExercises.push({
-                exerciseId: ex.id,
-                sets: smartSets,
-                notes: 'Auto-genererad'
-             });
+             newExercises.push({ exerciseId: ex.id, sets: lastSetData ? createSmartSets(lastSetData, true) : plan.sets, notes: 'Auto-genererad' });
           }
        });
-
        const updatedSession = { ...prev, exercises: newExercises };
        storage.setActiveSession(updatedSession);
        return updatedSession;
      });
-
      setShowGenerator(false);
   };
 
   const muscleStats = useMemo(() => {
     const load: Record<string, number> = {};
     let totalLoadPoints = 0;
-    
     localSession.exercises.forEach(item => {
       const ex = allExercises.find(e => e.id === item.exerciseId);
       if (!ex) return;
-
       const impact = calculateExerciseImpact(ex, item.sets, userProfile.weight);
-
-      const primaries = (ex.primaryMuscles && ex.primaryMuscles.length > 0) 
-        ? ex.primaryMuscles 
-        : (ex.muscleGroups || []);
-
-      primaries.forEach(m => {
-        load[m] = (load[m] || 0) + impact;
-        totalLoadPoints += impact;
-      });
-
-      ex.secondaryMuscles?.forEach(m => {
-        const secondaryImpact = impact * 0.5;
-        load[m] = (load[m] || 0) + secondaryImpact;
-        totalLoadPoints += secondaryImpact;
-      });
+      const primaries = (ex.primaryMuscles && ex.primaryMuscles.length > 0) ? ex.primaryMuscles : (ex.muscleGroups || []);
+      primaries.forEach(m => { load[m] = (load[m] || 0) + impact; totalLoadPoints += impact; });
+      ex.secondaryMuscles?.forEach(m => { const secondaryImpact = impact * 0.5; load[m] = (load[m] || 0) + secondaryImpact; totalLoadPoints += secondaryImpact; });
     });
-
-    const results = Object.entries(load)
-      .map(([name, score]) => ({
-        name,
-        percentage: totalLoadPoints > 0 ? Math.round((score / totalLoadPoints) * 100) : 0,
-        count: score
-      }))
-      .sort((a, b) => b.count - a.count);
-
+    const results = Object.entries(load).map(([name, score]) => ({ name, percentage: totalLoadPoints > 0 ? Math.round((score / totalLoadPoints) * 100) : 0, count: score })).sort((a, b) => b.count - a.count);
     return { results, loadMap: load };
   }, [localSession.exercises, allExercises, userProfile.weight]);
 
@@ -275,129 +194,40 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
   }, [searchQuery, allExercises, activeLibraryTab, selectedCategory]);
 
-  const handleFinishClick = () => {
-    setShowSummary(true);
-    setIsTimerActive(false);
-  };
-
-  const handleConfirmedSave = (rpe: number, feeling: string) => {
-    const finalSession = { 
-        ...localSession, 
-        rpe, 
-        feeling 
-    };
-    onComplete(finalSession, timer);
+  const saveAsRoutine = () => {
+    const name = window.prompt("Vad ska rutinen heta?", localSession.name);
+    if (!name) return;
+    storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: localSession.exercises.map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: pe.sets.map(s => ({ reps: s.reps, weight: s.weight, completed: false })) })) });
+    alert("Rutinen sparad!");
   };
 
   return (
     <div className="space-y-4 pb-80 animate-in fade-in duration-500">
-      {/* HEADER WITH ACTIONS */}
-      <header className="px-4 pt-8 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsTimerActive(!isTimerActive)}
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isTimerActive ? 'bg-accent-pink/20 text-accent-pink shadow-[0_0_15px_rgba(255,45,85,0.2)]' : 'bg-white/5 text-white/40'}`}
-          >
-             {isTimerActive ? <Pause size={24} /> : <Play size={24} />}
-          </button>
-          <div>
-            <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em] block mb-1">Workout Timer</span>
-            <span className="text-xl font-black italic">{Math.floor(timer/60)}:{String(timer%60).padStart(2,'0')}</span>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {/* AVBRYT-KNAPP (Papperskorg) */}
-          <button 
-            onClick={() => {
-              if (window.confirm("Är du säker på att du vill avbryta passet? All data går förlorad.")) {
-                onCancel();
-              }
-            }}
-            className="p-3 bg-red-500/10 text-red-500 rounded-2xl border border-red-500/20 active:scale-95 transition-all"
-          >
-            <Trash2 size={24} />
-          </button>
-          <button 
-            onClick={() => {
-              const name = window.prompt("Vad ska rutinen heta?", localSession.name);
-              if (!name) return;
-              
-              const routine: WorkoutRoutine = {
-                id: `routine-${Date.now()}`,
-                name,
-                exercises: localSession.exercises.map(pe => ({
-                  exerciseId: pe.exerciseId,
-                  notes: pe.notes,
-                  sets: pe.sets.map(s => ({ 
-                    reps: s.reps, 
-                    weight: s.weight, 
-                    completed: false 
-                  }))
-                }))
-              };
-              
-              storage.saveRoutine(routine);
-              alert("Rutinen sparad i 'Mina Rutiner'!");
-            }} 
-            className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95"
-          >
-             <Save size={18} />
-             <span className="text-[10px] font-black uppercase">Spara Mall</span>
-          </button>
-        </div>
-      </header>
+      <WorkoutHeader 
+        timer={timer} 
+        isTimerActive={isTimerActive} 
+        onToggleTimer={() => setIsTimerActive(!isTimerActive)} 
+        onCancel={onCancel} 
+        onSaveRoutine={saveAsRoutine} 
+      />
 
-      {/* REST TIMER OVERLAY */}
       {restTimer !== null && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-accent-pink text-white px-8 py-3 rounded-full font-black italic shadow-2xl animate-in zoom-in slide-in-from-top-4 flex items-center gap-4">
-          <RotateCcw size={18} className="animate-spin" />
+          <RefreshCw size={18} className="animate-spin" />
           <span>VILA: {restTimer}s</span>
           <button onClick={() => setRestTimer(null)} className="ml-2 opacity-50"><X size={14}/></button>
         </div>
       )}
 
-      {/* WORKOUT INSIGHTS (MÅLMUSKLER & BELASTNING) */}
       <div className="px-4 space-y-4">
-        <div className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-3">
-              <BarChart3 className="text-accent-pink" size={20} />
-              <h4 className="text-sm font-black uppercase italic tracking-widest">Målmuskler</h4>
-            </div>
-            <button 
-              onClick={() => setIsLoadMapOpen(!isLoadMapOpen)}
-              className="text-[10px] font-black uppercase tracking-widest text-text-dim flex items-center gap-1"
-            >
-              Muskelbelastning {isLoadMapOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {muscleStats.results.slice(0, 3).map((m, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
-                  <span>{m.name}</span>
-                  <span className="text-accent-pink">{m.percentage}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-accent-pink transition-all duration-1000" style={{ width: `${m.percentage}%` }} />
-                </div>
-              </div>
-            ))}
-            {muscleStats.results.length === 0 && (
-              <p className="text-[10px] font-black text-text-dim uppercase tracking-widest text-center py-2 opacity-40">Lägg till övningar för att se fördelning</p>
-            )}
-          </div>
-
-          {isLoadMapOpen && (
-            <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-              <RecoveryMap loadMap={muscleStats.loadMap} size="md" />
-            </div>
-          )}
-        </div>
+        <WorkoutStats 
+          results={muscleStats.results} 
+          loadMap={muscleStats.loadMap} 
+          isLoadMapOpen={isLoadMapOpen} 
+          onToggleLoadMap={() => setIsLoadMapOpen(!isLoadMapOpen)} 
+        />
       </div>
 
-      {/* ZONE SWITCHER */}
       <div className="flex justify-center gap-2 px-2 overflow-x-auto scrollbar-hide py-2">
         {allZones.map(z => (
           <button 
@@ -412,295 +242,75 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         ))}
       </div>
 
-      {/* EXERCISE LIST */}
       <div className="space-y-4 px-2">
         {localSession.exercises.map((item, exIdx) => {
           const exData = allExercises.find(e => e.id === item.exerciseId)!;
-          
-          const calculateEffectiveWeight = (w: number) => {
-             const bwContr = userProfile.weight * (exData.bodyweightCoefficient || 0);
-             return Math.round(w + bwContr);
-          };
-
-          const totalSets = item.sets.length;
-          const avgReps = Math.round(item.sets.reduce((sum, s) => sum + s.reps, 0) / (totalSets || 1));
-          const currentWeight = item.sets[0]?.weight || 0;
-          const estLoad = calculateEffectiveWeight(currentWeight);
-
           return (
-            <div key={`${item.exerciseId}-${exIdx}`} className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-xl relative group">
-              <div className="flex justify-between items-start mb-6">
-                <div className="flex gap-4 items-center flex-1">
-                  <div className="w-14 h-14 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center p-2 overflow-hidden">
-                    <img src={exData.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${exData.name}`} className="w-full h-full object-cover opacity-30" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-xl font-black uppercase italic tracking-tighter leading-none mb-1">{exData.name}</h3>
-                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">{exData.pattern}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[10px] font-black text-white/60 uppercase">
-                        {totalSets} Set, {avgReps} Reps, {currentWeight}Kg 
-                      </span>
-                      <span className="text-[10px] font-black text-accent-pink uppercase italic">
-                        (Beräknad {estLoad}Kg)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button 
-                    onClick={() => setInfoExercise(exData)}
-                    className="p-2 text-text-dim/40 hover:text-accent-blue transition-colors"
-                  >
-                    <Info size={18} />
-                  </button>
-                  <button 
-                    onClick={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)}
-                    className={`p-2 transition-colors ${openNotesIdx === exIdx ? 'text-accent-pink' : 'text-text-dim/40 hover:text-white'}`}
-                  >
-                    <FileText size={18} />
-                  </button>
-                  <button 
-                    onClick={() => removeExercise(exIdx)} 
-                    className="p-2 text-text-dim/20 hover:text-red-500 transition-colors active:scale-95"
-                  >
-                    <Trash2 size={18}/>
-                  </button>
-                </div>
-              </div>
-
-              {/* EXPANDABLE NOTES FIELD */}
-              {openNotesIdx === exIdx && (
-                <div className="mb-6 animate-in slide-in-from-top-2 fade-in duration-300">
-                  <textarea 
-                    placeholder="Anteckningar för övningen (t.ex. inställningar)..."
-                    value={item.notes || ''}
-                    onChange={(e) => updateNotes(exIdx, e.target.value)}
-                    className="w-full bg-[#0f0d15] border border-accent-pink/20 rounded-2xl p-4 text-[11px] font-bold text-white placeholder:text-white/20 outline-none focus:border-accent-pink/50 transition-all shadow-inner"
-                    rows={3}
-                    autoFocus
-                  />
-                </div>
-              )}
-
-              {/* SETS */}
-              <div className="space-y-3">
-                {item.sets.map((set, setIdx) => (
-                  <div key={setIdx} className={`bg-[#0f0d15] rounded-2xl p-4 flex items-center gap-4 border transition-all ${set.completed ? 'border-green-500/30 opacity-40 grayscale' : 'border-white/5'}`}>
-                    <span className="text-lg font-black italic text-text-dim w-6 text-center">{setIdx + 1}</span>
-                    <div className="flex-1 grid grid-cols-2 gap-4">
-                      <div className="flex flex-col">
-                        <span className="text-[8px] font-black text-text-dim uppercase mb-1">KG</span>
-                        <input type="number" value={set.weight || ''} onChange={(e) => updateSet(exIdx, setIdx, { weight: Number(e.target.value) })} className="bg-transparent font-black text-2xl outline-none w-full" placeholder="0" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[8px] font-black text-text-dim uppercase mb-1">Reps</span>
-                        <input type="number" value={set.reps || ''} onChange={(e) => updateSet(exIdx, setIdx, { reps: Number(e.target.value) })} className="bg-transparent font-black text-2xl outline-none w-full" placeholder="0" />
-                      </div>
-                    </div>
-                    <button onClick={() => updateSet(exIdx, setIdx, { completed: !set.completed })} className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${set.completed ? 'bg-green-500 text-white' : 'bg-white/5 text-text-dim'}`}>
-                      {set.completed ? <Check size={28} /> : <Plus size={28} />}
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <button 
-                onClick={() => addSetToExercise(exIdx)}
-                className="w-full py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mt-4 active:scale-[0.98] transition-all"
-              >
-                + Lägg till set
-              </button>
-            </div>
+            <ExerciseCard 
+              key={`${item.exerciseId}-${exIdx}`}
+              item={item}
+              exIdx={exIdx}
+              exData={exData}
+              userWeight={userProfile.weight}
+              isNotesOpen={openNotesIdx === exIdx}
+              onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)}
+              onUpdateNotes={(notes) => updateNotes(exIdx, notes)}
+              onRemove={() => removeExercise(exIdx)}
+              onAddSet={() => addSetToExercise(exIdx)}
+              onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)}
+              onShowInfo={() => setInfoExercise(exData)}
+            />
           );
         })}
       </div>
 
-      {/* GENERATE & ADD BUTTONS */}
       <div className="flex gap-2 mx-2">
-        <button 
-          onClick={() => setShowGenerator(true)}
-          className="flex-1 py-12 bg-accent-blue/10 border-2 border-dashed border-accent-blue/30 rounded-[40px] flex flex-col items-center justify-center gap-4 text-accent-blue hover:bg-accent-blue/20 transition-all active:scale-95"
-        >
-          <Sparkles size={32} />
-          <span className="font-black uppercase tracking-widest text-[10px] italic">Föreslå Pass</span>
-        </button>
-
-        <button 
-          onClick={() => setShowAddModal(true)} 
-          className="flex-1 py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50 active:scale-95 transition-all"
-        >
-          <Plus size={32} />
-          <span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span>
-        </button>
+        <button onClick={() => setShowGenerator(true)} className="flex-1 py-12 bg-accent-blue/10 border-2 border-dashed border-accent-blue/30 rounded-[40px] flex flex-col items-center justify-center gap-4 text-accent-blue active:scale-95 transition-all"><Sparkles size={32} /><span className="font-black uppercase tracking-widest text-[10px] italic">Föreslå Pass</span></button>
+        <button onClick={() => setShowAddModal(true)} className="flex-1 py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim active:scale-95 transition-all"><Plus size={32} /><span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span></button>
       </div>
 
-      {/* FOOTER ACTIONS */}
       <div className="fixed bottom-32 left-0 right-0 px-4 z-[70] max-w-md mx-auto space-y-3">
-        {!isTimerActive && timer === 0 ? (
-          <button 
-            onClick={() => setIsTimerActive(true)} 
-            className="w-full bg-white text-black py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all"
-          >
-            Starta Pass <Play size={20} fill="currentColor" />
-          </button>
-        ) : (
-          <button 
-            onClick={() => setIsTimerActive(!isTimerActive)} 
-            className={`w-full py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all ${isTimerActive ? 'bg-white/10 text-white' : 'bg-white text-black'}`}
-          >
-            {isTimerActive ? 'Pausa Pass' : 'Återuppta Pass'} {isTimerActive ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
-          </button>
-        )}
-        
         <button 
-          onClick={handleFinishClick} 
-          className="w-full bg-accent-pink py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:opacity-90"
+          onClick={() => { setIsTimerActive(!isTimerActive); if(!isTimerActive && timer === 0) setIsTimerActive(true); }} 
+          className={`w-full py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all ${isTimerActive ? 'bg-white/10 text-white' : 'bg-white text-black'}`}
         >
-          Slutför Pass <Check size={20} strokeWidth={3} />
+          {isTimerActive ? 'Pausa Pass' : (timer === 0 ? 'Starta Pass' : 'Återuppta Pass')}
         </button>
-
-        <button 
-          onClick={() => { if(window.confirm("Är du säker på att du vill avbryta passet? All data går förlorad.")) onCancel(); }}
-          className="w-full py-4 bg-white/5 border border-white/10 rounded-[24px] font-black italic text-[10px] tracking-widest uppercase text-white/40 hover:text-red-400 hover:border-red-400/20 transition-all flex items-center justify-center gap-2"
-        >
-          <Trash2 size={16} /> Avbryt Pass
-        </button>
+        <button onClick={() => setShowSummary(true)} className="w-full bg-accent-pink py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:opacity-90">Slutför Pass</button>
       </div>
 
-      {/* MODAL FOR ADDING EXERCISES */}
       {showAddModal && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[120] flex flex-col p-6 animate-in slide-in-from-bottom-4 duration-500">
-           <header className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-black italic uppercase">Övningar</h3>
-              <button onClick={() => setShowAddModal(false)} className="p-3 bg-white/5 rounded-2xl"><X size={32}/></button>
-           </header>
-           <div className="relative mb-6">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={20} />
-              <input type="text" placeholder="Sök..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 pl-12 rounded-3xl outline-none focus:border-accent-pink transition-all" />
-           </div>
+           <header className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black italic uppercase">Övningar</h3><button onClick={() => setShowAddModal(false)} className="p-3 bg-white/5 rounded-2xl"><X size={32}/></button></header>
+           <div className="relative mb-6"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={20} /><input type="text" placeholder="Sök..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 pl-12 rounded-3xl outline-none focus:border-accent-pink transition-all" /></div>
            <div className="flex-1 overflow-y-auto space-y-3 scrollbar-hide">
               {filteredExercises.map(ex => (
                 <div key={ex.id} className="w-full p-5 bg-[#1a1721] border border-white/5 rounded-[32px] flex justify-between items-center group shadow-lg">
-                   <div className="text-left flex-1" onClick={() => addNewExercise(ex)}>
-                      <span className="font-black italic uppercase text-lg block leading-none">{ex.name}</span>
-                      <span className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{ex.pattern}</span>
-                   </div>
-                   <div className="flex gap-2">
-                     <button onClick={() => setInfoExercise(ex)} className="p-3 bg-white/5 rounded-2xl text-text-dim hover:text-accent-blue transition-all">
-                        <Info size={18} />
-                     </button>
-                     <button onClick={() => addNewExercise(ex)} className="p-3 bg-accent-pink/10 rounded-2xl text-accent-pink hover:bg-accent-pink hover:text-white transition-all">
-                        <Plus size={20} />
-                     </button>
-                   </div>
+                   <div className="text-left flex-1" onClick={() => addNewExercise(ex)}><span className="font-black italic uppercase text-lg block leading-none">{ex.name}</span><span className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{ex.pattern}</span></div>
+                   <div className="flex gap-2"><button onClick={() => setInfoExercise(ex)} className="p-3 bg-white/5 rounded-2xl text-text-dim hover:text-accent-blue transition-all"><Info size={18} /></button><button onClick={() => addNewExercise(ex)} className="p-3 bg-accent-pink/10 rounded-2xl text-accent-pink hover:bg-accent-pink hover:text-white transition-all"><Plus size={20} /></button></div>
                 </div>
               ))}
            </div>
         </div>
       )}
 
-      {/* GENERATOR MODAL */}
-      {showGenerator && (
-         <WorkoutGenerator 
-            activeZone={activeZone}
-            onClose={() => setShowGenerator(false)}
-            onGenerate={handleGenerate}
-         />
-      )}
-
-      {/* EXERCISE INFO MODAL */}
+      {showGenerator && <WorkoutGenerator activeZone={activeZone} onClose={() => setShowGenerator(false)} onGenerate={handleGenerate} />}
+      {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling) => onComplete({ ...localSession, rpe, feeling }, timer)} />}
+      
       {infoExercise && (
         <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[200] p-6 overflow-y-auto animate-in fade-in">
           <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
             <div className="w-full h-72 bg-black/50 relative">
-              {infoExercise.imageUrl ? (
-                  <img src={infoExercise.imageUrl} className="w-full h-full object-cover" />
-              ) : (
-                  <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30">
-                      <Dumbbell size={64} />
-                      <span className="font-black uppercase tracking-widest text-xs">Ingen bild tillgänglig</span>
-                  </div>
-              )}
-              <button 
-                  onClick={() => setInfoExercise(null)}
-                  className="absolute top-4 right-4 bg-black/50 p-3 rounded-full text-white backdrop-blur-md hover:scale-110 active:scale-95 transition-all"
-              >
-                  <X size={24} />
-              </button>
+              {infoExercise.imageUrl && <img src={infoExercise.imageUrl} className="w-full h-full object-cover" />}
+              <button onClick={() => setInfoExercise(null)} className="absolute top-4 right-4 bg-black/50 p-3 rounded-full text-white backdrop-blur-md"><X size={24} /></button>
             </div>
-
             <div className="p-8 space-y-8">
-              <div>
-                  <h2 className="text-3xl font-black italic uppercase leading-none mb-2 tracking-tighter">{infoExercise.name}</h2>
-                  <div className="flex gap-2">
-                      <span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">
-                          {infoExercise.pattern}
-                      </span>
-                  </div>
-              </div>
-
-              <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Instruktioner</h4>
-                  {infoExercise.description ? (
-                      <p className="text-sm leading-relaxed text-white/80 font-medium whitespace-pre-wrap">
-                          {infoExercise.description}
-                      </p>
-                  ) : (
-                      <p className="text-xs italic text-white/20 font-bold uppercase tracking-widest">Ingen beskrivning tillgänglig för denna övning.</p>
-                  )}
-              </div>
-
-              <div className="space-y-6">
-                  <div>
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-pink mb-3">Primära Muskler</h4>
-                      <div className="flex flex-wrap gap-2">
-                          {(infoExercise.primaryMuscles?.length ? infoExercise.primaryMuscles : infoExercise.muscleGroups).map(m => (
-                              <span key={m} className="px-3 py-1.5 border border-accent-pink/30 bg-accent-pink/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
-                          ))}
-                      </div>
-                  </div>
-                  {infoExercise.secondaryMuscles && infoExercise.secondaryMuscles.length > 0 && (
-                    <div>
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-blue mb-3">Sekundära Muskler</h4>
-                        <div className="flex flex-wrap gap-2">
-                            {infoExercise.secondaryMuscles.map(m => (
-                                <span key={m} className="px-3 py-1.5 border border-accent-blue/30 bg-accent-blue/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
-                            ))}
-                        </div>
-                    </div>
-                  )}
-              </div>
-
-              {infoExercise.alternativeExIds && infoExercise.alternativeExIds.length > 0 && (
-                  <div className="pt-6 border-t border-white/5">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-4">Bra Alternativ</h4>
-                      <div className="space-y-2">
-                          {infoExercise.alternativeExIds.map(altId => {
-                              const altEx = allExercises.find(e => e.id === altId);
-                              return altEx ? (
-                                  <div key={altId} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden">
-                                          <img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50"/>
-                                      </div>
-                                      <span className="text-xs font-black uppercase italic tracking-tight">{altEx.name}</span>
-                                  </div>
-                              ) : null;
-                          })}
-                      </div>
-                  </div>
-              )}
+              <h2 className="text-3xl font-black italic uppercase leading-none tracking-tighter">{infoExercise.name}</h2>
+              <div className="space-y-3"><h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Instruktioner</h4><p className="text-sm leading-relaxed text-white/80 font-medium whitespace-pre-wrap">{infoExercise.description || 'Ingen beskrivning tillgänglig.'}</p></div>
+              <div><h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-pink mb-3">Muskler</h4><div className="flex flex-wrap gap-2">{(infoExercise.primaryMuscles || infoExercise.muscleGroups).map(m => (<span key={m} className="px-3 py-1.5 border border-accent-pink/30 bg-accent-pink/5 rounded-xl text-[10px] font-black uppercase">{m}</span>))}</div></div>
             </div>
           </div>
         </div>
-      )}
-
-      {showSummary && (
-          <WorkoutSummaryModal 
-             duration={timer}
-             onCancel={() => setShowSummary(false)}
-             onConfirm={handleConfirmedSave}
-          />
       )}
     </div>
   );

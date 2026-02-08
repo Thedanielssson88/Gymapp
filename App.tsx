@@ -61,9 +61,13 @@ export default function App() {
   };
 
   const handleCancelWorkout = () => {
+    // 1. Rensa databasen först
     storage.setActiveSession(null);
+    // 2. Rensa lokalt state
     setCurrentSession(null);
-    setActiveTab('workout');
+    // 3. Navigera omedelbart bort för att förhindra race-conditions med auto-save
+    setActiveTab('body');
+    // 4. Uppdatera all data
     refreshData();
   };
 
@@ -157,7 +161,6 @@ export default function App() {
                 <button key={z.id} onClick={() => setSelectedZoneForStart(z)} className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex items-center justify-between group active:scale-95 transition-all">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center">
-                      {/* Fixed: Home and Trees are now correctly imported from lucide-react */}
                       {z.name.toLowerCase().includes('hem') ? <Home size={32} /> : 
                        z.name.toLowerCase().includes('ute') ? <Trees size={32} /> : 
                        <MapPin size={32} />}
@@ -181,7 +184,6 @@ export default function App() {
           <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
           <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
           <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
-          {/* Fixed syntax error: missing closing parenthesis in onClick handler */}
           <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
         </div>
       </nav>
