@@ -4,7 +4,7 @@ import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, Mov
 import { findReplacement, adaptVolume } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { RecoveryMap } from './RecoveryMap';
-import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
+import { ALL_MUSCLE_GROUPS, calculateExerciseImpact } from '../utils/recovery';
 import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, Check, RefreshCw, Activity, ShieldCheck, Save, Timer, Play, Pause, RotateCcw, BarChart3, Info, FileText, Dumbbell } from 'lucide-react';
 
 interface WorkoutViewProps {
@@ -132,24 +132,24 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       const ex = allExercises.find(e => e.id === item.exerciseId);
       if (!ex) return;
 
-      // Hitta primära muskler (fallback till gamla systemet om det saknas)
+      // Använd den avancerade fatigue-formeln för live-vyn
+      const impact = calculateExerciseImpact(ex, item.sets, userProfile.weight);
+
+      // Primära muskler
       const primaries = (ex.primaryMuscles && ex.primaryMuscles.length > 0) 
         ? ex.primaryMuscles 
-        : ex.muscleGroups || [];
+        : (ex.muscleGroups || []);
 
-      // Hitta sekundära
-      const secondaries = ex.secondaryMuscles || [];
-
-      // Ge 1 poäng för primära
       primaries.forEach(m => {
-        load[m] = (load[m] || 0) + 1;
-        totalLoadPoints += 1;
+        load[m] = (load[m] || 0) + impact;
+        totalLoadPoints += impact;
       });
 
-      // Ge 0.5 poäng för sekundära
-      secondaries.forEach(m => {
-        load[m] = (load[m] || 0) + 0.5;
-        totalLoadPoints += 0.5;
+      // Sekundära muskler (50% av impact)
+      ex.secondaryMuscles?.forEach(m => {
+        const secondaryImpact = impact * 0.5;
+        load[m] = (load[m] || 0) + secondaryImpact;
+        totalLoadPoints += secondaryImpact;
       });
     });
 
@@ -162,7 +162,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       .sort((a, b) => b.count - a.count);
 
     return { results, loadMap: load };
-  }, [localSession.exercises, allExercises]);
+  }, [localSession.exercises, allExercises, userProfile.weight]);
 
   const filteredExercises = useMemo(() => {
     return allExercises.filter(ex => {
