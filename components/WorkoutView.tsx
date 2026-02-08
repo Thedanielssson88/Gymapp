@@ -4,7 +4,6 @@ import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment } fr
 import { findReplacement, adaptVolume } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { RecoveryMap } from './RecoveryMap';
-// Fix: Added missing Activity icon to the lucide-react import list.
 import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, ChevronRight, Check, MapPin, RefreshCw, Zap, Activity } from 'lucide-react';
 
 interface WorkoutViewProps {
@@ -91,7 +90,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return map;
   }, [localSession.exercises, allExercises]);
 
-  // Fix: Added explicit type casting for numeric subtraction in sort to resolve arithmetic operation errors.
   const activeMuscleSummaries = Object.entries(muscleLoadMap)
     .sort((a, b) => (b[1] as number) - (a[1] as number))
     .slice(0, 3);
@@ -147,8 +145,10 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       <div className="space-y-4 px-2">
         {localSession.exercises.map((item, exIdx) => {
           const exData = allExercises.find(e => e.id === item.exerciseId)!;
+          const bodyweightLoad = userProfile.weight * (exData.bodyweightCoefficient || 0);
           const totalWeight = item.sets.reduce((sum, s) => sum + s.weight, 0);
           const totalReps = item.sets.reduce((sum, s) => sum + s.reps, 0);
+          const avgEffectiveWeight = Math.round((totalWeight + (bodyweightLoad * item.sets.length)) / item.sets.length || 0);
 
           return (
             <div key={`${item.exerciseId}-${exIdx}`} className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-xl relative overflow-hidden group">
@@ -163,7 +163,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                     <span className="text-[8px] font-black text-text-dim uppercase tracking-[0.2em] block mb-0.5">Fokusövning</span>
                     <h3 className="text-2xl font-black uppercase italic tracking-tighter leading-none">{exData.name}</h3>
                     <p className="text-[10px] font-black text-text-dim uppercase mt-2 tracking-widest">
-                      {item.sets.length} SET • {Math.round(totalReps / item.sets.length || 0)} REPS • {totalWeight} KG
+                      {item.sets.length} SET • {Math.round(totalReps / item.sets.length || 0)} REPS • {totalWeight} KG • {avgEffectiveWeight} EFF. KG
                     </p>
                   </div>
                 </div>
@@ -176,44 +176,50 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               </div>
 
               <div className="space-y-3">
-                {item.sets.map((set, setIdx) => (
-                  <div 
-                    key={setIdx} 
-                    className={`bg-[#0f0d15] rounded-2xl p-4 flex items-center gap-4 border transition-all ${set.completed ? 'border-green-500/30 opacity-40 grayscale' : 'border-white/5'}`}
-                  >
-                    <span className="text-lg font-black italic text-text-dim w-6 text-center">{setIdx + 1}</span>
-                    
-                    <div className="flex-1 grid grid-cols-2 gap-4">
-                      <div className="flex flex-col">
-                        <span className="text-[8px] font-black text-text-dim uppercase mb-1">Vikt</span>
-                        <input 
-                          type="number" 
-                          value={set.weight || ''} 
-                          onChange={(e) => updateSet(exIdx, setIdx, { weight: Number(e.target.value) })}
-                          className="bg-transparent font-black text-2xl outline-none w-full"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[8px] font-black text-text-dim uppercase mb-1">Reps</span>
-                        <input 
-                          type="number" 
-                          value={set.reps || ''} 
-                          onChange={(e) => updateSet(exIdx, setIdx, { reps: Number(e.target.value) })}
-                          className="bg-transparent font-black text-2xl outline-none w-full"
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={() => updateSet(exIdx, setIdx, { completed: !set.completed })}
-                      className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${set.completed ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-text-dim hover:bg-white/10'}`}
+                {item.sets.map((set, setIdx) => {
+                  const setEffectiveWeight = Math.round(set.weight + bodyweightLoad);
+                  return (
+                    <div 
+                      key={setIdx} 
+                      className={`bg-[#0f0d15] rounded-2xl p-4 flex items-center gap-4 border transition-all ${set.completed ? 'border-green-500/30 opacity-40 grayscale' : 'border-white/5'}`}
                     >
-                      {set.completed ? <Check size={28} strokeWidth={3} /> : <Plus size={28} />}
-                    </button>
-                  </div>
-                ))}
+                      <span className="text-lg font-black italic text-text-dim w-6 text-center">{setIdx + 1}</span>
+                      
+                      <div className="flex-1 grid grid-cols-2 gap-4">
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-text-dim uppercase mb-1">Vikt (+{Math.round(bodyweightLoad)} Eff)</span>
+                          <div className="flex items-baseline gap-1">
+                            <input 
+                              type="number" 
+                              value={set.weight || ''} 
+                              onChange={(e) => updateSet(exIdx, setIdx, { weight: Number(e.target.value) })}
+                              className="bg-transparent font-black text-2xl outline-none w-full"
+                              placeholder="0"
+                            />
+                            <span className="text-[10px] font-black text-accent-pink opacity-60">={setEffectiveWeight}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[8px] font-black text-text-dim uppercase mb-1">Reps</span>
+                          <input 
+                            type="number" 
+                            value={set.reps || ''} 
+                            onChange={(e) => updateSet(exIdx, setIdx, { reps: Number(e.target.value) })}
+                            className="bg-transparent font-black text-2xl outline-none w-full"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        onClick={() => updateSet(exIdx, setIdx, { completed: !set.completed })}
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${set.completed ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-text-dim hover:bg-white/10'}`}
+                      >
+                        {set.completed ? <Check size={28} strokeWidth={3} /> : <Plus size={28} />}
+                      </button>
+                    </div>
+                  );
+                })}
 
                 <button 
                   onClick={() => {
