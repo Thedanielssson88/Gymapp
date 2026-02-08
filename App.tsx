@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -13,12 +12,13 @@ import { storage } from './services/storage';
 import { calculateMuscleRecovery } from './utils/recovery';
 import { RecoveryMap } from './components/RecoveryMap';
 import { OnboardingWizard } from './components/OnboardingWizard';
-import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight } from 'lucide-react';
+import { SettingsView } from './components/SettingsView';
+import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings } from 'lucide-react';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms'>('body');
-  const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'stats'>('recovery');
+  const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'stats' | 'settings'>('recovery');
   
   const [user, setUser] = useState<UserProfile | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -143,14 +143,18 @@ export default function App() {
       case 'body':
         return (
           <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen">
-            <nav className="flex items-center justify-center gap-10 pt-8 border-b border-white/5 pb-4">
+            <nav className="flex items-center justify-center gap-6 pt-8 border-b border-white/5 pb-4 px-2">
               <button onClick={() => setBodySubTab('recovery')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'recovery' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Recovery</button>
               <button onClick={() => setBodySubTab('measurements')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'measurements' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Mått</button>
               <button onClick={() => setBodySubTab('stats')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'stats' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Stats</button>
+              <button onClick={() => setBodySubTab('settings')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'settings' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>
+                 <Settings size={16} />
+              </button>
             </nav>
             {bodySubTab === 'recovery' && <div className="animate-in zoom-in-95"><RecoveryMap status={recoveryStatus} size="lg" /><div className="bg-white/2 p-6 rounded-[40px] border border-white/5 mt-8 text-center"><p className="text-[10px] font-black text-text-dim uppercase tracking-[0.3em] mb-2">Din dagsform</p><p className="text-4xl font-black italic text-white uppercase tracking-tighter">Peak Performance</p></div></div>}
             {bodySubTab === 'measurements' && <MeasurementsView profile={user} onUpdate={refreshData} />}
             {bodySubTab === 'stats' && <StatsView logs={biometricLogs} history={history} allExercises={allExercises} />}
+            {bodySubTab === 'settings' && user && ( <SettingsView userProfile={user} onUpdate={refreshData} /> )}
           </div>
         );
       case 'log': return <WorkoutLog history={history} allExercises={allExercises} />;
