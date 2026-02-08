@@ -24,30 +24,22 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
   
   const muscleScores = useMemo(() => {
     const list = ALL_MUSCLE_GROUPS.map(muscle => {
-      let score = 0;
+      let score = 100;
       let loadCount = 0;
       
-      if (loadMap) {
-        // LÄGE: BELASTNING (I PASSET)
-        // 0 = Ingen last, 100 = Max last.
-        // Vi antar att ca 3 poäng (t.ex. 3 primära set) är "Full träff" för visualisering
+      if (status) {
+        score = Math.round(status[muscle] ?? 100);
+      } else if (loadMap) {
         loadCount = loadMap[muscle] || 0;
-        score = Math.min(100, Math.round((loadCount / 3) * 100));
-      } else {
-        // LÄGE: ÅTERHÄMTNING (STARTSIDAN)
-        // 100 = Pigg, 0 = Död.
-        score = Math.round(status?.[muscle] ?? 100);
+        score = Math.max(0, 100 - loadCount);
       }
 
       return { muscle, score, loadCount };
     });
 
-    // SORTERING
     if (loadMap) {
-        // I passet: Visa de vi tränar MEST (högst score) överst
-        return list.sort((a, b) => b.score - a.score);
+        return list.sort((a, b) => b.loadCount - a.loadCount);
     } else {
-        // I recovery: Visa de som är TRÖTTAST (lägst score) överst
         return list.sort((a, b) => a.score - b.score);
     }
   }, [status, loadMap]);
@@ -58,17 +50,15 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
     }
   };
 
-  // Hjälpfunktion för färg vid belastning (Grön -> Röd när man bygger upp)
   const getLoadColor = (percentage: number) => {
       if (percentage <= 5) return 'rgba(255,255,255,0.1)';
-      if (percentage < 40) return '#2ed573'; // Grön (Startar lätt)
-      if (percentage < 75) return '#ffa502'; // Orange (Börjar kännas)
-      return '#ff2d55'; // Röd (Hög volym)
+      if (percentage < 40) return '#2ed573';
+      if (percentage < 75) return '#ffa502';
+      return '#ff2d55';
   };
 
   return (
     <div className="w-full space-y-6">
-      {/* Header Info */}
       <div className="flex justify-between items-end px-2">
         <div>
           <h3 className="text-[10px] font-black uppercase text-accent-pink tracking-[0.3em] mb-1">
@@ -86,23 +76,19 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
         )}
       </div>
 
-      {/* Heatmap List */}
       <div className={`grid gap-2 ${size === 'lg' ? 'max-h-[60vh]' : 'max-h-[40vh]'} overflow-y-auto scrollbar-hide pr-1`}>
         {muscleScores.map(({ muscle, score, loadCount }) => {
           const isSelected = selectedMuscles.includes(muscle);
-          
-          // Välj färglogik
+          const displayScore = loadMap ? loadCount : score;
           const color = loadMap 
-            ? getLoadColor(score) 
-            : getRecoveryColor(score, isSelected);
+            ? getLoadColor(displayScore) 
+            : getRecoveryColor(displayScore, isSelected);
 
-          // Texten till höger
           const statusText = loadMap 
-            ? (loadCount > 0 ? `${loadCount.toFixed(1)}p` : '-')
+            ? (loadCount > 0 ? `Belastning: ${Math.round(loadCount)}` : '-')
             : getRecoveryStatus(score);
 
-          // Tona ner muskler som inte används i passet
-          const opacity = loadMap && score === 0 ? 0.3 : 1;
+          const opacity = loadMap && loadCount === 0 ? 0.3 : 1;
 
           return (
             <div 
@@ -126,12 +112,11 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
                 </div>
               </div>
 
-              {/* Progress Bar */}
               <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden relative">
                 <div 
                   className="h-full transition-all duration-1000 ease-out rounded-full"
                   style={{ 
-                    width: `${score}%`, 
+                    width: `${displayScore}%`, 
                     backgroundColor: color,
                   }}
                 />

@@ -1,6 +1,5 @@
 
 import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal } from '../types';
-import { storage } from '../services/storage';
 
 /**
  * Epley Formula for Estimated 1RM
@@ -16,10 +15,9 @@ export const calculate1RM = (weight: number, reps: number): number => {
  */
 export const findReplacement = (
   currentExercise: Exercise,
-  targetZone: Zone
+  targetZone: Zone,
+  allExercises: Exercise[]
 ): Exercise => {
-  const allExercises = storage.getAllExercises();
-  
   // Filter DB for same movement pattern and available equipment
   const candidates = allExercises.filter(ex => 
     ex.pattern === currentExercise.pattern &&

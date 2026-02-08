@@ -6,11 +6,15 @@ import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { ExerciseImporter } from './ExerciseImporter';
 import { Plus, Search, Edit3, Trash2, X, Check, Dumbbell, Activity, ShieldCheck, Filter, Link, Image, AlignLeft, Globe, Info } from 'lucide-react';
 
+interface ExerciseLibraryProps {
+  allExercises: Exercise[];
+  onUpdate: () => void;
+}
+
 type LibraryTab = 'all' | 'muscles' | 'equipment';
 type ModalTab = 'info' | 'anatomy' | 'media';
 
-export const ExerciseLibrary: React.FC = () => {
-  const [exercises, setExercises] = useState<Exercise[]>(storage.getAllExercises());
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, onUpdate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<LibraryTab>('all');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -20,10 +24,8 @@ export const ExerciseLibrary: React.FC = () => {
   const [modalTab, setModalTab] = useState<ModalTab>('info');
   const [showImporter, setShowImporter] = useState(false);
 
-  const allExercisesForContext = useMemo(() => storage.getAllExercises(), [exercises]);
-
   const filteredExercises = useMemo(() => {
-    return exercises.filter(ex => {
+    return allExercises.filter(ex => {
       const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           ex.pattern.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -36,9 +38,9 @@ export const ExerciseLibrary: React.FC = () => {
 
       return matchesSearch && matchesCategory;
     });
-  }, [searchQuery, exercises, activeTab, selectedCategory]);
+  }, [searchQuery, allExercises, activeTab, selectedCategory]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editingEx?.name || !editingEx?.pattern) return;
     
     const allMuscles = Array.from(new Set([
@@ -61,36 +63,39 @@ export const ExerciseLibrary: React.FC = () => {
       alternativeExIds: editingEx.alternativeExIds || []
     };
 
-    storage.saveExercise(newEx);
-    setExercises(storage.getAllExercises());
+    await storage.saveExercise(newEx);
+    onUpdate();
     setEditingEx(null);
     setIsAdding(false);
     setModalTab('info');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Är du säker på att du vill ta bort denna övning?")) {
-      storage.deleteExercise(id);
-      setExercises(storage.getAllExercises());
+      await storage.deleteExercise(id);
+      onUpdate();
     }
   };
 
   const togglePrimaryMuscle = (m: MuscleGroup) => {
-    const current = editingEx?.primaryMuscles || [];
+    if (!editingEx) return;
+    const current = editingEx.primaryMuscles || [];
     const next = current.includes(m) ? current.filter(x => x !== m) : [...current, m];
-    setEditingEx({ ...editingEx!, primaryMuscles: next });
+    setEditingEx({ ...editingEx, primaryMuscles: next });
   };
 
   const toggleSecondaryMuscle = (m: MuscleGroup) => {
-    const current = editingEx?.secondaryMuscles || [];
+    if (!editingEx) return;
+    const current = editingEx.secondaryMuscles || [];
     const next = current.includes(m) ? current.filter(x => x !== m) : [...current, m];
-    setEditingEx({ ...editingEx!, secondaryMuscles: next });
+    setEditingEx({ ...editingEx, secondaryMuscles: next });
   };
 
   const toggleEquipment = (e: Equipment) => {
-    const current = editingEx?.equipment || [];
+    if (!editingEx) return;
+    const current = editingEx.equipment || [];
     const next = current.includes(e) ? current.filter(x => x !== e) : [...current, e];
-    setEditingEx({ ...editingEx!, equipment: next });
+    setEditingEx({ ...editingEx, equipment: next });
   };
 
   const handleTabChange = (tab: LibraryTab) => {
@@ -244,7 +249,6 @@ export const ExerciseLibrary: React.FC = () => {
         </div>
       )}
 
-      {/* Editor Modal */}
       {(editingEx || isAdding) && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[120] p-6 overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 duration-500">
           <div className="flex justify-between items-center mb-6">
@@ -262,42 +266,42 @@ export const ExerciseLibrary: React.FC = () => {
           </div>
 
           <div className="space-y-8 pb-32">
-            {modalTab === 'info' && (
+            {modalTab === 'info' && editingEx && (
               <>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Övningens Namn</label>
-                  <input type="text" value={editingEx?.name || ''} onChange={(e) => setEditingEx({ ...editingEx!, name: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-6 outline-none focus:border-accent-pink font-black text-xl placeholder:text-text-dim/20" placeholder="Ex: Diamond Pushups" />
+                  <input type="text" value={editingEx.name || ''} onChange={(e) => setEditingEx({ ...editingEx, name: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-6 outline-none focus:border-accent-pink font-black text-xl placeholder:text-text-dim/20" placeholder="Ex: Diamond Pushups" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Rörelsemönster</label>
                   <div className="grid grid-cols-2 gap-2">
                     {Object.values(MovementPattern).map(p => (
-                      <button key={p} onClick={() => setEditingEx({ ...editingEx!, pattern: p })} className={`p-4 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${editingEx?.pattern === p ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/5 text-text-dim'}`}>{p}</button>
+                      <button key={p} onClick={() => setEditingEx({ ...editingEx, pattern: p })} className={`p-4 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${editingEx.pattern === p ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/5 text-text-dim'}`}>{p}</button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Beskrivning</label>
-                  <textarea value={editingEx?.description || ''} onChange={(e) => setEditingEx({ ...editingEx!, description: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 text-sm font-medium outline-none focus:border-accent-pink min-h-[150px] placeholder:text-text-dim/20" placeholder="Beskriv hur övningen utförs..." />
+                  <textarea value={editingEx.description || ''} onChange={(e) => setEditingEx({ ...editingEx, description: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 text-sm font-medium outline-none focus:border-accent-pink min-h-[150px] placeholder:text-text-dim/20" placeholder="Beskriv hur övningen utförs..." />
                 </div>
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Nödvändig Utrustning</label>
                   <div className="flex flex-wrap gap-2">
                     {Object.values(Equipment).map(e => (
-                      <button key={e} onClick={() => toggleEquipment(e)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx?.equipment?.includes(e) ? 'bg-accent-blue border-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{e}</button>
+                      <button key={e} onClick={() => toggleEquipment(e)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx.equipment?.includes(e) ? 'bg-accent-blue border-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{e}</button>
                     ))}
                   </div>
                 </div>
               </>
             )}
 
-            {modalTab === 'anatomy' && (
+            {modalTab === 'anatomy' && editingEx && (
               <>
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-accent-pink uppercase tracking-widest ml-1">Primära Muskler (Drivande)</label>
                   <div className="flex flex-wrap gap-2 bg-accent-pink/5 p-4 rounded-[24px] border border-accent-pink/10">
                     {ALL_MUSCLE_GROUPS.map(m => (
-                      <button key={m} onClick={() => togglePrimaryMuscle(m)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx?.primaryMuscles?.includes(m) ? 'bg-accent-pink border-accent-pink text-white shadow-[0_0_15px_rgba(255,45,85,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>
+                      <button key={m} onClick={() => togglePrimaryMuscle(m)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx.primaryMuscles?.includes(m) ? 'bg-accent-pink border-accent-pink text-white shadow-[0_0_15px_rgba(255,45,85,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>
                     ))}
                   </div>
                 </div>
@@ -305,45 +309,45 @@ export const ExerciseLibrary: React.FC = () => {
                   <label className="text-[10px] font-black text-accent-blue uppercase tracking-widest ml-1">Sekundära Muskler (Hjälpande)</label>
                   <div className="flex flex-wrap gap-2 bg-accent-blue/5 p-4 rounded-[24px] border border-accent-blue/10">
                     {ALL_MUSCLE_GROUPS.map(m => (
-                      <button key={m} onClick={() => toggleSecondaryMuscle(m)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx?.secondaryMuscles?.includes(m) ? 'bg-accent-blue border-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>
+                      <button key={m} onClick={() => toggleSecondaryMuscle(m)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx.secondaryMuscles?.includes(m) ? 'bg-accent-blue border-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>
                     ))}
                   </div>
                 </div>
                 <div className="bg-white/5 p-6 rounded-[32px] border border-white/5 space-y-6">
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Intensitet Multiplier</label><span className="text-accent-pink font-black text-lg italic">{editingEx?.difficultyMultiplier?.toFixed(1)}x</span></div>
-                    <input type="range" min="0.1" max="2.0" step="0.1" value={editingEx?.difficultyMultiplier || 1.0} onChange={(e) => setEditingEx({ ...editingEx!, difficultyMultiplier: parseFloat(e.target.value) })} className="w-full accent-accent-pink h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Intensitet Multiplier</label><span className="text-accent-pink font-black text-lg italic">{editingEx.difficultyMultiplier?.toFixed(1)}x</span></div>
+                    <input type="range" min="0.1" max="2.0" step="0.1" value={editingEx.difficultyMultiplier || 1.0} onChange={(e) => setEditingEx({ ...editingEx, difficultyMultiplier: parseFloat(e.target.value) })} className="w-full accent-accent-pink h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
                   </div>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Bodyweight Coeff.</label><span className="text-accent-blue font-black text-lg italic">{editingEx?.bodyweightCoefficient?.toFixed(2)}x</span></div>
-                    <input type="range" min="0" max="1" step="0.05" value={editingEx?.bodyweightCoefficient || 0} onChange={(e) => setEditingEx({ ...editingEx!, bodyweightCoefficient: parseFloat(e.target.value) })} className="w-full accent-accent-blue h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
+                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Bodyweight Coeff.</label><span className="text-accent-blue font-black text-lg italic">{editingEx.bodyweightCoefficient?.toFixed(2)}x</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value={editingEx.bodyweightCoefficient || 0} onChange={(e) => setEditingEx({ ...editingEx, bodyweightCoefficient: parseFloat(e.target.value) })} className="w-full accent-accent-blue h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
                   </div>
                 </div>
               </>
             )}
 
-            {modalTab === 'media' && (
+            {modalTab === 'media' && editingEx && (
               <>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Bild / GIF URL</label>
                   <div className="flex gap-4 items-center">
-                    <div className="flex-1 relative"><Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" /><input type="text" value={editingEx?.imageUrl || ''} onChange={(e) => setEditingEx({ ...editingEx!, imageUrl: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 pl-12 font-bold text-xs outline-none focus:border-accent-pink" placeholder="https://..." /></div>
-                    {editingEx?.imageUrl && <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 bg-black/50"><img src={editingEx.imageUrl} className="w-full h-full object-cover" /></div>}
+                    <div className="flex-1 relative"><Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" /><input type="text" value={editingEx.imageUrl || ''} onChange={(e) => setEditingEx({ ...editingEx, imageUrl: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 pl-12 font-bold text-xs outline-none focus:border-accent-pink" placeholder="https://..." /></div>
+                    {editingEx.imageUrl && <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 bg-black/50"><img src={editingEx.imageUrl} className="w-full h-full object-cover" /></div>}
                   </div>
                 </div>
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Alternativa Övningar</label>
                   <div className="space-y-2">
-                    {editingEx?.alternativeExIds?.map(altId => {
-                      const altEx = exercises.find(e => e.id === altId);
+                    {editingEx.alternativeExIds?.map(altId => {
+                      const altEx = allExercises.find(e => e.id === altId);
                       return altEx ? (
-                        <div key={altId} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/5 group"><span className="text-xs font-bold uppercase tracking-tight">{altEx.name}</span><button onClick={() => { const next = editingEx.alternativeExIds?.filter(id => id !== altId); setEditingEx({ ...editingEx!, alternativeExIds: next }); }} className="text-red-500/40 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div>
+                        <div key={altId} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/5 group"><span className="text-xs font-bold uppercase tracking-tight">{altEx.name}</span><button onClick={() => { const next = editingEx.alternativeExIds?.filter(id => id !== altId); setEditingEx({ ...editingEx, alternativeExIds: next }); }} className="text-red-500/40 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div>
                       ) : null;
                     })}
                   </div>
-                  <select className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 text-xs font-bold outline-none appearance-none" onChange={(e) => { if(!e.target.value) return; const current = editingEx?.alternativeExIds || []; if(!current.includes(e.target.value)) { setEditingEx({ ...editingEx!, alternativeExIds: [...current, e.target.value] }); } e.target.value = ''; }}>
+                  <select className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 text-xs font-bold outline-none appearance-none" onChange={(e) => { if(!e.target.value) return; const current = editingEx.alternativeExIds || []; if(!current.includes(e.target.value)) { setEditingEx({ ...editingEx, alternativeExIds: [...current, e.target.value] }); } e.target.value = ''; }}>
                     <option value="">+ Lägg till alternativ...</option>
-                    {exercises.filter(e => e.id !== editingEx?.id && e.pattern === editingEx?.pattern).map(e => (<option key={e.id} value={e.id}>{e.name}</option>))}
+                    {allExercises.filter(e => e.id !== editingEx.id && e.pattern === editingEx.pattern).map(e => (<option key={e.id} value={e.id}>{e.name}</option>))}
                   </select>
                 </div>
               </>
@@ -353,7 +357,6 @@ export const ExerciseLibrary: React.FC = () => {
         </div>
       )}
 
-      {/* Info Modal */}
       {infoExercise && (
         <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[200] p-6 overflow-y-auto animate-in fade-in">
           <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
@@ -399,7 +402,7 @@ export const ExerciseLibrary: React.FC = () => {
                       <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-4">Bra Alternativ</h4>
                       <div className="space-y-2">
                           {infoExercise.alternativeExIds.map(altId => {
-                              const altEx = allExercisesForContext.find(e => e.id === altId);
+                              const altEx = allExercises.find(e => e.id === altId);
                               return altEx ? (
                                   <div key={altId} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
                                       <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden"><img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50"/></div>

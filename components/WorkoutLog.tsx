@@ -1,16 +1,15 @@
 
 import React, { useState, useMemo } from 'react';
 import { WorkoutSession, Exercise } from '../types';
-import { storage } from '../services/storage';
 import { Share2, History, Settings, Plus, ChevronDown, MoreHorizontal, X, Clock, Activity, Zap, ShieldCheck, Heart, Info, ChevronRight, Dumbbell } from 'lucide-react';
 
 interface WorkoutLogProps {
   history: WorkoutSession[];
+  allExercises: Exercise[];
 }
 
-export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
+export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises }) => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const allExercises = useMemo(() => storage.getAllExercises(), []);
   
   const today = new Date();
   const weekDays = ['SÖ', 'MÅ', 'TI', 'ON', 'TO', 'FR', 'LÖ'];
@@ -53,7 +52,8 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
     }
   };
 
-  const getRpeColor = (rpe: number) => {
+  const getRpeColor = (rpe?: number) => {
+    if (!rpe) return 'text-text-dim';
     if (rpe <= 4) return 'text-green-400';
     if (rpe <= 7) return 'text-accent-blue';
     if (rpe <= 9) return 'text-orange-400';
@@ -62,7 +62,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
 
   return (
     <div className="min-h-screen pb-40 animate-in fade-in duration-700">
-      {/* ATHLETE HEADER */}
       <header className="px-6 pt-8 pb-6 flex justify-between items-center">
         <h1 className="text-4xl font-black tracking-tighter">Athlete</h1>
         <div className="flex gap-4 items-center">
@@ -78,7 +77,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
         </div>
       </header>
 
-      {/* KALENDER SECTION */}
       <section className="px-6 mb-10">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold">Kalender</h2>
@@ -101,7 +99,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
         </div>
       </section>
 
-      {/* TIDIGARE PASS SECTION */}
       <section className="px-6">
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-2xl font-black italic tracking-tighter">Tidigare pass</h2>
@@ -111,16 +108,13 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
         </div>
 
         <div className="space-y-8 relative">
-          {/* Vertical Timeline Line */}
           <div className="absolute left-[3px] top-2 bottom-0 w-[1px] bg-white/10"></div>
 
           {history.length > 0 ? (
-            history.slice().reverse().map((session, idx) => (
+            history.slice().sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((session, idx) => (
               <div key={session.id} className="relative pl-8">
-                {/* Timeline Dot */}
                 <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-white/20 border border-[#0f0d15] z-10"></div>
                 
-                {/* Date and Duration Meta */}
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-[10px] font-black uppercase tracking-[0.1em] text-white/60">
                     {formatDate(session.date)}
@@ -137,7 +131,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
                   </div>
                 </div>
 
-                {/* Workout Card */}
                 <button 
                   onClick={() => setSelectedSessionId(session.id)}
                   className="w-full text-left bg-[#1a1721] rounded-3xl p-5 border border-white/5 flex gap-4 items-center shadow-lg relative group active:scale-[0.98] transition-all"
@@ -181,7 +174,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
         </div>
       </section>
 
-      {/* DETAIL MODAL */}
       {selectedSession && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-0 flex flex-col animate-in slide-in-from-bottom-6 duration-500 overflow-y-auto scrollbar-hide">
           <header className="px-6 pt-12 pb-8 flex justify-between items-start sticky top-0 bg-[#0f0d15]/80 backdrop-blur-xl z-10 border-b border-white/5">
@@ -200,7 +192,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
           </header>
 
           <div className="p-6 space-y-8 pb-32">
-            {/* STATS ROW */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
@@ -208,7 +199,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
                   <span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Ansträngning</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className={`text-3xl font-black italic ${getRpeColor(selectedSession.rpe || 7)}`}>
+                  <span className={`text-3xl font-black italic ${getRpeColor(selectedSession.rpe)}`}>
                     {selectedSession.rpe || '--'}
                   </span>
                   <span className="text-[10px] font-bold text-white/20 uppercase">RPE</span>
@@ -287,7 +278,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history }) => {
             <button 
               className="w-full py-6 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center gap-3 text-white/60 font-black uppercase tracking-[0.2em] italic active:scale-95 transition-all"
               onClick={() => {
-                const text = `Jag tränade ${selectedSession.name} i ${Math.floor(selectedSession.duration || 0 / 60)} minuter och lyfte totalt ${calculateTotalVolume(selectedSession)} kg! #MorphFit`;
+                const text = `Jag tränade ${selectedSession.name} i ${Math.floor((selectedSession.duration || 0) / 60)} minuter och lyfte totalt ${calculateTotalVolume(selectedSession)} kg! #MorphFit`;
                 if(navigator.share) {
                   navigator.share({ title: 'Mitt MorphFit Pass', text: text });
                 } else {

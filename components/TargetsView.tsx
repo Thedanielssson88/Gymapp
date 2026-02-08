@@ -1,18 +1,15 @@
 
-import React, { useMemo, useState } from 'react';
-import { WorkoutSession, GoalTarget } from '../types';
-import { Target, ChevronDown, MoreHorizontal, Plus, Settings } from 'lucide-react';
-import { storage } from '../services/storage';
+import React, { useMemo } from 'react';
+import { WorkoutSession, GoalTarget, Exercise } from '../types';
+import { Target, ChevronDown, Settings } from 'lucide-react';
 
 interface TargetsViewProps {
   history: WorkoutSession[];
+  goalTargets: GoalTarget[];
+  allExercises: Exercise[];
 }
 
-export const TargetsView: React.FC<TargetsViewProps> = ({ history }) => {
-  const goalTargets = useMemo(() => storage.getGoalTargets(), []);
-  const allExercises = useMemo(() => storage.getAllExercises(), []);
-  
-  // Calculate current sets completed this week (last 7 days)
+export const TargetsView: React.FC<TargetsViewProps> = ({ history, goalTargets, allExercises }) => {
   const stats = useMemo(() => {
     const now = new Date();
     const weekAgo = new Date();
@@ -45,7 +42,6 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ history }) => {
 
   return (
     <div className="min-h-screen pb-40 animate-in fade-in duration-700 bg-[#0f0d15] text-white">
-      {/* HEADER SECTION WITH LARGE HEXAGON PROGRESS */}
       <div className="pt-12 pb-10 flex flex-col items-center">
         <div className="relative w-48 h-48 flex items-center justify-center mb-4">
           <div className="hexagon absolute inset-0 bg-[#1a1721] border border-white/5 flex items-center justify-center">
@@ -57,7 +53,6 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ history }) => {
         <p className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Total Veckovolym</p>
       </div>
 
-      {/* TARGET CARDS */}
       <div className="px-6 space-y-4">
         {stats.results.map((target) => (
           <div key={target.id} className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 flex justify-between items-center group transition-all active:scale-[0.98]">
@@ -82,7 +77,6 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ history }) => {
         ))}
       </div>
 
-      {/* HISTORIK SECTION */}
       <div className="px-6 mt-12">
         <h2 className="text-2xl font-black italic tracking-tighter mb-6">Historik</h2>
         <div className="flex gap-4">
@@ -94,7 +88,6 @@ export const TargetsView: React.FC<TargetsViewProps> = ({ history }) => {
         </div>
       </div>
 
-      {/* SETTINGS FLOATING BUTTON */}
       <div className="fixed bottom-36 right-6 z-[80]">
         <button className="bg-white/5 p-4 rounded-full border border-white/10 backdrop-blur-xl text-white shadow-2xl active:scale-90 transition-all">
           <Settings size={24} />

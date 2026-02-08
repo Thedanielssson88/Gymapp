@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, WorkoutRoutine } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, WorkoutRoutine, UserProfile } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -13,6 +13,10 @@ import { Search, X, Plus, RefreshCw, Info, Sparkles } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
+  allExercises: Exercise[];
+  userProfile: UserProfile;
+  allZones: Zone[];
+  history: WorkoutSession[];
   activeZone: Zone;
   onZoneChange: (zone: Zone) => void;
   onComplete: (session: WorkoutSession, duration: number) => void;
@@ -22,7 +26,11 @@ interface WorkoutViewProps {
 type LibraryTab = 'all' | 'muscles' | 'equipment';
 
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
-  session, 
+  session,
+  allExercises,
+  userProfile,
+  allZones,
+  history,
   activeZone, 
   onZoneChange,
   onComplete,
@@ -41,10 +49,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
   const [showSummary, setShowSummary] = useState(false);
-
-  const allExercises = storage.getAllExercises();
-  const userProfile = useMemo(() => storage.getUserProfile(), []);
-  const allZones = storage.getZones();
 
   useEffect(() => {
     let interval: any;
@@ -69,7 +73,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     setLocalSession(prev => {
       const newExercises = prev.exercises.map(item => {
         const currentEx = allExercises.find(e => e.id === item.exerciseId)!;
-        const replacement = findReplacement(currentEx, targetZone);
+        const replacement = findReplacement(currentEx, targetZone, allExercises);
         if (replacement.id === currentEx.id) return item;
         const newSets = adaptVolume(item.sets, currentEx, replacement, userProfile.goal);
         return { ...item, exerciseId: replacement.id, sets: newSets };
@@ -105,17 +109,15 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   }, []);
 
   const removeExercise = useCallback((exIdx: number) => {
-    if (window.confirm("Vill du ta bort denna övning från passet?")) {
-      setLocalSession(prev => {
-        const n = { ...prev };
-        n.exercises = [...prev.exercises]; 
-        n.exercises.splice(exIdx, 1);
-        storage.setActiveSession(n);
-        return n;
-      });
+    if(confirm("Ta bort övning?")){
+      const newSession = {...localSession};
+      newSession.exercises = [...localSession.exercises]; 
+      newSession.exercises.splice(exIdx,1); 
+      setLocalSession(newSession); 
+      storage.setActiveSession(newSession);
       setOpenNotesIdx(null);
     }
-  }, []);
+  }, [localSession]);
 
   const addSetToExercise = useCallback((exIdx: number) => {
     setLocalSession(prev => {
@@ -135,7 +137,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   }, []);
 
   const addNewExercise = (ex: Exercise, autoGenerate = false) => {
-    const history = storage.getHistory();
     const lastSetData = getLastPerformance(ex.id, history);
     let newSets: WorkoutSet[] = lastSetData && lastSetData.length > 0
       ? createSmartSets(lastSetData, autoGenerate || window.confirm(`Hittade historik för ${ex.name}!\nVill du applicera progressiv överbelastning?`))
@@ -152,7 +153,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const handleGenerate = (muscles: MuscleGroup[]) => {
      const generated = generateWorkoutSession(muscles, activeZone, allExercises);
      if (generated.length === 0) { alert("Hittade inga övningar i denna zon för valda muskler."); return; }
-     const history = storage.getHistory();
      setLocalSession(prev => {
        const newExercises = [...prev.exercises];
        generated.forEach(plan => {
@@ -194,10 +194,10 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
   }, [searchQuery, allExercises, activeLibraryTab, selectedCategory]);
 
-  const saveAsRoutine = () => {
+  const saveAsRoutine = async () => {
     const name = window.prompt("Vad ska rutinen heta?", localSession.name);
     if (!name) return;
-    storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: localSession.exercises.map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: pe.sets.map(s => ({ reps: s.reps, weight: s.weight, completed: false })) })) });
+    await storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: localSession.exercises.map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: pe.sets.map(s => ({ reps: s.reps, weight: s.weight, completed: false })) })) });
     alert("Rutinen sparad!");
   };
 
@@ -207,7 +207,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         timer={timer} 
         isTimerActive={isTimerActive} 
         onToggleTimer={() => setIsTimerActive(!isTimerActive)} 
-        onCancel={onCancel} 
+        onCancel={() => { if (window.confirm("Är du säker på att du vill avbryta passet? All data går förlorad.")) { onCancel(); } }} 
         onSaveRoutine={saveAsRoutine} 
       />
 
@@ -245,7 +245,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       <div className="space-y-4 px-2">
         {localSession.exercises.map((item, exIdx) => {
           const exData = allExercises.find(e => e.id === item.exerciseId)!;
-          return (
+          return exData ? (
             <ExerciseCard 
               key={`${item.exerciseId}-${exIdx}`}
               item={item}
@@ -260,7 +260,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)}
               onShowInfo={() => setInfoExercise(exData)}
             />
-          );
+          ) : null;
         })}
       </div>
 

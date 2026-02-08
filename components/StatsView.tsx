@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
-import { BiometricLog, WorkoutSession, MovementPattern } from '../types';
+import { BiometricLog, WorkoutSession, MovementPattern, Exercise } from '../types';
 import { calculate1RM } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { TrendingUp, Activity, Target } from 'lucide-react';
@@ -9,9 +8,11 @@ import { TrendingUp, Activity, Target } from 'lucide-react';
 interface StatsViewProps {
   logs: BiometricLog[];
   history: WorkoutSession[];
+  // FIX: Add allExercises to props to receive data from the parent component
+  allExercises: Exercise[];
 }
 
-export const StatsView: React.FC<StatsViewProps> = ({ logs, history }) => {
+export const StatsView: React.FC<StatsViewProps> = ({ logs, history, allExercises }) => {
   const [metric, setMetric] = useState<'weight' | 'biceps' | 'waist'>('weight');
   const [pattern, setPattern] = useState<MovementPattern>(MovementPattern.HORIZONTAL_PUSH);
 
@@ -28,11 +29,11 @@ export const StatsView: React.FC<StatsViewProps> = ({ logs, history }) => {
   // 2. Data för Styrka (Aggregerat per Rörelsemönster)
   const strengthData = useMemo(() => {
     const dataMap: Record<string, number> = {};
-    const allExercises = storage.getAllExercises();
-
+    
     history.forEach(session => {
         let dailyMax = 0;
         session.exercises.forEach(ex => {
+            // FIX: Use allExercises from props which is an array, not a promise
             const exDef = allExercises.find(e => e.id === ex.exerciseId);
             if (exDef && exDef.pattern === pattern) {
                 ex.sets.forEach(set => {
@@ -52,15 +53,15 @@ export const StatsView: React.FC<StatsViewProps> = ({ logs, history }) => {
     return Object.entries(dataMap).map(([date, max]) => ({ date, max }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(-10);
-  }, [history, pattern]);
+  }, [history, pattern, allExercises]);
 
   // PR List
   const personalRecords = useMemo(() => {
     const prs: Record<string, number> = {};
-    const allExercises = storage.getAllExercises();
-
+    
     history.forEach(session => {
       session.exercises.forEach(ex => {
+        // FIX: Use allExercises from props which is an array, not a promise
         const exDef = allExercises.find(e => e.id === ex.exerciseId);
         if (!exDef) return;
         ex.sets.forEach(set => {
@@ -75,7 +76,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ logs, history }) => {
     });
 
     return Object.entries(prs).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  }, [history]);
+  }, [history, allExercises]);
 
   return (
     <div className="space-y-8 pb-32 animate-in fade-in duration-700">

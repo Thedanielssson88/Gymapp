@@ -85,6 +85,7 @@ export interface BodyMeasurements {
 }
 
 export interface UserProfile {
+  id?: string; // Alltid 'current' i DB
   name: string;
   weight: number;
   height: number;
@@ -134,6 +135,7 @@ export interface WorkoutSession {
 }
 
 export interface BiometricLog {
+  id: string;
   date: string;
   weight: number;
   measurements: BodyMeasurements;

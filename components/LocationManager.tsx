@@ -4,28 +4,24 @@ import { Zone, Equipment } from '../types';
 import { storage } from '../services/storage';
 import { MapPin, Plus, Edit2, Trash2, X, Check, Save, Dumbbell, Home, Trees } from 'lucide-react';
 
-export const LocationManager: React.FC = () => {
-  const [zones, setZones] = useState<Zone[]>([]);
+interface LocationManagerProps {
+  zones: Zone[];
+  onUpdate: () => void;
+}
+
+export const LocationManager: React.FC<LocationManagerProps> = ({ zones, onUpdate }) => {
   const [editingZone, setEditingZone] = useState<Zone | null>(null);
 
-  useEffect(() => {
-    loadZones();
-  }, []);
-
-  const loadZones = () => {
-    setZones(storage.getZones());
-  };
-
-  const handleSave = (zone: Zone) => {
-    storage.saveZone(zone);
+  const handleSave = async (zone: Zone) => {
+    await storage.saveZone(zone);
     setEditingZone(null);
-    loadZones();
+    onUpdate();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Är du säker på att du vill ta bort denna plats?")) {
-      storage.deleteZone(id);
-      loadZones();
+      await storage.deleteZone(id);
+      onUpdate();
     }
   };
 

@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserProfile, Zone, Goal, WorkoutSession, Equipment, Exercise, MovementPattern, MuscleGroup, BodyMeasurements, BiometricLog, PlannedExercise } from './types';
-import { INITIAL_ZONES } from './constants';
+import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine } from './types';
 import { WorkoutView } from './components/WorkoutView';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { WorkoutLog } from './components/WorkoutLog';
@@ -13,9 +12,7 @@ import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
 import { calculateMuscleRecovery } from './utils/recovery';
 import { RecoveryMap } from './components/RecoveryMap';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-// Added missing Home and Trees icons to lucide-react imports
-import { Dumbbell, User2, Target, Calendar, Plus, Settings, ChevronRight, History, X, BookOpen, MapPin, Check, Activity, Home, Trees } from 'lucide-react';
+import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight } from 'lucide-react';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -27,53 +24,62 @@ export default function App() {
   const [history, setHistory] = useState<WorkoutSession[]>([]);
   const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>([]);
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(null);
+  const [allExercises, setAllExercises] = useState<Exercise[]>([]);
+  const [goalTargets, setGoalTargets] = useState<GoalTarget[]>([]);
+  const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
 
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
 
-  const refreshData = () => {
-    setUser(storage.getUserProfile());
-    setZones(storage.getZones());
-    setHistory(storage.getHistory());
-    setBiometricLogs(storage.getBiometricLogs());
-    setCurrentSession(storage.getActiveSession());
+  const refreshData = async () => {
+    const [p, z, h, logs, sess, ex, gt, r] = await Promise.all([
+      storage.getUserProfile(),
+      storage.getZones(),
+      storage.getHistory(),
+      storage.getBiometricLogs(),
+      storage.getActiveSession(),
+      storage.getAllExercises(),
+      storage.getGoalTargets(),
+      storage.getRoutines(),
+    ]);
+    setUser(p);
+    setZones(z);
+    setHistory(h);
+    setBiometricLogs(logs);
+    setCurrentSession(sess || null);
+    setAllExercises(ex);
+    setGoalTargets(gt);
+    setRoutines(r);
   };
 
   useEffect(() => {
     const initApp = async () => {
       await storage.init();
-      refreshData();
-      setTimeout(() => setIsReady(true), 1200);
+      await refreshData();
+      setIsReady(true);
     };
     initApp();
   }, []);
 
-  const recoveryStatus = useMemo(() => calculateMuscleRecovery(history), [history]);
+  const recoveryStatus = useMemo(() => calculateMuscleRecovery(history, allExercises, user), [history, allExercises, user]);
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
-  const handleFinishWorkout = (session: WorkoutSession, duration: number) => {
-    const finalSession = { ...session, isCompleted: true, date: new Date().toISOString(), duration };
-    storage.saveToHistory(finalSession);
-    refreshData();
-    setCurrentSession(null);
-    storage.setActiveSession(null);
+  const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
+    await storage.saveToHistory({ ...session, isCompleted: true, date: new Date().toISOString(), duration });
+    await storage.setActiveSession(null);
+    await refreshData();
     setActiveTab('log');
   };
 
-  const handleCancelWorkout = () => {
-    // 1. Rensa databasen först
-    storage.setActiveSession(null);
-    // 2. Rensa lokalt state
-    setCurrentSession(null);
-    // 3. Navigera omedelbart bort för att förhindra race-conditions med auto-save
+  const handleCancelWorkout = async () => {
+    await storage.setActiveSession(null);
+    await refreshData();
     setActiveTab('body');
-    // 4. Uppdatera all data
-    refreshData();
   };
 
-  const handleStartWorkout = (exercises: PlannedExercise[], name: string) => {
+  const handleStartWorkout = async (exercises: PlannedExercise[], name: string) => {
     const zone = selectedZoneForStart || zones[0];
-    const newSess = { 
+    const newSess: WorkoutSession = { 
       id: 'w-' + Date.now(), 
       date: new Date().toISOString(), 
       name, 
@@ -81,14 +87,14 @@ export default function App() {
       exercises, 
       isCompleted: false 
     };
-    setCurrentSession(newSess);
-    storage.setActiveSession(newSess);
+    await storage.setActiveSession(newSess);
+    await refreshData();
     setShowStartMenu(false);
     setSelectedZoneForStart(null);
     setActiveTab('workout');
   };
 
-  if (!isReady) {
+  if (!isReady || !user) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f0d15] text-white">
         <div className="relative"><div className="w-24 h-24 border-4 border-accent-pink/20 border-t-accent-pink rounded-full animate-spin"></div><Activity className="absolute inset-0 m-auto text-accent-pink animate-pulse" size={32} /></div>
@@ -103,14 +109,28 @@ export default function App() {
         if (!currentSession) return (
           <div className="flex flex-col items-center justify-center h-[80vh] gap-8 px-8 text-center">
             <div className="w-32 h-32 bg-accent-pink/5 rounded-full flex items-center justify-center text-accent-pink"><Dumbbell size={64} className="animate-bounce" /></div>
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black uppercase italic">Klar för kamp?</h2>
-              <p className="text-text-dim font-bold">Välj din miljö för att optimera passet.</p>
-            </div>
+            <div className="space-y-2"><h2 className="text-3xl font-black uppercase italic">Klar för kamp?</h2><p className="text-text-dim font-bold">Välj din miljö för att optimera passet.</p></div>
             <button onClick={() => setShowStartMenu(true)} className="bg-accent-pink w-full py-6 rounded-3xl font-black italic tracking-widest uppercase shadow-2xl text-xl">Starta Pass</button>
           </div>
         );
-        return <WorkoutView session={currentSession} activeZone={activeZone} onZoneChange={(z) => setCurrentSession({...currentSession, zoneId: z.id})} onComplete={handleFinishWorkout} onCancel={handleCancelWorkout} />;
+        return <WorkoutView 
+                  key={currentSession.id}
+                  session={currentSession}
+                  allExercises={allExercises}
+                  userProfile={user}
+                  allZones={zones}
+                  history={history}
+                  activeZone={activeZone}
+                  onZoneChange={async (z) => {
+                    if (currentSession) {
+                      const newSession = {...currentSession, zoneId: z.id};
+                      setCurrentSession(newSession); // Optimistic UI update
+                      await storage.setActiveSession(newSession);
+                    }
+                  }} 
+                  onComplete={handleFinishWorkout} 
+                  onCancel={handleCancelWorkout} 
+               />;
       case 'body':
         return (
           <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen">
@@ -119,27 +139,15 @@ export default function App() {
               <button onClick={() => setBodySubTab('measurements')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'measurements' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Mått</button>
               <button onClick={() => setBodySubTab('stats')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'stats' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Stats</button>
             </nav>
-            {bodySubTab === 'recovery' && (
-              <div className="animate-in zoom-in-95">
-                <RecoveryMap status={recoveryStatus} size="lg" />
-                <div className="bg-white/2 p-6 rounded-[40px] border border-white/5 mt-8 text-center">
-                  <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.3em] mb-2">Din dagsform</p>
-                  <p className="text-4xl font-black italic text-white uppercase tracking-tighter">Peak Performance</p>
-                </div>
-              </div>
-            )}
-            {bodySubTab === 'measurements' && user && (
-              <MeasurementsView profile={user} onUpdate={refreshData} />
-            )}
-            {bodySubTab === 'stats' && (
-               <StatsView logs={biometricLogs} history={history} />
-            )}
+            {bodySubTab === 'recovery' && <div className="animate-in zoom-in-95"><RecoveryMap status={recoveryStatus} size="lg" /><div className="bg-white/2 p-6 rounded-[40px] border border-white/5 mt-8 text-center"><p className="text-[10px] font-black text-text-dim uppercase tracking-[0.3em] mb-2">Din dagsform</p><p className="text-4xl font-black italic text-white uppercase tracking-tighter">Peak Performance</p></div></div>}
+            {bodySubTab === 'measurements' && <MeasurementsView profile={user} onUpdate={refreshData} />}
+            {bodySubTab === 'stats' && <StatsView logs={biometricLogs} history={history} allExercises={allExercises} />}
           </div>
         );
-      case 'log': return <WorkoutLog history={history} />;
-      case 'targets': return <TargetsView history={history} />;
-      case 'library': return <ExerciseLibrary />;
-      case 'gyms': return <LocationManager />;
+      case 'log': return <WorkoutLog history={history} allExercises={allExercises} />;
+      case 'targets': return <TargetsView history={history} goalTargets={goalTargets} allExercises={allExercises} />;
+      case 'library': return <ExerciseLibrary allExercises={allExercises} onUpdate={refreshData} />;
+      case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
       default: return null;
     }
   };
@@ -147,53 +155,21 @@ export default function App() {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#0f0d15] selection:bg-accent-pink selection:text-white relative overflow-x-hidden">
       {renderContent()}
-
       {showStartMenu && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 flex flex-col overflow-y-auto scrollbar-hide">
-          <header className="flex justify-between items-center mb-10">
-            <h3 className="text-3xl font-black uppercase italic tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3>
-            <button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim p-2"><X size={32}/></button>
-          </header>
-
+          <header className="flex justify-between items-center mb-10"><h3 className="text-3xl font-black uppercase italic tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3><button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim p-2"><X size={32}/></button></header>
           {!selectedZoneForStart ? (
             <div className="grid grid-cols-1 w-full gap-4">
-              {zones.map(z => (
-                <button key={z.id} onClick={() => setSelectedZoneForStart(z)} className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex items-center justify-between group active:scale-95 transition-all">
-                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center">
-                      {z.name.toLowerCase().includes('hem') ? <Home size={32} /> : 
-                       z.name.toLowerCase().includes('ute') ? <Trees size={32} /> : 
-                       <MapPin size={32} />}
-                    </div>
-                    <span className="text-2xl font-black uppercase italic tracking-tight">{z.name}</span>
-                  </div>
-                  <ChevronRight size={32} className="text-text-dim" />
-                </button>
-              ))}
+              {zones.map(z => (<button key={z.id} onClick={() => setSelectedZoneForStart(z)} className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex items-center justify-between group active:scale-95 transition-all"><div className="flex items-center gap-6"><div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center">{z.name.toLowerCase().includes('hem') ? <Home size={32} /> : z.name.toLowerCase().includes('ute') ? <Trees size={32} /> : <MapPin size={32} />}</div><span className="text-2xl font-black uppercase italic tracking-tight">{z.name}</span></div><ChevronRight size={32} className="text-text-dim" /></button>))}
             </div>
           ) : (
-            <RoutinePicker onStart={handleStartWorkout} activeZone={selectedZoneForStart} />
+            <RoutinePicker onStart={handleStartWorkout} activeZone={selectedZoneForStart} allExercises={allExercises} userProfile={user} routines={routines} onUpdate={refreshData} />
           )}
         </div>
       )}
-
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0f0d15]/80 backdrop-blur-3xl border-t border-white/5 z-[100] max-w-md mx-auto px-4 pb-12 pt-4">
-        <div className="flex justify-between items-center">
-          <NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" />
-          <NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" />
-          <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
-          <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
-          <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
-          <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
-        </div>
-      </nav>
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#0f0d15]/80 backdrop-blur-3xl border-t border-white/5 z-[100] max-w-md mx-auto px-4 pb-12 pt-4"><div className="flex justify-between items-center"><NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" /><NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" /><NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" /><NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" /><NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" /><NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" /></div></nav>
     </div>
   );
 }
 
-const NavButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (
-  <button onClick={onClick} className={`flex flex-col items-center gap-2 transition-all flex-1 ${active ? 'text-white' : 'text-text-dim'}`}>
-    <div className={`p-1.5 transition-all ${active ? 'text-accent-pink scale-110 drop-shadow-[0_0_10px_rgba(255,45,85,0.5)]' : ''}`}>{icon}</div>
-    <span className="text-[7px] font-black uppercase tracking-[0.2em]">{label}</span>
-  </button>
-);
+const NavButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (<button onClick={onClick} className={`flex flex-col items-center gap-2 transition-all flex-1 ${active ? 'text-white' : 'text-text-dim'}`}><div className={`p-1.5 transition-all ${active ? 'text-accent-pink scale-110 drop-shadow-[0_0_10px_rgba(255,45,85,0.5)]' : ''}`}>{icon}</div><span className="text-[7px] font-black uppercase tracking-[0.2em]">{label}</span></button>);

@@ -1,6 +1,5 @@
-
 import React, { useMemo, useState } from 'react';
-import { WorkoutRoutine, Zone, Exercise, PlannedExercise, MovementPattern, MuscleGroup, Equipment } from '../types';
+import { WorkoutRoutine, Zone, Exercise, PlannedExercise, MovementPattern, MuscleGroup, Equipment, UserProfile } from '../types';
 import { storage } from '../services/storage';
 import { findReplacement, adaptVolume } from '../utils/fitness';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
@@ -9,12 +8,16 @@ import { Plus, Play, ChevronRight, Bookmark, Trash2, Dumbbell, Edit3, X, Check, 
 interface RoutinePickerProps {
   onStart: (exercises: PlannedExercise[], routineName: string) => void;
   activeZone: Zone;
+  // FIX: Add missing props for data passed from App.tsx
+  routines: WorkoutRoutine[];
+  allExercises: Exercise[];
+  userProfile: UserProfile;
+  onUpdate: () => void;
 }
 
 type LibraryTab = 'all' | 'muscles' | 'equipment';
 
-export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZone }) => {
-  const [routines, setRoutines] = useState<WorkoutRoutine[]>(storage.getRoutines());
+export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZone, routines, allExercises, userProfile, onUpdate }) => {
   const [editingRoutine, setEditingRoutine] = useState<Partial<WorkoutRoutine> | null>(null);
   const [showExSelector, setShowExSelector] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,9 +25,6 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
   // Library filtering state
   const [activeTab, setActiveTab] = useState<LibraryTab>('all');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-
-  const allExercises = storage.getAllExercises();
-  const userProfile = storage.getUserProfile();
 
   const handleSelectRoutine = (routine: WorkoutRoutine) => {
     const morphedExercises = routine.exercises.map(pe => {
@@ -34,7 +34,9 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
       const isAvailable = originalEx.equipment.every(eq => activeZone.inventory.includes(eq));
       
       if (!isAvailable) {
-        const replacement = findReplacement(originalEx, activeZone);
+        // FIX: Pass allExercises as the third argument to findReplacement
+        const replacement = findReplacement(originalEx, activeZone, allExercises);
+        // FIX: Access goal from userProfile prop correctly
         const newSets = adaptVolume(pe.sets, originalEx, replacement, userProfile.goal);
         return {
           ...pe,
@@ -52,7 +54,7 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
     onStart(morphedExercises, routine.name);
   };
 
-  const saveRoutine = () => {
+  const saveRoutine = async () => {
     if (!editingRoutine?.name || !editingRoutine?.exercises?.length) return;
     
     const newRoutine: WorkoutRoutine = {
@@ -61,15 +63,15 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
       exercises: editingRoutine.exercises || []
     };
 
-    storage.saveRoutine(newRoutine);
-    setRoutines(storage.getRoutines());
+    await storage.saveRoutine(newRoutine);
+    onUpdate();
     setEditingRoutine(null);
   };
 
-  const deleteRoutine = (id: string) => {
+  const deleteRoutine = async (id: string) => {
     if (confirm("Vill du ta bort denna rutin?")) {
-      storage.deleteRoutine(id);
-      setRoutines(storage.getRoutines());
+      await storage.deleteRoutine(id);
+      onUpdate();
     }
   };
 
@@ -94,6 +96,7 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
   };
 
   const filteredExercises = useMemo(() => {
+    // FIX: Use allExercises from props which is an array, not a promise
     return allExercises.filter(ex => {
       const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           ex.pattern.toLowerCase().includes(searchQuery.toLowerCase());
@@ -219,6 +222,7 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
 
               <div className="space-y-3">
                 {editingRoutine.exercises?.map((pe, idx) => {
+                  // FIX: Use allExercises from props which is an array, not a promise
                   const ex = allExercises.find(e => e.id === pe.exerciseId);
                   return (
                     <div key={idx} className="bg-white/5 p-5 rounded-[24px] border border-white/5 flex justify-between items-center">
