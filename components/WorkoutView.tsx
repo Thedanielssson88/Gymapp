@@ -125,26 +125,43 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   };
 
   const muscleStats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    let totalOccurrences = 0;
+    const load: Record<string, number> = {};
+    let totalLoadPoints = 0;
     
     localSession.exercises.forEach(item => {
       const ex = allExercises.find(e => e.id === item.exerciseId);
-      ex?.muscleGroups.forEach(m => {
-        counts[m] = (counts[m] || 0) + 1;
-        totalOccurrences++;
+      if (!ex) return;
+
+      // Hitta primära muskler (fallback till gamla systemet om det saknas)
+      const primaries = (ex.primaryMuscles && ex.primaryMuscles.length > 0) 
+        ? ex.primaryMuscles 
+        : ex.muscleGroups || [];
+
+      // Hitta sekundära
+      const secondaries = ex.secondaryMuscles || [];
+
+      // Ge 1 poäng för primära
+      primaries.forEach(m => {
+        load[m] = (load[m] || 0) + 1;
+        totalLoadPoints += 1;
+      });
+
+      // Ge 0.5 poäng för sekundära
+      secondaries.forEach(m => {
+        load[m] = (load[m] || 0) + 0.5;
+        totalLoadPoints += 0.5;
       });
     });
 
-    const results = Object.entries(counts)
-      .map(([name, count]) => ({
+    const results = Object.entries(load)
+      .map(([name, score]) => ({
         name,
-        percentage: totalOccurrences > 0 ? Math.round((count / totalOccurrences) * 100) : 0,
-        count
+        percentage: totalLoadPoints > 0 ? Math.round((score / totalLoadPoints) * 100) : 0,
+        count: score
       }))
       .sort((a, b) => b.count - a.count);
 
-    return { results, loadMap: counts };
+    return { results, loadMap: load };
   }, [localSession.exercises, allExercises]);
 
   const filteredExercises = useMemo(() => {
@@ -169,7 +186,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
              {isTimerActive ? <Pause size={24} /> : <Play size={24} />}
           </button>
           <div>
-            <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em] block">Workout Timer</span>
+            <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em] block mb-1">Workout Timer</span>
             <span className="text-xl font-black italic">{Math.floor(timer/60)}:{String(timer%60).padStart(2,'0')}</span>
           </div>
         </div>
@@ -236,7 +253,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
           {isLoadMapOpen && (
             <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-              <RecoveryMap status={storage.getHistory().length > 0 ? undefined : {}} loadMap={muscleStats.loadMap} size="md" />
+              <RecoveryMap loadMap={muscleStats.loadMap} size="md" />
             </div>
           )}
         </div>
