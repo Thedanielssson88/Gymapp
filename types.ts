@@ -47,6 +47,13 @@ export enum Goal {
   REHAB = 'Rehab'
 }
 
+export interface GoalTarget {
+  id: string;
+  name: string;
+  targetSets: number;
+  muscleGroups: MuscleGroup[];
+}
+
 export interface Exercise {
   id: string;
   name: string;
@@ -59,6 +66,7 @@ export interface Exercise {
 
 export interface BodyMeasurements {
   neck?: number;
+  shoulders?: number;
   chest?: number;
   waist?: number;
   hips?: number;
@@ -97,6 +105,14 @@ export interface WorkoutSet {
 export interface PlannedExercise {
   exerciseId: string;
   sets: WorkoutSet[];
+  notes?: string;
+}
+
+export interface WorkoutRoutine {
+  id: string;
+  name: string;
+  exercises: PlannedExercise[];
+  category?: string;
 }
 
 export interface WorkoutSession {

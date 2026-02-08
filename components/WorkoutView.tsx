@@ -1,57 +1,71 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, MovementPattern, PlannedExercise, WorkoutRoutine } from '../types';
 import { findReplacement, adaptVolume } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { RecoveryMap } from './RecoveryMap';
-import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, ChevronRight, Check, MapPin, RefreshCw, Zap, Activity } from 'lucide-react';
+import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
+import { ChevronDown, ChevronUp, Plus, Search, X, Trash2, Check, RefreshCw, Activity, ShieldCheck, Save, Timer, Play, Pause, RotateCcw, BarChart3, Info, FileText } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
   activeZone: Zone;
   onZoneChange: (zone: Zone) => void;
   onComplete: (session: WorkoutSession, duration: number) => void;
+  onCancel: () => void;
 }
+
+type LibraryTab = 'all' | 'muscles' | 'equipment';
 
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session, 
   activeZone, 
   onZoneChange,
-  onComplete 
+  onComplete,
+  onCancel
 }) => {
   const [localSession, setLocalSession] = useState(session);
   const [timer, setTimer] = useState(0);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [restTimer, setRestTimer] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isMusclePanelOpen, setIsMusclePanelOpen] = useState(false);
+  const [activeLibraryTab, setActiveLibraryTab] = useState<LibraryTab>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [isLoadMapOpen, setIsLoadMapOpen] = useState(false);
+  const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
 
   const allExercises = storage.getAllExercises();
   const userProfile = useMemo(() => storage.getUserProfile(), []);
   const allZones = storage.getZones();
 
   useEffect(() => {
-    const interval = setInterval(() => setTimer(t => t + 1), 1000);
+    let interval: any;
+    if (isTimerActive) {
+      interval = setInterval(() => setTimer(t => t + 1), 1000);
+    }
     return () => clearInterval(interval);
-  }, []);
+  }, [isTimerActive]);
+
+  useEffect(() => {
+    let interval: any;
+    if (restTimer !== null && restTimer > 0) {
+      interval = setInterval(() => setRestTimer(r => (r !== null ? r - 1 : 0)), 1000);
+    } else if (restTimer === 0) {
+      setRestTimer(null);
+    }
+    return () => clearInterval(interval);
+  }, [restTimer]);
 
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
-
     const newExercises = localSession.exercises.map(item => {
       const currentEx = allExercises.find(e => e.id === item.exerciseId)!;
       const replacement = findReplacement(currentEx, targetZone);
-      
       if (replacement.id === currentEx.id) return item;
-
-      // Adapt sets based on new difficulty
       const newSets = adaptVolume(item.sets, currentEx, replacement, userProfile.goal);
-      return {
-        ...item,
-        exerciseId: replacement.id,
-        sets: newSets
-      };
+      return { ...item, exerciseId: replacement.id, sets: newSets };
     });
-
     const updatedSession = { ...localSession, zoneId: targetZone.id, exercises: newExercises };
     setLocalSession(updatedSession);
     storage.setActiveSession(updatedSession);
@@ -64,8 +78,38 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       ...newSession.exercises[exIdx].sets[setIdx],
       ...updates
     };
+    if (updates.completed) setRestTimer(90); // Default rest timer 90s
     setLocalSession(newSession);
     storage.setActiveSession(newSession);
+  };
+
+  const updateNotes = (exIdx: number, notes: string) => {
+    const newSession = { ...localSession };
+    newSession.exercises[exIdx].notes = notes;
+    setLocalSession(newSession);
+    storage.setActiveSession(newSession);
+  };
+
+  const saveAsRoutine = () => {
+    const name = prompt("Vad ska rutinen heta?", localSession.name);
+    if (!name) return;
+    
+    const routine: WorkoutRoutine = {
+      id: `routine-${Date.now()}`,
+      name,
+      exercises: localSession.exercises.map(pe => ({
+        exerciseId: pe.exerciseId,
+        notes: pe.notes,
+        sets: pe.sets.map(s => ({ 
+          reps: s.reps, 
+          weight: s.weight, 
+          completed: false 
+        }))
+      }))
+    };
+    
+    storage.saveRoutine(routine);
+    alert("Rutinen sparad i 'Mina Rutiner'!");
   };
 
   const addNewExercise = (ex: Exercise) => {
@@ -79,49 +123,107 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     setShowAddModal(false);
   };
 
-  const muscleLoadMap = useMemo(() => {
-    const map: Record<string, number> = {};
+  const muscleStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let totalOccurrences = 0;
+    
     localSession.exercises.forEach(item => {
       const ex = allExercises.find(e => e.id === item.exerciseId);
       ex?.muscleGroups.forEach(m => {
-        map[m] = (map[m] || 0) + 1;
+        counts[m] = (counts[m] || 0) + 1;
+        totalOccurrences++;
       });
     });
-    return map;
+
+    const results = Object.entries(counts)
+      .map(([name, count]) => ({
+        name,
+        percentage: totalOccurrences > 0 ? Math.round((count / totalOccurrences) * 100) : 0,
+        count
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return { results, loadMap: counts };
   }, [localSession.exercises, allExercises]);
 
-  const activeMuscleSummaries = Object.entries(muscleLoadMap)
-    .sort((a, b) => (b[1] as number) - (a[1] as number))
-    .slice(0, 3);
+  const filteredExercises = useMemo(() => {
+    return allExercises.filter(ex => {
+      const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase());
+      let matchesCategory = true;
+      if (activeLibraryTab === 'muscles' && selectedCategory) matchesCategory = ex.muscleGroups.includes(selectedCategory as MuscleGroup);
+      else if (activeLibraryTab === 'equipment' && selectedCategory) matchesCategory = ex.equipment.includes(selectedCategory as Equipment);
+      return matchesSearch && matchesCategory;
+    });
+  }, [searchQuery, allExercises, activeLibraryTab, selectedCategory]);
 
   return (
-    <div className="space-y-4 pb-40 animate-in fade-in duration-500">
-      {/* MUSCLE STATUS PANEL */}
-      <div className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-2xl mx-2 mt-4 transition-all">
-        <button 
-          onClick={() => setIsMusclePanelOpen(!isMusclePanelOpen)}
-          className="w-full flex items-center justify-between mb-2"
-        >
-          <div className="flex items-center gap-2">
-             <Activity size={14} className="text-white" />
-             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Muskelbelastning</span>
+    <div className="space-y-4 pb-80 animate-in fade-in duration-500">
+      {/* HEADER WITH ACTIONS */}
+      <header className="px-4 pt-8 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsTimerActive(!isTimerActive)}
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${isTimerActive ? 'bg-accent-pink/20 text-accent-pink shadow-[0_0_15px_rgba(255,45,85,0.2)]' : 'bg-white/5 text-white/40'}`}
+          >
+             {isTimerActive ? <Pause size={24} /> : <Play size={24} />}
+          </button>
+          <div>
+            <span className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em] block">Workout Timer</span>
+            <span className="text-xl font-black italic">{Math.floor(timer/60)}:{String(timer%60).padStart(2,'0')}</span>
           </div>
-          {isMusclePanelOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-
-        <div className={`overflow-hidden transition-all duration-500 ${isMusclePanelOpen ? 'max-h-[500px] opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-          <RecoveryMap loadMap={muscleLoadMap} size="md" />
         </div>
+        <button onClick={saveAsRoutine} className="p-3 bg-white/5 rounded-xl border border-white/5 text-white/60 hover:text-white transition-all flex items-center gap-2 active:scale-95">
+           <Save size={18} />
+           <span className="text-[10px] font-black uppercase">Spara Mall</span>
+        </button>
+      </header>
 
-        <div className="flex justify-center gap-2 mt-4">
-          {activeMuscleSummaries.map(([muscle, count]) => (
-            <div key={muscle} className="bg-white/5 border border-white/10 px-3 py-1.5 rounded-full flex items-center gap-2">
-              <span className="text-[9px] font-black uppercase tracking-widest text-white">{muscle}</span>
-              <span className="text-[9px] font-black text-white/40">x{count}</span>
+      {/* REST TIMER OVERLAY */}
+      {restTimer !== null && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-accent-pink text-white px-8 py-3 rounded-full font-black italic shadow-2xl animate-in zoom-in slide-in-from-top-4 flex items-center gap-4">
+          <RotateCcw size={18} className="animate-spin" />
+          <span>VILA: {restTimer}s</span>
+          <button onClick={() => setRestTimer(null)} className="ml-2 opacity-50"><X size={14}/></button>
+        </div>
+      )}
+
+      {/* WORKOUT INSIGHTS (MÅLMUSKLER & BELASTNING) */}
+      <div className="px-4 space-y-4">
+        <div className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-xl">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3">
+              <BarChart3 className="text-accent-pink" size={20} />
+              <h4 className="text-sm font-black uppercase italic tracking-widest">Målmuskler</h4>
             </div>
-          ))}
-          {activeMuscleSummaries.length === 0 && (
-            <span className="text-[9px] font-black uppercase text-text-dim">Ingen belastning ännu</span>
+            <button 
+              onClick={() => setIsLoadMapOpen(!isLoadMapOpen)}
+              className="text-[10px] font-black uppercase tracking-widest text-text-dim flex items-center gap-1"
+            >
+              Muskelbelastning {isLoadMapOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {muscleStats.results.slice(0, 3).map((m, idx) => (
+              <div key={idx} className="space-y-1">
+                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                  <span>{m.name}</span>
+                  <span className="text-accent-pink">{m.percentage}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-accent-pink transition-all duration-1000" style={{ width: `${m.percentage}%` }} />
+                </div>
+              </div>
+            ))}
+            {muscleStats.results.length === 0 && (
+              <p className="text-[10px] font-black text-text-dim uppercase tracking-widest text-center py-2 opacity-40">Lägg till övningar för att se fördelning</p>
+            )}
+          </div>
+
+          {isLoadMapOpen && (
+            <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
+              <RecoveryMap loadMap={muscleStats.loadMap} size="md" />
+            </div>
           )}
         </div>
       </div>
@@ -145,157 +247,156 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       <div className="space-y-4 px-2">
         {localSession.exercises.map((item, exIdx) => {
           const exData = allExercises.find(e => e.id === item.exerciseId)!;
-          const bodyweightLoad = userProfile.weight * (exData.bodyweightCoefficient || 0);
-          const totalWeight = item.sets.reduce((sum, s) => sum + s.weight, 0);
-          const totalReps = item.sets.reduce((sum, s) => sum + s.reps, 0);
-          const avgEffectiveWeight = Math.round((totalWeight + (bodyweightLoad * item.sets.length)) / item.sets.length || 0);
+          
+          // Total Load Calculation: User weight * Coefficient + current weight
+          const calculateEffectiveWeight = (w: number) => {
+             const bwContr = userProfile.weight * (exData.bodyweightCoefficient || 0);
+             return Math.round(w + bwContr);
+          };
+
+          const totalSets = item.sets.length;
+          const avgReps = Math.round(item.sets.reduce((sum, s) => sum + s.reps, 0) / (totalSets || 1));
+          const currentWeight = item.sets[0]?.weight || 0;
+          const estLoad = calculateEffectiveWeight(currentWeight);
 
           return (
-            <div key={`${item.exerciseId}-${exIdx}`} className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-xl relative overflow-hidden group">
+            <div key={`${item.exerciseId}-${exIdx}`} className="bg-[#1a1721] rounded-[32px] p-6 border border-white/5 shadow-xl relative group">
               <div className="flex justify-between items-start mb-6">
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-4 items-center flex-1">
                   <div className="w-14 h-14 bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center p-2">
-                    <div className="w-8 h-8 rounded-lg bg-accent-pink/20 flex items-center justify-center">
-                       <Plus size={20} className="text-accent-pink" />
-                    </div>
+                    <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${exData.name}`} className="w-full h-full opacity-30" />
                   </div>
-                  <div>
-                    <span className="text-[8px] font-black text-text-dim uppercase tracking-[0.2em] block mb-0.5">Fokusövning</span>
-                    <h3 className="text-2xl font-black uppercase italic tracking-tighter leading-none">{exData.name}</h3>
-                    <p className="text-[10px] font-black text-text-dim uppercase mt-2 tracking-widest">
-                      {item.sets.length} SET • {Math.round(totalReps / item.sets.length || 0)} REPS • {totalWeight} KG • {avgEffectiveWeight} EFF. KG
-                    </p>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-black uppercase italic tracking-tighter leading-none mb-1">{exData.name}</h3>
+                    <p className="text-[10px] font-black text-text-dim uppercase tracking-widest">{exData.pattern}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-[10px] font-black text-white/60 uppercase">
+                        {totalSets} Set, {avgReps} Reps, {currentWeight}Kg 
+                      </span>
+                      <span className="text-[10px] font-black text-accent-pink uppercase italic">
+                        (Beräknad {estLoad}Kg)
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => {if(confirm("Ta bort?")){const n={...localSession}; n.exercises.splice(exIdx,1); setLocalSession(n); storage.setActiveSession(n);}}} 
-                  className="p-2 text-text-dim/20 hover:text-red-500 transition-colors"
-                >
-                  <Trash2 size={18}/>
-                </button>
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)}
+                    className={`p-2 transition-colors ${openNotesIdx === exIdx ? 'text-accent-pink' : 'text-text-dim/40 hover:text-white'}`}
+                  >
+                    <FileText size={18} />
+                  </button>
+                  <button onClick={() => {if(confirm("Ta bort?")){const n={...localSession}; n.exercises.splice(exIdx,1); setLocalSession(n); storage.setActiveSession(n);}}} className="p-2 text-text-dim/20 hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                </div>
               </div>
 
+              {/* EXPANDABLE NOTES FIELD */}
+              {openNotesIdx === exIdx && (
+                <div className="mb-6 animate-in slide-in-from-top-2 fade-in duration-300">
+                  <textarea 
+                    placeholder="Anteckningar för övningen (t.ex. inställningar)..."
+                    value={item.notes || ''}
+                    onChange={(e) => updateNotes(exIdx, e.target.value)}
+                    className="w-full bg-[#0f0d15] border border-accent-pink/20 rounded-2xl p-4 text-[11px] font-bold text-white placeholder:text-white/20 outline-none focus:border-accent-pink/50 transition-all shadow-inner"
+                    rows={3}
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* SETS */}
               <div className="space-y-3">
-                {item.sets.map((set, setIdx) => {
-                  const setEffectiveWeight = Math.round(set.weight + bodyweightLoad);
-                  return (
-                    <div 
-                      key={setIdx} 
-                      className={`bg-[#0f0d15] rounded-2xl p-4 flex items-center gap-4 border transition-all ${set.completed ? 'border-green-500/30 opacity-40 grayscale' : 'border-white/5'}`}
-                    >
-                      <span className="text-lg font-black italic text-text-dim w-6 text-center">{setIdx + 1}</span>
-                      
-                      <div className="flex-1 grid grid-cols-2 gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-black text-text-dim uppercase mb-1">Vikt (+{Math.round(bodyweightLoad)} Eff)</span>
-                          <div className="flex items-baseline gap-1">
-                            <input 
-                              type="number" 
-                              value={set.weight || ''} 
-                              onChange={(e) => updateSet(exIdx, setIdx, { weight: Number(e.target.value) })}
-                              className="bg-transparent font-black text-2xl outline-none w-full"
-                              placeholder="0"
-                            />
-                            <span className="text-[10px] font-black text-accent-pink opacity-60">={setEffectiveWeight}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-black text-text-dim uppercase mb-1">Reps</span>
-                          <input 
-                            type="number" 
-                            value={set.reps || ''} 
-                            onChange={(e) => updateSet(exIdx, setIdx, { reps: Number(e.target.value) })}
-                            className="bg-transparent font-black text-2xl outline-none w-full"
-                            placeholder="0"
-                          />
-                        </div>
+                {item.sets.map((set, setIdx) => (
+                  <div key={setIdx} className={`bg-[#0f0d15] rounded-2xl p-4 flex items-center gap-4 border transition-all ${set.completed ? 'border-green-500/30 opacity-40 grayscale' : 'border-white/5'}`}>
+                    <span className="text-lg font-black italic text-text-dim w-6 text-center">{setIdx + 1}</span>
+                    <div className="flex-1 grid grid-cols-2 gap-4">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-text-dim uppercase mb-1">KG</span>
+                        <input type="number" value={set.weight || ''} onChange={(e) => updateSet(exIdx, setIdx, { weight: Number(e.target.value) })} className="bg-transparent font-black text-2xl outline-none w-full" placeholder="0" />
                       </div>
-
-                      <button 
-                        onClick={() => updateSet(exIdx, setIdx, { completed: !set.completed })}
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${set.completed ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'bg-white/5 border border-white/10 text-text-dim hover:bg-white/10'}`}
-                      >
-                        {set.completed ? <Check size={28} strokeWidth={3} /> : <Plus size={28} />}
-                      </button>
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-text-dim uppercase mb-1">Reps</span>
+                        <input type="number" value={set.reps || ''} onChange={(e) => updateSet(exIdx, setIdx, { reps: Number(e.target.value) })} className="bg-transparent font-black text-2xl outline-none w-full" placeholder="0" />
+                      </div>
                     </div>
-                  );
-                })}
-
-                <button 
-                  onClick={() => {
-                    const n = {...localSession};
-                    const currentEx = n.exercises[exIdx];
-                    const lastSet = currentEx.sets[currentEx.sets.length - 1];
-                    currentEx.sets.push({...lastSet, completed: false});
-                    setLocalSession(n);
-                    storage.setActiveSession(n);
-                  }}
-                  className="w-full py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-text-dim border border-white/5 mt-2 hover:bg-white/10 transition-all"
-                >
-                  + Lägg till set
-                </button>
+                    <button onClick={() => updateSet(exIdx, setIdx, { completed: !set.completed })} className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${set.completed ? 'bg-green-500 text-white' : 'bg-white/5 text-text-dim'}`}>
+                      {set.completed ? <Check size={28} /> : <Plus size={28} />}
+                    </button>
+                  </div>
+                ))}
               </div>
+
+              <button 
+                onClick={() => { const n = {...localSession}; n.exercises[exIdx].sets.push({...n.exercises[exIdx].sets[n.exercises[exIdx].sets.length-1], completed: false}); setLocalSession(n); }}
+                className="w-full py-4 bg-white/5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mt-4"
+              >
+                + Lägg till set
+              </button>
             </div>
           );
         })}
       </div>
 
-      {/* ADD EXERCISE ACTION */}
-      <button onClick={() => setShowAddModal(true)} className="mx-2 w-[calc(100%-16px)] py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50 hover:bg-accent-pink/5 transition-all group">
-        <div className="bg-white/5 p-4 rounded-full group-hover:bg-accent-pink/10 group-hover:text-accent-pink transition-all">
-          <Plus size={32} />
-        </div>
-        <span className="font-black uppercase tracking-[0.3em] text-[10px] italic">Lägg till övning</span>
+      <button onClick={() => setShowAddModal(true)} className="mx-2 w-[calc(100%-16px)] py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50">
+        <Plus size={32} />
+        <span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span>
       </button>
 
-      {/* FINISH PASS */}
-      <div className="fixed bottom-32 left-0 right-0 px-4 z-[70] max-w-md mx-auto">
+      {/* FOOTER ACTIONS */}
+      <div className="fixed bottom-32 left-0 right-0 px-4 z-[70] max-w-md mx-auto space-y-3">
+        {!isTimerActive && timer === 0 ? (
+          <button 
+            onClick={() => setIsTimerActive(true)} 
+            className="w-full bg-white text-black py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all"
+          >
+            Starta Pass <Play size={20} fill="currentColor" />
+          </button>
+        ) : (
+          <button 
+            onClick={() => setIsTimerActive(!isTimerActive)} 
+            className={`w-full py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all ${isTimerActive ? 'bg-white/10 text-white' : 'bg-white text-black'}`}
+          >
+            {isTimerActive ? 'Pausa Pass' : 'Återuppta Pass'} {isTimerActive ? <Pause size={20} /> : <Play size={20} fill="currentColor" />}
+          </button>
+        )}
+        
         <button 
           onClick={() => onComplete(localSession, timer)} 
-          className="w-full bg-accent-pink py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-[0_10px_40px_rgba(255,45,85,0.4)] active:scale-95 transition-all flex items-center justify-center gap-4"
+          className="w-full bg-accent-pink py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:opacity-90"
         >
-          <span>Slutför träningspass</span>
-          <div className="bg-white/20 p-1 rounded-full"><Check size={20} /></div>
+          Slutför Pass <Check size={20} strokeWidth={3} />
+        </button>
+
+        <button 
+          onClick={() => { if(confirm("Vill du avbryta passet? Inga framsteg sparas.")) onCancel(); }}
+          className="w-full py-4 bg-white/5 border border-white/10 rounded-[24px] font-black italic text-[10px] tracking-widest uppercase text-white/40 hover:text-red-400 hover:border-red-400/20 transition-all flex items-center justify-center gap-2"
+        >
+          <X size={14} /> Avbryt Pass
         </button>
       </div>
 
-      {/* ADD MODAL */}
+      {/* MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[120] flex flex-col animate-in slide-in-from-bottom-4">
-          <div className="flex items-center p-6">
-            <button onClick={() => setShowAddModal(false)} className="p-2 text-accent-pink"><X size={32}/></button>
-            <h3 className="flex-1 text-center text-xl font-black uppercase italic tracking-widest">Bibliotek</h3>
-            <div className="w-12"></div>
-          </div>
-          <div className="p-6">
-            <div className="relative">
-              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-text-dim" size={20} />
-              <input 
-                type="text" 
-                placeholder="Sök övning..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 pl-16 outline-none focus:border-accent-pink font-bold"
-              />
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-6 space-y-3">
-            {allExercises
-              .filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()))
-              .map(ex => (
-                <button 
-                  key={ex.id} 
-                  onClick={() => addNewExercise(ex)}
-                  className="w-full p-6 bg-white/5 rounded-[32px] border border-white/5 flex justify-between items-center group active:scale-95 transition-all"
-                >
-                  <div className="text-left">
-                    <span className="font-black italic uppercase text-lg block group-hover:text-accent-pink transition-colors">{ex.name}</span>
-                    <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">{ex.pattern}</span>
-                  </div>
-                  <Plus size={24} className="text-text-dim group-hover:text-white" />
+        <div className="fixed inset-0 bg-[#0f0d15] z-[120] flex flex-col p-6 animate-in slide-in-from-bottom-4">
+           <header className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-black italic uppercase">Övningar</h3>
+              <button onClick={() => setShowAddModal(false)}><X size={32}/></button>
+           </header>
+           <div className="relative mb-6">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={20} />
+              <input type="text" placeholder="Sök..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 p-5 pl-12 rounded-3xl outline-none" />
+           </div>
+           <div className="flex-1 overflow-y-auto space-y-3">
+              {filteredExercises.map(ex => (
+                <button key={ex.id} onClick={() => addNewExercise(ex)} className="w-full p-5 bg-white/5 rounded-[32px] flex justify-between items-center group">
+                   <div className="text-left">
+                      <span className="font-black italic uppercase text-lg block">{ex.name}</span>
+                      <span className="text-[10px] font-black text-text-dim uppercase">{ex.pattern}</span>
+                   </div>
+                   <Plus size={20} />
                 </button>
               ))}
-          </div>
+           </div>
         </div>
       )}
     </div>

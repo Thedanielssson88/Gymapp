@@ -1,4 +1,11 @@
-import { MovementPattern, Equipment, Exercise, Zone } from './types';
+
+import { MovementPattern, Equipment, Exercise, Zone, GoalTarget } from './types';
+
+export const INITIAL_GOAL_TARGETS: GoalTarget[] = [
+  { id: 'target-push', name: 'PUSH-MUSKLER', targetSets: 50, muscleGroups: ['Bröst', 'Axlar', 'Triceps'] },
+  { id: 'target-pull', name: 'PULL-MUSKLER', targetSets: 27, muscleGroups: ['Rygg', 'Biceps', 'Underarmar', 'Trapezius'] },
+  { id: 'target-legs', name: 'BEN-MUSKLER', targetSets: 45, muscleGroups: ['Framsida lår', 'Baksida lår', 'Säte', 'Vader'] }
+];
 
 export const EXERCISE_DATABASE: Exercise[] = [
   // --- DEL 1: GYM (SATS PROFIL) ---

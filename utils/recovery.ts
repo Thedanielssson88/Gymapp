@@ -1,3 +1,4 @@
+
 import { WorkoutSession, MuscleGroup } from '../types';
 import { storage } from '../services/storage';
 
@@ -21,10 +22,13 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
   const userProfile = storage.getUserProfile();
   const now = new Date().getTime();
 
-  history.forEach(session => {
+  // Sortera historik för att processa äldsta först så utmattning ackumuleras rätt
+  const sortedHistory = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  sortedHistory.forEach(session => {
     const sessionTime = new Date(session.date).getTime();
     const hoursSince = (now - sessionTime) / (1000 * 60 * 60);
-    if (hoursSince > 168) return; // 7 day lookback
+    if (hoursSince > 168) return; // 7 dagars fönster
 
     session.exercises.forEach(plannedEx => {
       const exData = allExercises.find(e => e.id === plannedEx.exerciseId);
@@ -33,20 +37,23 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
       const completedSets = plannedEx.sets.filter(s => s.completed);
       if (completedSets.length === 0) return;
 
-      // Calculate Biomechanical Volume
-      // Formula: (user_bodyweight * exercise.bodyweight_coefficient) + added_weight_kg
+      // Beräkna Biomekanisk Volym
       const totalEffectiveVolume = completedSets.reduce((sum, s) => {
-        const bodyweightLoad = userProfile.weight * exData.bodyweightCoefficient;
+        const bodyweightLoad = userProfile.weight * (exData.bodyweightCoefficient || 0);
         const effectiveLoad = bodyweightLoad + s.weight;
         return sum + (effectiveLoad * s.reps);
       }, 0);
 
-      const fatigueAmount = Math.min(35, (totalEffectiveVolume / 500 + 5) * exData.difficultyMultiplier);
+      // Aggressivare utmattning: (Volym / 250 + 10 bas) * svårighet
+      // Detta gör att även kroppsviktsträning (låg volym i KG) ger utslag pga +10 bas per set-ish logic här
+      const fatiguePerSet = (totalEffectiveVolume / 250 + (completedSets.length * 2)) * exData.difficultyMultiplier;
 
       exData.muscleGroups.forEach(muscle => {
         if (status[muscle] !== undefined) {
+          // Linjär återhämtning över 72 timmar
           const recoveryRate = hoursSince / MUSCLE_RECOVERY_HOURS;
-          const remainingFatigue = fatigueAmount * Math.max(0, 1 - recoveryRate);
+          const remainingFatigue = fatiguePerSet * Math.max(0, 1 - recoveryRate);
+          
           status[muscle] = Math.max(0, status[muscle] - remainingFatigue);
         }
       });
@@ -58,9 +65,9 @@ export const calculateMuscleRecovery = (history: WorkoutSession[]): MuscleStatus
 
 export const getRecoveryColor = (score: number, isSelected?: boolean) => {
   if (isSelected) return '#ff2d55'; 
-  if (score >= 98) return 'rgba(255, 255, 255, 0.05)';
-  if (score >= 80) return '#ffccd5';
-  if (score >= 60) return '#ff8095';
-  if (score >= 40) return '#ff2d55';
-  return '#b31535'; 
+  if (score >= 95) return 'rgba(255, 255, 255, 0.05)'; // Helt fräsch
+  if (score >= 80) return '#ffd6dd'; // Minimalt påverkad
+  if (score >= 65) return '#ff8095'; // Trött (Rosa)
+  if (score >= 45) return '#ff2d55'; // Mycket trött (Röd)
+  return '#990022'; // Helt slut (Mörkröd)
 };
