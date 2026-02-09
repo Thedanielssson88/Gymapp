@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, WorkoutRoutine, UserProfile } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, getExerciseHistory } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -9,7 +8,7 @@ import { WorkoutGenerator } from './WorkoutGenerator';
 import { WorkoutHeader } from './WorkoutHeader';
 import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
-import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, Calendar, Dumbbell, MapPin, Check, ArrowRightLeft } from 'lucide-react';
+import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
@@ -49,7 +48,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [infoTab, setInfoTab] = useState<'instructions' | 'history'>('instructions');
   const [showZonePicker, setShowZonePicker] = useState(false);
 
   useEffect(() => {
@@ -97,7 +95,9 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
-    if (updates.completed) setRestTimer(90); 
+    if (updates.completed) {
+      setRestTimer(90);
+    }
   }, []);
 
   const updateNotes = useCallback((exIdx: number, notes: string) => {
@@ -130,6 +130,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       const newSet: WorkoutSet = {
         reps: lastSet?.reps || 10,
         weight: lastSet?.weight || 0,
+        type: lastSet?.type || 'normal',
         completed: false
       };
       updatedExercises[exIdx] = { ...updatedExercises[exIdx], sets: [...currentSets, newSet] };
@@ -141,9 +142,15 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   const addNewExercise = (ex: Exercise, autoGenerate = false) => {
     const lastSetData = getLastPerformance(ex.id, history);
+    
+    let applyOverload = false;
+    if (lastSetData && lastSetData.length > 0) {
+      applyOverload = autoGenerate || window.confirm(`Hittade historik för ${ex.name}!\nVill du applicera progressiv överbelastning (öka vikten)?`);
+    }
+
     let newSets: WorkoutSet[] = lastSetData && lastSetData.length > 0
-      ? createSmartSets(lastSetData, autoGenerate || window.confirm(`Hittade historik för ${ex.name}!\nVill du applicera progressiv överbelastning?`))
-      : [{ reps: 10, weight: 0, completed: false }, { reps: 10, weight: 0, completed: false }, { reps: 10, weight: 0, completed: false }];
+      ? createSmartSets(lastSetData, applyOverload)
+      : [{ reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }];
 
     setLocalSession(prev => {
       const updatedSession = { ...prev, exercises: [...prev.exercises, { exerciseId: ex.id, sets: newSets, notes: lastSetData ? 'Baserat på föregående pass' : '' }] };
@@ -156,13 +163,21 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const handleGenerate = (muscles: MuscleGroup[]) => {
      const generated = generateWorkoutSession(muscles, activeZone, allExercises);
      if (generated.length === 0) { alert("Hittade inga övningar i denna zon för valda muskler."); return; }
+     
+     // Vid autogenerering frågar vi en gång om progression ska gälla för hela passet
+     const useProgression = confirm("Ska vi applicera progressiv överbelastning på de övningar vi hittar historik för?");
+
      setLocalSession(prev => {
        const newExercises = [...prev.exercises];
        generated.forEach(plan => {
           const ex = allExercises.find(e => e.id === plan.exerciseId);
           if (ex) {
              const lastSetData = getLastPerformance(ex.id, history);
-             newExercises.push({ exerciseId: ex.id, sets: lastSetData ? createSmartSets(lastSetData, true) : plan.sets, notes: 'Auto-genererad' });
+             newExercises.push({ 
+               exerciseId: ex.id, 
+               sets: lastSetData ? createSmartSets(lastSetData, useProgression) : plan.sets, 
+               notes: 'Auto-genererad' 
+             });
           }
        });
        const updatedSession = { ...prev, exercises: newExercises };
@@ -200,7 +215,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const saveAsRoutine = async () => {
     const name = window.prompt("Vad ska rutinen heta?", localSession.name);
     if (!name) return;
-    await storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: localSession.exercises.map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: pe.sets.map(s => ({ reps: s.reps, weight: s.weight, completed: false })) })) });
+    await storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: localSession.exercises.map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: pe.sets.map(s => ({ reps: s.reps, weight: s.weight, type: s.type, completed: false })) })) });
     alert("Rutinen sparad!");
   };
   
@@ -211,7 +226,13 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
        alert("Du måste lägga till övningen i passet först.");
        return;
     }
-    if (confirm("Detta kommer ersätta dina nuvarande set med de från historiken. Vill du fortsätta?")) {
+    
+    if (localSession.exercises[exIndex].sets.some(s => s.completed)) {
+       alert("Du kan inte ändra en övning där du redan har klarmarkerat set. Ta bort klarmarkeringen först.");
+       return;
+    }
+
+    if (confirm("Detta kommer ersätta dina nuvarande set med de från historiken (inklusive uppvärmning/taggar). Vill du fortsätta?")) {
       const newSession = { ...localSession };
       newSession.exercises[exIndex].sets = sets.map(s => ({
         ...s,
@@ -233,13 +254,19 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       return;
     }
 
+    const originalPlannedExercise = localSession.exercises[originalExerciseIndex];
+    if (originalPlannedExercise.sets.some(s => s.completed)) {
+       alert("Du kan inte byta ut en övning som du redan har påbörjat. Ta bort markeringarna för avklarade set först.");
+       return;
+    }
+
     const alternativeExercise = allExercises.find(ex => ex.id === alternativeExerciseId);
     if (!alternativeExercise) {
       alert("Alternativ övning kunde inte hittas.");
       return;
     }
     
-    if (!confirm(`Är du säker på att du vill byta ut "${infoExercise.name}" mot "${alternativeExercise.name}"?`)) {
+    if (!confirm(`Är du säker på att du vill byta ut "${infoExercise.name}" mot "${alternativeExercise.name}"? Belastningen kommer att räknas om.`)) {
         return;
     }
 
@@ -249,12 +276,12 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     let notes: string;
 
     if (historyForAlternative) {
-      newSets = createSmartSets(historyForAlternative, true);
-      notes = `Bytt från ${infoExercise.name}. Set baserade på tidigare prestation.`;
+      const useProgression = confirm("Hittade historik för den nya övningen. Vill du använda den med progressiv överbelastning?");
+      newSets = createSmartSets(historyForAlternative, useProgression);
+      notes = `Bytt från ${infoExercise.name}. Set baserade på historik.`;
     } else {
-      const originalPlannedExercise = localSession.exercises[originalExerciseIndex];
       newSets = adaptVolume(originalPlannedExercise.sets, infoExercise, alternativeExercise, userProfile.goal);
-      notes = `Bytt från ${infoExercise.name}. Volym anpassad.`;
+      notes = `Bytt från ${infoExercise.name}. Volym anpassad matematiskt.`;
     }
 
     setLocalSession(prev => {
@@ -273,7 +300,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-80 animate-in fade-in duration-500">
+    <div className="space-y-4 pb-64 animate-in fade-in duration-500">
       <WorkoutHeader 
         timer={timer} 
         isTimerActive={isTimerActive} 
@@ -281,14 +308,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         onCancel={() => { if (window.confirm("Är du säker på att du vill avbryta passet? All data går förlorad.")) { onCancel(); } }} 
         onSaveRoutine={saveAsRoutine} 
       />
-
-      {restTimer !== null && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] bg-accent-pink text-white px-8 py-3 rounded-full font-black italic shadow-2xl animate-in zoom-in slide-in-from-top-4 flex items-center gap-4">
-          <RefreshCw size={18} className="animate-spin" />
-          <span>VILA: {restTimer}s</span>
-          <button onClick={() => setRestTimer(null)} className="ml-2 opacity-50"><X size={14}/></button>
-        </div>
-      )}
 
       <div className="px-4 space-y-4">
         <WorkoutStats 
@@ -309,7 +328,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                <MapPin size={20} />
              </div>
              <div className="text-left">
-               <span className="text-[9px] font-black uppercase tracking-widest text-text-dim block mb-1">Nuvarande Plats</span>
+               <span className="text-[9px] font-black uppercase tracking-widest text-text-dim block mb-1">Träningsplats</span>
                <span className="text-lg font-black italic uppercase text-white">{activeZone.name}</span>
              </div>
           </div>
@@ -342,45 +361,68 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         })}
       </div>
 
-      {/* --- KNAPPAR: FÖRESLÅ & LÄGG TILL --- */}
-      <div className="flex gap-2 mx-2 mt-4 mb-32">
-        {/* GENERATOR KNAPPEN (Som försvann) */}
+      <div className="flex gap-2 mx-2 mt-4 mb-12">
         <button 
            onClick={() => setShowGenerator(true)}
-           className="flex-1 py-12 bg-accent-blue/10 border-2 border-dashed border-accent-blue/30 rounded-[40px] flex flex-col items-center justify-center gap-4 text-accent-blue hover:bg-accent-blue/20 transition-all active:scale-95"
+           className="flex-1 py-10 bg-accent-blue/5 border-2 border-dashed border-accent-blue/10 rounded-[40px] flex flex-col items-center justify-center gap-3 text-accent-blue hover:bg-accent-blue/10 transition-all active:scale-95"
         >
-          <Sparkles size={32} />
-          <span className="font-black uppercase tracking-widest text-[10px] italic">Föreslå Pass</span>
+          <Sparkles size={28} />
+          <span className="font-black uppercase tracking-widest text-[9px] italic">Smart Generator</span>
         </button>
 
-        {/* LÄGG TILL KNAPPEN */}
         <button 
            onClick={() => setShowAddModal(true)} 
-           className="flex-1 py-12 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-4 text-text-dim hover:border-accent-pink/50 active:scale-95 transition-all"
+           className="flex-1 py-10 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-3 text-text-dim hover:border-accent-pink/30 active:scale-95 transition-all"
         >
-          <Plus size={32} />
-          <span className="font-black uppercase tracking-widest text-[10px] italic">Lägg till övning</span>
+          <Plus size={28} />
+          <span className="font-black uppercase tracking-widest text-[9px] italic">Lägg till övning</span>
         </button>
       </div>
 
-      {/* --- FOOTER ACTIONS --- */}
-      <div className="fixed bottom-32 left-0 right-0 px-4 z-[70] max-w-md mx-auto space-y-3">
-        
-        {/* Timer/Start Knapp (Behåll denna som den är) */}
-        <button 
-          onClick={() => { setIsTimerActive(!isTimerActive); if(!isTimerActive && timer === 0) setIsTimerActive(true); }} 
-          className={`w-full py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:scale-95 transition-all ${isTimerActive ? 'bg-white/10 text-white' : 'bg-white text-black'}`}
-        >
-          {isTimerActive ? 'Pausa Pass' : (timer === 0 ? 'Starta Pass' : 'Återuppta Pass')}
-        </button>
+      <div className="fixed bottom-0 left-0 right-0 z-[150] pb-safe">
+        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15]/95 to-transparent pointer-events-none" />
+        <div className="relative px-6 pb-10 pt-4 max-w-md mx-auto">
+          <div className="bg-[#1a1721]/95 backdrop-blur-3xl border border-white/10 rounded-[36px] p-4 flex items-center gap-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+             <div className="flex-1 h-16 relative">
+                {restTimer !== null ? (
+                  <button 
+                    onClick={() => setRestTimer(null)}
+                    className="w-full h-full bg-accent-pink rounded-[24px] flex items-center gap-4 px-4 shadow-[0_0_20px_rgba(255,45,85,0.4)] animate-in zoom-in duration-300 active:scale-95 transition-transform"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <RefreshCw size={20} className="animate-spin text-white" />
+                    </div>
+                    <div className="text-left">
+                       <span className="text-[8px] font-black uppercase tracking-widest text-white block mb-0.5 opacity-80">VILA</span>
+                       <span className="text-2xl font-black italic tabular-nums text-white leading-none">{restTimer}s</span>
+                    </div>
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => setIsTimerActive(!isTimerActive)}
+                    className="w-full h-full bg-white/5 border border-white/5 rounded-[24px] flex items-center gap-4 px-4 hover:bg-white/10 transition-all active:scale-95"
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isTimerActive ? 'bg-white text-[#0f0d15]' : 'bg-accent-blue text-white'}`}>
+                      {isTimerActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                    </div>
+                    <div className="text-left">
+                      <span className="text-[8px] font-black uppercase text-text-dim block tracking-[0.2em] mb-0.5">TID</span>
+                      <span className="text-2xl font-black italic tabular-nums leading-none tracking-tighter">
+                        {Math.floor(timer/60)}:{String(timer%60).padStart(2,'0')}
+                      </span>
+                    </div>
+                  </button>
+                )}
+             </div>
 
-        {/* SLUTFÖR KNAPP (Här är fixen för färgen) */}
-        <button 
-          onClick={() => setShowSummary(true)} 
-          className="w-full bg-accent-pink text-white py-6 rounded-[24px] font-black italic text-xl tracking-widest uppercase shadow-2xl flex items-center justify-center gap-4 active:opacity-90"
-        >
-          Slutför Pass <Check size={20} strokeWidth={3} />
-        </button>
+             <button 
+               onClick={() => setShowSummary(true)} 
+               className="flex-1 h-16 bg-[#2ed573] text-[#0f0d15] rounded-[24px] font-black italic text-lg tracking-wider uppercase shadow-[0_0_25px_rgba(46,213,115,0.3)] flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+             >
+               Slutför <Check size={20} strokeWidth={4} />
+             </button>
+          </div>
+        </div>
       </div>
 
       {showSummary && (
@@ -398,7 +440,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
       
       {showAddModal && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-6 flex flex-col animate-in slide-in-from-bottom-10 duration-500">
+        <div className="fixed inset-0 bg-[#0f0d15] z-[200] p-6 flex flex-col animate-in slide-in-from-bottom-10 duration-500">
             <header className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-black italic uppercase text-white tracking-tighter">Lägg till övning</h3>
                 <button onClick={() => setShowAddModal(false)} className="p-3 bg-white/5 rounded-2xl"><X size={28} className="text-text-dim" /></button>
@@ -410,9 +452,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-4">
                 {filteredExercises.map(ex => (
                     <button key={ex.id} onClick={() => addNewExercise(ex)} className="w-full flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-transparent hover:border-white/10">
-                        <div className="w-12 h-12 bg-black/30 rounded-lg overflow-hidden border border-white/5 flex-shrink-0">
-                           <img src={ex.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${ex.name}`} className="w-full h-full object-cover p-1 opacity-40" alt={ex.name}/>
-                        </div>
+                        <ExerciseThumb ex={ex} />
                         <div className="text-left">
                            <p className="font-black uppercase italic text-sm tracking-tight">{ex.name}</p>
                            <p className="text-[9px] font-black text-text-dim uppercase tracking-widest">{ex.pattern}</p>
@@ -424,7 +464,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       )}
 
       {showZonePicker && (
-        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[150] flex flex-col p-6 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[200] flex flex-col p-6 animate-in fade-in duration-200">
            <header className="flex justify-between items-center mb-8">
               <div>
                 <h3 className="text-2xl font-black italic uppercase text-white">Välj Gym</h3>
@@ -475,119 +515,275 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       )}
 
       {infoExercise && (
-        <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[200] p-6 overflow-y-auto animate-in fade-in">
-          <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
-            <div className="w-full h-72 bg-black/50 relative">
-              {infoExercise.imageUrl ? (
-                  <img src={infoExercise.imageUrl} className="w-full h-full object-cover" alt={infoExercise.name}/>
-              ) : (
-                  <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30"><Dumbbell size={64} /><span className="font-black uppercase tracking-widest text-xs">Ingen bild tillgänglig</span></div>
-              )}
-              <button onClick={() => setInfoExercise(null)} className="absolute top-4 right-4 bg-black/50 p-3 rounded-full text-white backdrop-blur-md hover:scale-110 active:scale-95 transition-all"><X size={24} /></button>
-            </div>
-            <div className="p-8 space-y-8">
-              <div>
-                  <h2 className="text-3xl font-black italic uppercase leading-none mb-2 tracking-tighter">{infoExercise.name}</h2>
-                  <div className="flex gap-2"><span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">{infoExercise.pattern}</span></div>
-              </div>
+        <InfoModal 
+          exercise={infoExercise} 
+          onClose={() => setInfoExercise(null)} 
+          history={history} 
+          onApplyHistory={applyHistoryToCurrent} 
+          onSwap={handleSwapExercise} 
+          allExercises={allExercises} 
+          isExerciseStarted={localSession.exercises.find(e => e.exerciseId === infoExercise.id)?.sets.some(s => s.completed)}
+        />
+      )}
+    </div>
+  );
+};
 
-              <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
-                <button onClick={() => setInfoTab('instructions')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${infoTab === 'instructions' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><BookOpen size={14} /> Instruktioner</button>
-                <button onClick={() => setInfoTab('history')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${infoTab === 'history' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><History size={14} /> Historik</button>
-              </div>
+const ExerciseThumb: React.FC<{ ex: Exercise }> = ({ ex }) => {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
 
-              {infoTab === 'instructions' && (
-                <div className="space-y-8 animate-in fade-in">
-                  <div className="space-y-3">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Instruktioner</h4>
-                      {infoExercise.description ? (<p className="text-sm leading-relaxed text-white/80 font-medium whitespace-pre-wrap">{infoExercise.description}</p>) : (<p className="text-xs italic text-white/20 font-bold uppercase tracking-widest">Ingen beskrivning tillgänglig för denna övning.</p>)}
-                  </div>
-                  <div className="space-y-6">
-                      <div>
-                          <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-pink mb-3">Primära Muskler</h4>
-                          <div className="flex flex-wrap gap-2">
-                              {(infoExercise.primaryMuscles?.length ? infoExercise.primaryMuscles : infoExercise.muscleGroups).map(m => (
-                                  <span key={m} className="px-3 py-1.5 border border-accent-pink/30 bg-accent-pink/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
-                              ))}
-                          </div>
-                      </div>
-                      {infoExercise.secondaryMuscles && infoExercise.secondaryMuscles.length > 0 && (
-                        <div>
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-blue mb-3">Sekundära Muskler</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {infoExercise.secondaryMuscles.map(m => (
-                                    <span key={m} className="px-3 py-1.5 border border-accent-blue/30 bg-accent-blue/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
-                                ))}
-                            </div>
-                        </div>
-                      )}
-                      {infoExercise.equipment && infoExercise.equipment.length > 0 && (
-                        <div>
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-3">Utrustning</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {infoExercise.equipment.map(eq => (
-                                    <span key={eq} className="px-3 py-1.5 border border-white/10 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-tight text-white/80">{eq}</span>
-                                ))}
-                            </div>
-                        </div>
-                      )}
-                  </div>
-                </div>
-              )}
-              
-              {infoTab === 'history' && (
-                <div className="space-y-4 animate-in fade-in">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Senaste prestationer</h4>
-                    {getExerciseHistory(infoExercise.id, history).map((perf, idx) => (
-                       <button key={idx} onClick={() => applyHistoryToCurrent(perf.sets)} className="w-full p-4 bg-white/5 rounded-2xl border border-white/5 text-left hover:border-white/10">
-                          <div className="flex justify-between items-center mb-2">
-                             <p className="text-[10px] font-black uppercase tracking-widest">{new Date(perf.date).toLocaleDateString()}</p>
-                             <div className="flex items-center gap-1 text-accent-blue text-[10px] font-black uppercase"><ArrowDownToLine size={12}/> Använd</div>
-                          </div>
-                          <div className="flex gap-2 flex-wrap">
-                            {perf.sets.map((s, sIdx) => (
-                               <div key={sIdx} className="text-xs font-bold bg-black/20 px-2 py-1 rounded">
-                                  {s.weight}kg <span className="text-[8px] opacity-40">x</span> {s.reps}
-                               </div>
-                            ))}
-                          </div>
-                       </button>
-                    ))}
-                    {getExerciseHistory(infoExercise.id, history).length === 0 && <p className="text-xs italic text-white/20 font-bold uppercase tracking-widest">Ingen historik för denna övning.</p>}
-                </div>
-              )}
+  useEffect(() => {
+    let active = true;
+    if (ex.imageId) {
+      storage.getImage(ex.imageId).then(url => {
+        if (active && url) setImgSrc(url);
+      });
+    } else if (ex.imageUrl) {
+      setImgSrc(ex.imageUrl);
+    } else {
+      setImgSrc(null);
+    }
+    return () => { active = false; };
+  }, [ex.imageId, ex.imageUrl]);
 
-              {infoExercise.alternativeExIds && infoExercise.alternativeExIds.length > 0 && (
-                  <div className="pt-6 border-t border-white/5">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-4">Bra Alternativ</h4>
-                      <div className="space-y-2">
-                          {infoExercise.alternativeExIds.map(altId => {
-                              const altEx = allExercises.find(e => e.id === altId);
-                              return altEx ? (
-                                  <button 
-                                    key={altId}
-                                    onClick={() => handleSwapExercise(altEx.id)}
-                                    className="w-full flex items-center justify-between gap-4 p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-accent-blue/50 group active:scale-[0.98] transition-all"
-                                  >
-                                    <div className="flex items-center gap-4 text-left">
-                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
-                                          <img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50 group-hover:opacity-80 transition-opacity" alt={altEx.name}/>
-                                      </div>
-                                      <span className="text-xs font-black uppercase italic tracking-tight">{altEx.name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 text-text-dim group-hover:bg-accent-blue group-hover:text-white transition-all">
-                                      <span className="text-[9px] font-bold uppercase">Byt</span>
-                                      <ArrowRightLeft size={12} />
-                                    </div>
-                                  </button>
-                              ) : null;
-                          })}
-                      </div>
-                  </div>
-              )}
-            </div>
-          </div>
+  return (
+    <div className="w-12 h-12 bg-black/30 rounded-lg overflow-hidden border border-white/5 flex-shrink-0 flex items-center justify-center">
+      {imgSrc ? (
+        <img src={imgSrc} className="w-full h-full object-cover p-1 opacity-40" alt={ex.name}/>
+      ) : (
+        <Dumbbell className="text-white/10" size={16} />
+      )}
+    </div>
+  );
+};
+
+const RenderSetTypeBadge = ({ type }: { type?: SetType }) => {
+  switch (type) {
+    case 'warmup':
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/20">
+          <Thermometer size={10} className="text-yellow-500" />
+          <span className="text-[8px] font-black text-yellow-500 uppercase tracking-tighter">VÄRM</span>
         </div>
+      );
+    case 'drop':
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+          <Zap size={10} className="text-purple-500" />
+          <span className="text-[8px] font-black text-purple-500 uppercase tracking-tighter">DROP</span>
+        </div>
+      );
+    case 'failure':
+      return (
+        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
+          <AlertCircle size={10} className="text-red-500" />
+          <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter">FAIL</span>
+        </div>
+      );
+    default:
+      return null;
+  }
+};
+
+const InfoModal: React.FC<{ exercise: Exercise, onClose: () => void, history: any[], onApplyHistory: (sets: WorkoutSet[]) => void, onSwap: (id: string) => void, allExercises: Exercise[], isExerciseStarted?: boolean }> = ({ exercise, onClose, history, onApplyHistory, onSwap, allExercises, isExerciseStarted }) => {
+  const [infoTab, setInfoTab] = useState<'instructions' | 'history'>('instructions');
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl: string | null = null;
+
+    const resolveImage = async () => {
+      if (exercise.imageId) {
+        const url = await storage.getImage(exercise.imageId);
+        if (active && url) {
+          objectUrl = url;
+          setImgSrc(url);
+          return;
+        }
+      }
+      if (exercise.imageUrl) {
+        if (active) setImgSrc(exercise.imageUrl);
+      } else {
+        if (active) setImgSrc(null);
+      }
+    };
+
+    resolveImage();
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [exercise.imageId, exercise.imageUrl]);
+
+  return (
+    <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[250] p-6 overflow-y-auto animate-in fade-in">
+      <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
+        <div className="w-full h-72 bg-black/50 relative flex items-center justify-center">
+          {imgSrc ? (
+              <img src={imgSrc} className="w-full h-full object-contain" alt={exercise.name}/>
+          ) : (
+              <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30">
+                <Dumbbell size={64} />
+                <span className="font-black uppercase tracking-widest text-xs">Ingen bild tillgänglig</span>
+              </div>
+          )}
+          <button onClick={onClose} className="absolute top-4 right-4 bg-black/50 p-3 rounded-full text-white backdrop-blur-md hover:scale-110 active:scale-95 transition-all"><X size={24} /></button>
+        </div>
+        <div className="p-8 space-y-8">
+          <div>
+              <h2 className="text-3xl font-black italic uppercase leading-none mb-2 tracking-tighter">{exercise.name}</h2>
+              <div className="flex gap-2"><span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">{exercise.pattern}</span></div>
+          </div>
+
+          <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5">
+            <button onClick={() => setInfoTab('instructions')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${infoTab === 'instructions' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><BookOpen size={14} /> Instruktioner</button>
+            <button onClick={() => setInfoTab('history')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${infoTab === 'history' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><History size={14} /> Historik</button>
+          </div>
+
+          {infoTab === 'instructions' && (
+            <div className="space-y-8 animate-in fade-in">
+              <div className="space-y-3">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Instruktioner</h4>
+                  {exercise.description ? (<p className="text-sm leading-relaxed text-white/80 font-medium whitespace-pre-wrap">{exercise.description}</p>) : (<p className="text-xs italic text-white/20 font-bold uppercase tracking-widest">Ingen beskrivning tillgänglig för denna övning.</p>)}
+              </div>
+              <div className="space-y-6">
+                  <div>
+                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-pink mb-3">Primära Muskler</h4>
+                      <div className="flex flex-wrap gap-2">
+                          {(exercise.primaryMuscles?.length ? exercise.primaryMuscles : exercise.muscleGroups).map(m => (
+                              <span key={m} className="px-3 py-1.5 border border-accent-pink/30 bg-accent-pink/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
+                          ))}
+                      </div>
+                  </div>
+                  {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 && (
+                    <div>
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-blue mb-3">Sekundära Muskler</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {exercise.secondaryMuscles.map(m => (
+                                <span key={m} className="px-3 py-1.5 border border-accent-blue/30 bg-accent-blue/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
+                            ))}
+                        </div>
+                    </div>
+                  )}
+                  {exercise.equipment && exercise.equipment.length > 0 && (
+                    <div>
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-3">Utrustning</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {exercise.equipment.map(eq => (
+                                <span key={eq} className="px-3 py-1.5 border border-white/10 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-tight text-white/80">{eq}</span>
+                            ))}
+                        </div>
+                    </div>
+                  )}
+              </div>
+            </div>
+          )}
+          
+          {infoTab === 'history' && (
+            <div className="space-y-4 animate-in fade-in">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Senaste prestationer</h4>
+                {getExerciseHistory(exercise.id, history).map((perf, idx) => (
+                   <button 
+                    key={idx} 
+                    onClick={() => onApplyHistory(perf.sets)} 
+                    disabled={isExerciseStarted}
+                    className={`w-full p-4 rounded-3xl border text-left transition-all ${isExerciseStarted ? 'bg-white/2 opacity-20 cursor-not-allowed' : 'bg-white/5 border-white/10 hover:border-white/30 active:scale-[0.98]'}`}
+                   >
+                      <div className="flex justify-between items-center mb-4">
+                         <p className="text-[10px] font-black uppercase tracking-[0.4em] text-accent-pink">{new Date(perf.date).toLocaleDateString()}</p>
+                         {!isExerciseStarted && <div className="flex items-center gap-1 text-accent-blue text-[10px] font-black uppercase tracking-widest"><ArrowDownToLine size={14}/> Använd</div>}
+                      </div>
+                      <div className="space-y-2">
+                        {perf.sets.map((s, sIdx) => (
+                           <div key={sIdx} className="flex items-center justify-between bg-black/40 px-3 py-2 rounded-xl border border-white/5">
+                              <div className="flex items-center gap-3">
+                                <span className="text-[11px] font-black text-white/90">
+                                  {s.weight}kg <span className="text-[8px] opacity-40 mx-1">x</span> {s.reps} reps
+                                </span>
+                              </div>
+                              <RenderSetTypeBadge type={s.type} />
+                           </div>
+                        ))}
+                      </div>
+                   </button>
+                ))}
+                {getExerciseHistory(exercise.id, history).length === 0 && <p className="text-xs italic text-white/20 font-bold uppercase tracking-widest">Ingen historik för denna övning.</p>}
+                {isExerciseStarted && (
+                   <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl mt-2">
+                      <AlertCircle size={16} className="text-red-500 shrink-0" />
+                      <p className="text-[9px] font-black uppercase text-red-500 leading-tight">Du kan inte applicera historik när övningen redan är påbörjad i detta pass.</p>
+                   </div>
+                )}
+            </div>
+          )}
+
+          {exercise.alternativeExIds && exercise.alternativeExIds.length > 0 && (
+              <div className="pt-6 border-t border-white/5">
+                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-4">Bra Alternativ</h4>
+                  
+                  {isExerciseStarted && (
+                     <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl mb-4">
+                        <AlertCircle size={14} className="text-red-500 shrink-0" />
+                        <p className="text-[8px] font-black uppercase text-red-500 leading-tight">Byten är låsta för påbörjade övningar.</p>
+                     </div>
+                  )}
+
+                  <div className="space-y-2">
+                      {exercise.alternativeExIds.map(altId => {
+                          const altEx = allExercises.find(e => e.id === altId);
+                          return altEx ? (
+                              <button 
+                                key={altId}
+                                onClick={() => onSwap(altEx.id)}
+                                disabled={isExerciseStarted}
+                                className={`w-full flex items-center justify-between gap-4 p-4 rounded-2xl border transition-all ${isExerciseStarted ? 'bg-white/2 border-white/5 opacity-30 grayscale' : 'bg-white/5 border-white/5 hover:border-accent-blue/50 active:scale-[0.98] group'}`}
+                              >
+                                <div className="flex items-center gap-4 text-left">
+                                  <ExerciseThumbSmall ex={altEx} />
+                                  <span className="text-xs font-black uppercase italic tracking-tight">{altEx.name}</span>
+                                </div>
+                                {!isExerciseStarted && (
+                                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 text-text-dim group-hover:bg-accent-blue group-hover:text-white transition-all">
+                                    <span className="text-[9px] font-bold uppercase">Byt</span>
+                                    <ArrowRightLeft size={12} />
+                                  </div>
+                                )}
+                              </button>
+                          ) : null;
+                      })}
+                  </div>
+              </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ExerciseThumbSmall: React.FC<{ ex: Exercise }> = ({ ex }) => {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (ex.imageId) {
+      storage.getImage(ex.imageId).then(url => {
+        if (active && url) setImgSrc(url);
+      });
+    } else if (ex.imageUrl) {
+      setImgSrc(ex.imageUrl);
+    } else {
+      setImgSrc(null);
+    }
+    return () => { active = false; };
+  }, [ex.imageId, ex.imageUrl]);
+
+  return (
+    <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+      {imgSrc ? (
+        <img src={imgSrc} className="w-full h-full object-cover opacity-50 transition-opacity" alt={ex.name}/>
+      ) : (
+        <Dumbbell className="text-white/10" size={14} />
       )}
     </div>
   );

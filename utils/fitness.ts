@@ -1,4 +1,3 @@
-
 import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal } from '../types';
 
 /**
@@ -18,14 +17,12 @@ export const findReplacement = (
   targetZone: Zone,
   allExercises: Exercise[]
 ): Exercise => {
-  // Filter DB for same movement pattern and available equipment
   const candidates = allExercises.filter(ex => 
     ex.pattern === currentExercise.pattern &&
     ex.equipment.every(eq => targetZone.inventory.includes(eq))
   );
 
   if (candidates.length === 0) {
-    // Fallback: search for just ONE of the equipments matching
     const fallback = allExercises.find(ex => 
       ex.pattern === currentExercise.pattern &&
       ex.equipment.some(eq => targetZone.inventory.includes(eq))
@@ -33,7 +30,6 @@ export const findReplacement = (
     return fallback || currentExercise;
   }
 
-  // Choose the one closest in difficulty to the original
   return candidates.sort((a, b) => 
     Math.abs(b.difficultyMultiplier - currentExercise.difficultyMultiplier) - 
     Math.abs(a.difficultyMultiplier - currentExercise.difficultyMultiplier)
@@ -58,18 +54,10 @@ export const adaptVolume = (
     return {
       ...set,
       reps: newReps,
-      weight: set.weight / diffRatio,
+      weight: Math.round((set.weight / diffRatio) * 2) / 2,
       completed: false
     };
   });
-};
-
-export const suggestOverload = (lastSet: WorkoutSet): { weight: number; reps: number } => {
-  const newWeight = Math.round((lastSet.weight * 1.025) * 2) / 2;
-  return {
-    weight: newWeight,
-    reps: lastSet.reps
-  };
 };
 
 /**
@@ -77,14 +65,12 @@ export const suggestOverload = (lastSet: WorkoutSet): { weight: number; reps: nu
  * Hittar senaste passet där övningen utfördes.
  */
 export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]): WorkoutSet[] | null => {
-  // Sortera pass nyast först
   const sortedHistory = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   for (const session of sortedHistory) {
     const ex = session.exercises.find(e => e.exerciseId === exerciseId);
-    // Vi vill ha set som faktiskt utfördes (completed) och har vikt eller reps
     if (ex && ex.sets.some(s => s.completed)) {
-      return ex.sets.filter(s => s.completed); // Returnera bara de genomförda seten
+      return ex.sets.filter(s => s.completed); 
     }
   }
   return null;
@@ -94,21 +80,17 @@ export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]
  * Hämtar de senaste passen där en specifik övning utfördes.
  */
 export const getExerciseHistory = (exerciseId: string, allHistory: WorkoutSession[], limit = 5) => {
-  // 1. Filtrera ut pass som innehåller övningen
   const relevantSessions = allHistory.filter(session => 
     session.exercises.some(e => e.exerciseId === exerciseId)
   );
 
-  // 2. Sortera nyast först
   relevantSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // 3. Returnera de X senaste med detaljer om just den övningen
   return relevantSessions.slice(0, limit).map(session => {
     const exData = session.exercises.find(e => e.exerciseId === exerciseId);
     return {
       date: session.date,
       sets: exData?.sets || [],
-      // Vi kan behöva sessionens namn eller rpe också om vi vill visa det
       sessionName: session.name
     };
   });
@@ -118,16 +100,17 @@ export const getExerciseHistory = (exerciseId: string, allHistory: WorkoutSessio
 /**
  * 2. PROGRESSION LOGIC
  * Skapar nya set baserat på historik, med valfri överbelastning.
+ * Viktigt: Behåller SetType (Warmup, Drop etc.) från föregående pass.
  */
 export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean): WorkoutSet[] => {
   return lastSets.map(s => {
     let newWeight = s.weight;
     let newReps = s.reps;
 
-    if (applyOverload) {
-      // Enkel progressiv överbelastning: Öka vikten med 2.5kg om man gjorde >= 8 reps
-      // Eller öka reps om vikten är låg.
-      if (newReps >= 8) {
+    // Vi applicerar bara progression på "normala" set eller failure-set. 
+    // Uppvärmning lämnas oftast oförändrad om vikten inte är extremt låg.
+    if (applyOverload && s.type !== 'warmup') {
+      if (newReps >= 10) {
          newWeight += 2.5; 
       } else {
          newReps += 1;
@@ -137,8 +120,9 @@ export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean):
     return {
       reps: newReps,
       weight: newWeight,
+      type: s.type || 'normal', // Ärv taggar (Warmup, Drop, Failure)
       completed: false,
-      rpe: undefined // Nollställ RPE för nya passet
+      rpe: undefined 
     };
   });
 };
@@ -156,30 +140,23 @@ export const generateWorkoutSession = (
   const plannedExercises: PlannedExercise[] = [];
   const selectedIds = new Set<string>();
 
-  // Filtrera övningar som går att göra i zonen OCH träffar rätt muskler
   const availableExercises = allExercises.filter(ex => 
-    // Måste ha utrustning som finns i zonen
     ex.equipment.every(eq => zone.inventory.includes(eq)) &&
-    // Måste träffa någon av målmusklerna (Primär eller Sekundär)
     ex.muscleGroups.some(m => targetMuscles.includes(m))
   );
 
-  // Strategi: 1 Tung Basövning, 2-3 Komplement, 1-2 Isolering
-  // Sortera efter "Difficulty" (Tungst först)
   availableExercises.sort((a, b) => b.difficultyMultiplier - a.difficultyMultiplier);
 
-  // Välj övningar
   availableExercises.forEach(ex => {
-    if (plannedExercises.length >= 6) return; // Max 6 övningar
+    if (plannedExercises.length >= 6) return; 
     if (selectedIds.has(ex.id)) return;
 
-    // Undvik att bomba samma muskel för många gånger direkt, sprid ut det
     plannedExercises.push({
       exerciseId: ex.id,
       sets: [
-        { reps: 10, weight: 0, completed: false },
-        { reps: 10, weight: 0, completed: false },
-        { reps: 10, weight: 0, completed: false }
+        { reps: 10, weight: 0, completed: false, type: 'normal' },
+        { reps: 10, weight: 0, completed: false, type: 'normal' },
+        { reps: 10, weight: 0, completed: false, type: 'normal' }
       ]
     });
     selectedIds.add(ex.id);

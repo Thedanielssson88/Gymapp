@@ -1,7 +1,10 @@
-
 import React, { useState, useMemo } from 'react';
-import { WorkoutSession, Exercise } from '../types';
-import { Share2, History, Settings, Plus, ChevronDown, MoreHorizontal, X, Clock, Activity, Zap, ShieldCheck, Heart, Info, ChevronRight, Dumbbell } from 'lucide-react';
+import { WorkoutSession, Exercise, SetType, MovementPattern } from '../types';
+import { 
+  Share2, History, Settings, Plus, ChevronDown, X, Clock, 
+  Activity, Zap, Heart, ChevronRight, Dumbbell, 
+  Thermometer, AlertCircle 
+} from 'lucide-react';
 
 interface WorkoutLogProps {
   history: WorkoutSession[];
@@ -37,6 +40,10 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises })
 
   const calculateTotalVolume = (session: WorkoutSession) => {
     return session.exercises.reduce((total, pe) => {
+      const exData = allExercises.find(e => e.id === pe.exerciseId);
+      if (exData?.trackingType === 'time_only' || exData?.pattern === MovementPattern.MOBILITY) {
+        return total;
+      }
       const exVol = pe.sets.reduce((sum, s) => s.completed ? sum + (s.weight * s.reps) : sum, 0);
       return total + exVol;
     }, 0);
@@ -58,6 +65,35 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises })
     if (rpe <= 7) return 'text-accent-blue';
     if (rpe <= 9) return 'text-orange-400';
     return 'text-accent-pink';
+  };
+
+  // --- HJÄLPFUNKTION FÖR SET-TYP BADGES ---
+  const renderSetTypeIndicator = (type?: SetType) => {
+    switch (type) {
+      case 'warmup':
+        return (
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/20 ml-2">
+            <Thermometer size={8} className="text-yellow-500" />
+            <span className="text-[7px] font-black text-yellow-500 uppercase tracking-tighter">VÄRM</span>
+          </div>
+        );
+      case 'drop':
+        return (
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 ml-2">
+            <Zap size={8} className="text-purple-500" />
+            <span className="text-[7px] font-black text-purple-500 uppercase tracking-tighter">DROP</span>
+          </div>
+        );
+      case 'failure':
+        return (
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 ml-2">
+            <AlertCircle size={8} className="text-red-500" />
+            <span className="text-[7px] font-black text-red-500 uppercase tracking-tighter">FAIL</span>
+          </div>
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -232,6 +268,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises })
                   const ex = allExercises.find(e => e.id === pe.exerciseId);
                   const completedSets = pe.sets.filter(s => s.completed);
                   const exerciseVolume = completedSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+                  const isTimeOnly = ex?.trackingType === 'time_only';
                   
                   return (
                     <div key={idx} className="space-y-3">
@@ -245,7 +282,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises })
                              <span className="text-[8px] font-black text-text-dim uppercase tracking-widest">{ex?.pattern}</span>
                            </div>
                         </div>
-                        <span className="text-[9px] font-black text-accent-pink uppercase">{exerciseVolume.toLocaleString()} KG</span>
+                        {!isTimeOnly && <span className="text-[9px] font-black text-accent-pink uppercase">{exerciseVolume.toLocaleString()} KG</span>}
                       </div>
 
                       <div className="grid grid-cols-1 gap-1.5 pl-11">
@@ -253,7 +290,10 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises })
                           <div key={sIdx} className={`flex items-center justify-between text-[11px] py-1 px-3 rounded-lg border ${set.completed ? 'bg-white/5 border-white/5' : 'bg-transparent border-white/5 opacity-30'}`}>
                              <div className="flex items-center gap-4">
                                <span className="font-black text-text-dim/60 w-3">{sIdx + 1}</span>
-                               <span className="font-bold text-white/80">{set.weight} kg <span className="text-[8px] text-white/20 mx-1">x</span> {set.reps} reps</span>
+                               <span className="font-bold text-white/80">
+                                 {isTimeOnly ? `${set.reps} sek` : `${set.weight} kg x ${set.reps} reps`}
+                               </span>
+                               {renderSetTypeIndicator(set.type)}
                              </div>
                              {set.completed ? (
                                <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/20" />

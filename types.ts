@@ -1,4 +1,3 @@
-
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -8,8 +7,13 @@ export enum MovementPattern {
   VERTICAL_PULL = 'Vertikal Drag',
   LUNGE = 'Utfall',
   CORE = 'Bål',
-  ISOLATION = 'Isolering'
+  ISOLATION = 'Isolering',
+  MOBILITY = 'Rörlighet / Stretch',
+  REHAB = 'Rehab / Prehab',
+  CARDIO = 'Kondition'
 }
+
+export type TrackingType = 'reps_weight' | 'reps_only' | 'time_only';
 
 export type MuscleGroup = 
   | 'Mage' 
@@ -27,7 +31,8 @@ export type MuscleGroup =
   | 'Abduktorer' 
   | 'Adduktorer' 
   | 'Underarmar' 
-  | 'Nacke';
+  | 'Nacke'
+  | 'Rotatorcuff';
 
 export enum Equipment {
   // --- FRIA VIKTER & STÄNGER ---
@@ -64,6 +69,11 @@ export enum Equipment {
   MEDICINE_BALL = 'Medicinboll',
   BOX = 'Box / Låda',
   BENCH = 'Träningsbänk',
+  
+  // --- HYROX & SPECIAL ---
+  SKI_ERG = 'SkiErg',
+  ROWER = 'Roddmaskin',
+  SLED = 'Släde',
 
   // --- LEGACY / ÖVRIGT ---
   MACHINES = 'Maskiner (Övriga)'
@@ -93,10 +103,13 @@ export interface Exercise {
   equipment: Equipment[];
   difficultyMultiplier: number;
   bodyweightCoefficient: number;
+  trackingType?: TrackingType;
   imageUrl?: string;
+  imageId?: string;
   description?: string;
   instructions?: string[];
   alternativeExIds?: string[];
+  userModified?: boolean;
 }
 
 export interface BodyMeasurements {
@@ -131,11 +144,14 @@ export interface Zone {
   icon: string;
 }
 
+export type SetType = 'normal' | 'warmup' | 'drop' | 'failure';
+
 export interface WorkoutSet {
   reps: number;
   weight: number;
   completed: boolean;
   rpe?: number;
+  type?: SetType;
 }
 
 export interface PlannedExercise {

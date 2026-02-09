@@ -74,15 +74,20 @@ export default function App() {
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
   const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
-    await storage.saveToHistory({ ...session, isCompleted: true, date: new Date().toISOString(), duration });
-    await storage.setActiveSession(null);
-    await refreshData();
-    setActiveTab('log');
+    try {
+      await storage.saveToHistory({ ...session, isCompleted: true, date: new Date().toISOString(), duration });
+      await storage.setActiveSession(null);
+      await refreshData();
+      setActiveTab('log');
+    } catch (error) {
+      console.error("Kunde inte spara passet:", error);
+      alert("Ett fel uppstod när passet skulle sparas. Försök igen.");
+    }
   };
 
   const handleCancelWorkout = async () => {
     await storage.setActiveSession(null);
-    setCurrentSession(null); // Rensa state direkt för omedelbar UI-uppdatering
+    setCurrentSession(null);
     setActiveTab('workout');
   };
 
@@ -112,6 +117,9 @@ export default function App() {
     );
   }
 
+  // Dölj navigering om vi är inne i ett aktivt pass
+  const isWorkoutActive = activeTab === 'workout' && currentSession;
+
   const renderContent = () => {
     switch (activeTab) {
       case 'workout':
@@ -133,7 +141,7 @@ export default function App() {
                   onZoneChange={async (z) => {
                     if (currentSession) {
                       const newSession = {...currentSession, zoneId: z.id};
-                      setCurrentSession(newSession); // Optimistic UI update
+                      setCurrentSession(newSession);
                       await storage.setActiveSession(newSession);
                     }
                   }} 
@@ -188,7 +196,19 @@ export default function App() {
           )}
         </div>
       )}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#0f0d15]/80 backdrop-blur-3xl border-t border-white/5 z-[100] max-w-md mx-auto px-4 pb-12 pt-4"><div className="flex justify-between items-center"><NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" /><NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" /><NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" /><NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" /><NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" /><NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" /></div></nav>
+
+      {!isWorkoutActive && (
+        <nav className="fixed bottom-0 left-0 right-0 bg-[#0f0d15]/80 backdrop-blur-3xl border-t border-white/5 z-[100] max-w-md mx-auto px-4 pb-12 pt-4">
+          <div className="flex justify-between items-center">
+            <NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" />
+            <NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" />
+            <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
+            <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
+            <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
+            <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

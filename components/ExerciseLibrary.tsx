@@ -1,10 +1,11 @@
-
-import React, { useState, useMemo } from 'react';
-import { Exercise, MovementPattern, Equipment, MuscleGroup } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Exercise, MovementPattern, Equipment, MuscleGroup, TrackingType } from '../types';
 import { storage } from '../services/storage';
+import { EXERCISE_DATABASE } from '../constants';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { ExerciseImporter } from './ExerciseImporter';
-import { Plus, Search, Edit3, Trash2, X, Check, Dumbbell, Activity, ShieldCheck, Filter, Link, Image, AlignLeft, Globe, Info } from 'lucide-react';
+import { ImageUpload } from './ImageUpload';
+import { Plus, Search, Edit3, Trash2, X, Dumbbell, Activity, RotateCcw, Image as ImageIcon, Link, Save, Clock, Weight } from 'lucide-react';
 
 interface ExerciseLibraryProps {
   allExercises: Exercise[];
@@ -12,421 +13,396 @@ interface ExerciseLibraryProps {
 }
 
 type LibraryTab = 'all' | 'muscles' | 'equipment';
-type ModalTab = 'info' | 'anatomy' | 'media';
 
 export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, onUpdate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<LibraryTab>('all');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [editingEx, setEditingEx] = useState<Partial<Exercise> | null>(null);
-  const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
-  const [modalTab, setModalTab] = useState<ModalTab>('info');
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [showImporter, setShowImporter] = useState(false);
 
   const filteredExercises = useMemo(() => {
     return allExercises.filter(ex => {
-      const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          ex.pattern.toLowerCase().includes(searchQuery.toLowerCase());
-      
+      const matchesSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase());
       let matchesCategory = true;
       if (activeTab === 'muscles' && selectedCategory) {
-        matchesCategory = ex.muscleGroups.includes(selectedCategory as MuscleGroup);
+        matchesCategory = (ex.primaryMuscles || ex.muscleGroups).includes(selectedCategory as MuscleGroup);
       } else if (activeTab === 'equipment' && selectedCategory) {
         matchesCategory = ex.equipment.includes(selectedCategory as Equipment);
       }
-
       return matchesSearch && matchesCategory;
-    });
-  }, [searchQuery, allExercises, activeTab, selectedCategory]);
+    }).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allExercises, searchQuery, activeTab, selectedCategory]);
 
-  const handleSave = async () => {
-    if (!editingEx?.name || !editingEx?.pattern) return;
-    
-    const allMuscles = Array.from(new Set([
-      ...(editingEx.primaryMuscles || []),
-      ...(editingEx.secondaryMuscles || [])
-    ]));
-
-    const newEx: Exercise = {
-      id: editingEx.id || `custom-${Date.now()}`,
-      name: editingEx.name,
-      pattern: editingEx.pattern as MovementPattern,
-      primaryMuscles: editingEx.primaryMuscles || [],
-      secondaryMuscles: editingEx.secondaryMuscles || [],
-      muscleGroups: allMuscles,
-      equipment: editingEx.equipment || [],
-      difficultyMultiplier: editingEx.difficultyMultiplier || 1.0,
-      bodyweightCoefficient: editingEx.bodyweightCoefficient || 0,
-      imageUrl: editingEx.imageUrl || '',
-      description: editingEx.description || '',
-      alternativeExIds: editingEx.alternativeExIds || []
-    };
-
-    await storage.saveExercise(newEx);
+  const handleSave = async (exercise: Exercise) => {
+    await storage.saveExercise(exercise);
+    setEditingExercise(null);
     onUpdate();
-    setEditingEx(null);
-    setIsAdding(false);
-    setModalTab('info');
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Är du säker på att du vill ta bort denna övning?")) {
+    if (confirm("Vill du radera denna övning permanent?")) {
       await storage.deleteExercise(id);
       onUpdate();
     }
   };
 
-  const togglePrimaryMuscle = (m: MuscleGroup) => {
-    if (!editingEx) return;
-    const current = editingEx.primaryMuscles || [];
-    const next = current.includes(m) ? current.filter(x => x !== m) : [...current, m];
-    setEditingEx({ ...editingEx, primaryMuscles: next });
-  };
-
-  const toggleSecondaryMuscle = (m: MuscleGroup) => {
-    if (!editingEx) return;
-    const current = editingEx.secondaryMuscles || [];
-    const next = current.includes(m) ? current.filter(x => x !== m) : [...current, m];
-    setEditingEx({ ...editingEx, secondaryMuscles: next });
-  };
-
-  const toggleEquipment = (e: Equipment) => {
-    if (!editingEx) return;
-    const current = editingEx.equipment || [];
-    const next = current.includes(e) ? current.filter(x => x !== e) : [...current, e];
-    setEditingEx({ ...editingEx, equipment: next });
-  };
-
-  const handleTabChange = (tab: LibraryTab) => {
-    setActiveTab(tab);
-    setSelectedCategory(null);
+  const createNew = () => {
+    const newEx: Exercise = {
+      id: `custom-${Date.now()}`,
+      name: '',
+      pattern: MovementPattern.SQUAT,
+      muscleGroups: [],
+      primaryMuscles: [],
+      secondaryMuscles: [],
+      equipment: [],
+      difficultyMultiplier: 1.0,
+      bodyweightCoefficient: 0,
+      trackingType: 'reps_weight',
+      userModified: true
+    };
+    setEditingExercise(newEx);
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-500 pb-32">
-      <header className="flex justify-between items-center px-4 pt-6">
+    <div className="pb-32 animate-in fade-in space-y-6 px-4 pt-8">
+      <header className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-3xl font-black tracking-tight uppercase italic">Bibliotek</h2>
-          <p className="text-text-dim text-[10px] font-black uppercase tracking-[0.2em]">
-            {filteredExercises.length} {filteredExercises.length === 1 ? 'Övning' : 'Övningar'} hittade
-          </p>
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter">Bibliotek</h2>
+          <p className="text-text-dim text-xs font-bold uppercase tracking-widest">{allExercises.length} övningar totalt</p>
         </div>
         <div className="flex gap-2">
           <button 
             onClick={() => setShowImporter(true)}
-            className="bg-white/5 text-white p-3 rounded-2xl border border-white/10 active:scale-95 transition-all flex items-center justify-center"
+            className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl active:scale-95 transition-all"
           >
-            <Globe size={24} />
+            <Plus size={24} />
           </button>
           <button 
-            onClick={() => {
-              setIsAdding(true);
-              setEditingEx({ 
-                primaryMuscles: [], 
-                secondaryMuscles: [], 
-                muscleGroups: [],
-                equipment: [], 
-                difficultyMultiplier: 1.0, 
-                bodyweightCoefficient: 0,
-                description: '',
-                imageUrl: '',
-                alternativeExIds: []
-              });
-              setModalTab('info');
-            }}
-            className="bg-accent-pink text-white p-3 rounded-2xl shadow-[0_0_20px_rgba(255,45,85,0.3)] active:scale-95 transition-all"
+            onClick={createNew}
+            className="p-4 bg-accent-pink text-white rounded-2xl shadow-lg active:scale-95 transition-all"
           >
             <Plus size={24} strokeWidth={3} />
           </button>
         </div>
       </header>
 
-      <div className="px-4">
-        <nav className="flex items-center justify-between bg-white/5 p-1.5 rounded-[24px] border border-white/5">
-          <button onClick={() => handleTabChange('all')} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'all' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim hover:text-white/60'}`}>Alla</button>
-          <button onClick={() => handleTabChange('muscles')} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'muscles' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim hover:text-white/60'}`}>Muskler</button>
-          <button onClick={() => handleTabChange('equipment')} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'equipment' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim hover:text-white/60'}`}>Utrustning</button>
-        </nav>
-      </div>
-
-      {(activeTab === 'muscles' || activeTab === 'equipment') && (
-        <div className="px-4 flex gap-2 overflow-x-auto scrollbar-hide py-1">
-          {(activeTab === 'muscles' ? ALL_MUSCLE_GROUPS : Object.values(Equipment)).map(cat => (
-            <button key={cat} onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)} className={`flex-none px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${selectedCategory === cat ? 'bg-accent-pink border-accent-pink text-white shadow-[0_0_15px_rgba(255,45,85,0.3)]' : 'bg-white/5 border-white/10 text-text-dim hover:bg-white/10'}`}>
-              {cat}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="px-4">
+      <div className="space-y-4">
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim group-focus-within:text-accent-pink transition-colors" size={18} />
-          <input type="text" placeholder="Sök övning..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold transition-all text-sm placeholder:text-text-dim/40" />
+          <input 
+            type="text" 
+            placeholder="Sök övning..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold transition-all"
+          />
         </div>
-      </div>
 
-      <div className="space-y-3 px-4">
-        {filteredExercises.length > 0 ? (
-          filteredExercises.map(ex => {
-            const isOfficial = !ex.id.startsWith('custom-');
-            return (
-              <div key={ex.id} className="bg-[#1a1721] border border-white/5 p-5 rounded-[32px] flex justify-between items-center group hover:border-white/20 transition-all shadow-xl">
-                <div className="flex gap-4">
-                  <div className="w-14 h-14 bg-[#0f0d15] rounded-2xl flex items-center justify-center border border-white/10 overflow-hidden">
-                     <img src={ex.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${ex.name}`} className="w-full h-full object-cover p-1 opacity-40 group-hover:opacity-80 transition-opacity" alt={ex.name} />
-                  </div>
-                  <div className="flex flex-col justify-center">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-black text-[15px] uppercase italic tracking-tight">{ex.name}</h4>
-                      {isOfficial && <ShieldCheck size={12} className="text-accent-blue opacity-60" />}
-                    </div>
-                    <span className="text-[9px] font-black text-text-dim uppercase tracking-[0.15em] mt-0.5">{ex.pattern}</span>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {(ex.primaryMuscles?.length ? ex.primaryMuscles : ex.muscleGroups).slice(0, 2).map(m => (
-                        <span key={m} className="text-[7px] font-black bg-white/5 px-2 py-0.5 rounded-full border border-white/10 uppercase tracking-tighter text-text-dim">{m}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => setInfoExercise(ex)} className="p-2.5 text-text-dim hover:text-accent-blue bg-white/5 rounded-xl transition-all">
-                    <Info size={16} />
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setEditingEx({
-                        ...ex,
-                        primaryMuscles: ex.primaryMuscles || [],
-                        secondaryMuscles: ex.secondaryMuscles || [],
-                        alternativeExIds: ex.alternativeExIds || [],
-                        description: ex.description || '',
-                        imageUrl: ex.imageUrl || ''
-                      });
-                      setModalTab('info');
-                    }}
-                    className="p-2.5 text-text-dim hover:text-white bg-white/5 rounded-xl transition-all"
-                  >
-                    <Edit3 size={16} />
-                  </button>
-                  <button onClick={() => handleDelete(ex.id)} className="p-2.5 text-text-dim hover:text-red-500 bg-white/5 rounded-xl transition-all">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div className="py-20 text-center space-y-4">
-            <div className="inline-block p-6 bg-white/5 rounded-full text-text-dim/20"><Search size={48} /></div>
-            <p className="font-black uppercase italic text-text-dim tracking-widest">Inga övningar matchar din sökning</p>
+        <nav className="flex items-center justify-between bg-white/5 p-1.5 rounded-[24px] border border-white/5">
+          <button onClick={() => { setActiveTab('all'); setSelectedCategory(null); }} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'all' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}>Alla</button>
+          <button onClick={() => { setActiveTab('muscles'); setSelectedCategory(null); }} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'muscles' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}>Muskler</button>
+          <button onClick={() => { setActiveTab('equipment'); setSelectedCategory(null); }} className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'equipment' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}>Utrustning</button>
+        </nav>
+
+        {(activeTab === 'muscles' || activeTab === 'equipment') && (
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
+            {(activeTab === 'muscles' ? ALL_MUSCLE_GROUPS : Object.values(Equipment)).map(cat => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                className={`flex-none px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${selectedCategory === cat ? 'bg-accent-pink border-accent-pink text-white' : 'bg-white/5 border-white/5 text-text-dim'}`}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
         )}
       </div>
 
+      <div className="grid grid-cols-1 gap-4">
+        {filteredExercises.map(ex => (
+          <ExerciseListItem key={ex.id} ex={ex} onEdit={() => setEditingExercise(ex)} onDelete={() => handleDelete(ex.id)} />
+        ))}
+      </div>
+
+      {editingExercise && (
+        <ExerciseEditor 
+          exercise={editingExercise} 
+          onClose={() => setEditingExercise(null)} 
+          onSave={handleSave} 
+        />
+      )}
+
       {showImporter && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[130]">
+        <div className="fixed inset-0 z-[200] bg-[#0f0d15] animate-in slide-in-from-bottom-10">
           <ExerciseImporter 
             onClose={() => setShowImporter(false)}
-            onImport={(importedData) => {
-              setShowImporter(false);
-              setIsAdding(true);
-              setEditingEx({
-                primaryMuscles: [],
-                secondaryMuscles: [],
-                muscleGroups: [],
-                equipment: [],
+            onImport={(data) => {
+              const newEx: Exercise = {
+                id: `custom-${Date.now()}`,
+                name: data.name || 'Importerad övning',
+                pattern: MovementPattern.SQUAT,
+                muscleGroups: data.muscleGroups || [],
+                primaryMuscles: data.primaryMuscles || [],
+                equipment: data.equipment || [],
                 difficultyMultiplier: 1.0,
-                bodyweightCoefficient: 0,
-                alternativeExIds: [],
-                imageUrl: '',
-                ...importedData
-              });
-              setModalTab('info');
+                bodyweightCoefficient: data.bodyweightCoefficient || 0,
+                imageUrl: data.imageUrl,
+                description: data.description,
+                trackingType: data.trackingType || 'reps_weight',
+                userModified: true
+              };
+              setEditingExercise(newEx);
+              setShowImporter(false);
             }}
           />
         </div>
       )}
+    </div>
+  );
+};
 
-      {(editingEx || isAdding) && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[120] p-6 overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 duration-500">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <span className="text-[10px] font-black text-accent-pink uppercase tracking-[0.3em] block mb-1">MorphFit Creator</span>
-              <h3 className="text-3xl font-black italic uppercase tracking-tighter">{editingEx?.id && !isAdding ? 'Redigera' : 'Ny övning'}</h3>
-            </div>
-            <button onClick={() => { setEditingEx(null); setIsAdding(false); }} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all border border-white/10"><X size={28}/></button>
+const ExerciseListItem: React.FC<{ ex: Exercise, onEdit: () => void, onDelete: () => void }> = ({ ex, onEdit, onDelete }) => {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (ex.imageId) {
+      storage.getImage(ex.imageId).then(url => {
+        if (active && url) setImgSrc(url);
+      });
+    } else if (ex.imageUrl) {
+      setImgSrc(ex.imageUrl);
+    } else {
+      setImgSrc(null);
+    }
+    return () => { active = false; };
+  }, [ex.imageId, ex.imageUrl]);
+
+  return (
+    <div className="bg-[#1a1721] p-5 rounded-[32px] border border-white/5 flex items-center justify-between group">
+      <div className="flex items-center gap-4">
+        <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center p-2 border border-white/5 overflow-hidden">
+          {imgSrc ? (
+            <img src={imgSrc} className="w-full h-full object-cover opacity-40 group-hover:opacity-80 transition-opacity" alt={ex.name} />
+          ) : (
+            <Dumbbell className="text-white/20" size={24} />
+          )}
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+             <h3 className="text-base font-black italic uppercase tracking-tight">{ex.name}</h3>
+             {ex.userModified && <Activity size={12} className="text-accent-pink" />}
           </div>
-
-          <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-2xl border border-white/5">
-            <button onClick={() => setModalTab('info')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${modalTab === 'info' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><AlignLeft size={14} /> Grundinfo</button>
-            <button onClick={() => setModalTab('anatomy')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${modalTab === 'anatomy' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><Activity size={14} /> Anatomi</button>
-            <button onClick={() => setModalTab('media')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${modalTab === 'media' ? 'bg-white/10 text-white shadow-lg' : 'text-text-dim'}`}><Image size={14} /> Media & Alt</button>
-          </div>
-
-          <div className="space-y-8 pb-32">
-            {modalTab === 'info' && editingEx && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Övningens Namn</label>
-                  <input type="text" value={editingEx.name || ''} onChange={(e) => setEditingEx({ ...editingEx, name: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-6 outline-none focus:border-accent-pink font-black text-xl placeholder:text-text-dim/20" placeholder="Ex: Diamond Pushups" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Rörelsemönster</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.values(MovementPattern).map(p => (
-                      <button key={p} onClick={() => setEditingEx({ ...editingEx, pattern: p })} className={`p-4 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${editingEx.pattern === p ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/5 text-text-dim'}`}>{p}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Beskrivning</label>
-                  <textarea value={editingEx.description || ''} onChange={(e) => setEditingEx({ ...editingEx, description: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 text-sm font-medium outline-none focus:border-accent-pink min-h-[150px] placeholder:text-text-dim/20" placeholder="Beskriv hur övningen utförs..." />
-                </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Nödvändig Utrustning</label>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.values(Equipment).map(e => (
-                      <button key={e} onClick={() => toggleEquipment(e)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx.equipment?.includes(e) ? 'bg-accent-blue border-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{e}</button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {modalTab === 'anatomy' && editingEx && (
-              <>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-accent-pink uppercase tracking-widest ml-1">Primära Muskler (Drivande)</label>
-                  <div className="flex flex-wrap gap-2 bg-accent-pink/5 p-4 rounded-[24px] border border-accent-pink/10">
-                    {ALL_MUSCLE_GROUPS.map(m => (
-                      <button key={m} onClick={() => togglePrimaryMuscle(m)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx.primaryMuscles?.includes(m) ? 'bg-accent-pink border-accent-pink text-white shadow-[0_0_15px_rgba(255,45,85,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-accent-blue uppercase tracking-widest ml-1">Sekundära Muskler (Hjälpande)</label>
-                  <div className="flex flex-wrap gap-2 bg-accent-blue/5 p-4 rounded-[24px] border border-accent-blue/10">
-                    {ALL_MUSCLE_GROUPS.map(m => (
-                      <button key={m} onClick={() => toggleSecondaryMuscle(m)} className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${editingEx.secondaryMuscles?.includes(m) ? 'bg-accent-blue border-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="bg-white/5 p-6 rounded-[32px] border border-white/5 space-y-6">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Intensitet Multiplier</label><span className="text-accent-pink font-black text-lg italic">{editingEx.difficultyMultiplier?.toFixed(1)}x</span></div>
-                    <input type="range" min="0.1" max="2.0" step="0.1" value={editingEx.difficultyMultiplier || 1.0} onChange={(e) => setEditingEx({ ...editingEx, difficultyMultiplier: parseFloat(e.target.value) })} className="w-full accent-accent-pink h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-text-dim uppercase tracking-widest">Bodyweight Coeff.</label><span className="text-accent-blue font-black text-lg italic">{editingEx.bodyweightCoefficient?.toFixed(2)}x</span></div>
-                    <input type="range" min="0" max="1" step="0.05" value={editingEx.bodyweightCoefficient || 0} onChange={(e) => setEditingEx({ ...editingEx, bodyweightCoefficient: parseFloat(e.target.value) })} className="w-full accent-accent-blue h-1 bg-white/10 rounded-full appearance-none cursor-pointer" />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {modalTab === 'media' && editingEx && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Bild / GIF URL</label>
-                  <div className="flex gap-4 items-center">
-                    <div className="flex-1 relative"><Link size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" /><input type="text" value={editingEx.imageUrl || ''} onChange={(e) => setEditingEx({ ...editingEx, imageUrl: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 pl-12 font-bold text-xs outline-none focus:border-accent-pink" placeholder="https://..." /></div>
-                    {editingEx.imageUrl && <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/20 bg-black/50"><img src={editingEx.imageUrl} className="w-full h-full object-cover" alt="Preview"/></div>}
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">Alternativa Övningar</label>
-                  <div className="space-y-2">
-                    {editingEx.alternativeExIds?.map(altId => {
-                      const altEx = allExercises.find(e => e.id === altId);
-                      return altEx ? (
-                        <div key={altId} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/5 group"><span className="text-xs font-bold uppercase tracking-tight">{altEx.name}</span><button onClick={() => { const next = editingEx.alternativeExIds?.filter(id => id !== altId); setEditingEx({ ...editingEx, alternativeExIds: next }); }} className="text-red-500/40 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div>
-                      ) : null;
-                    })}
-                  </div>
-                  <select className="w-full bg-white/5 border border-white/10 rounded-[24px] p-4 text-xs font-bold outline-none appearance-none" onChange={(e) => { if(!e.target.value) return; const current = editingEx.alternativeExIds || []; if(!current.includes(e.target.value)) { setEditingEx({ ...editingEx, alternativeExIds: [...current, e.target.value] }); } e.target.value = ''; }}>
-                    <option value="">+ Lägg till alternativ...</option>
-                    {allExercises.filter(e => e.id !== editingEx.id && e.pattern === editingEx.pattern).map(e => (<option key={e.id} value={e.id}>{e.name}</option>))}
-                  </select>
-                </div>
-              </>
-            )}
-            <button onClick={handleSave} disabled={!editingEx?.name || !editingEx?.pattern} className="w-full accent-gradient py-6 rounded-[24px] font-black italic tracking-[0.2em] uppercase shadow-[0_10px_40px_rgba(255,45,85,0.4)] disabled:opacity-20 flex items-center justify-center gap-3 text-lg"><Check size={24} strokeWidth={3} /> Spara i Bibliotek</button>
+          <div className="flex items-center gap-2">
+             <p className="text-[10px] text-text-dim uppercase tracking-widest font-black">{ex.pattern}</p>
+             {ex.trackingType === 'time_only' && <Clock size={10} className="text-accent-blue" />}
           </div>
         </div>
-      )}
+      </div>
+      <div className="flex gap-1">
+        <button onClick={onEdit} className="p-3 bg-white/5 rounded-xl text-text-dim hover:text-white transition-colors"><Edit3 size={18} /></button>
+        {ex.id.startsWith('custom-') && (
+          <button onClick={onDelete} className="p-3 bg-white/5 rounded-xl text-text-dim hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
+        )}
+      </div>
+    </div>
+  );
+};
 
-      {infoExercise && (
-        <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[200] p-6 overflow-y-auto animate-in fade-in">
-          <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
-            <div className="w-full h-72 bg-black/50 relative">
-              {infoExercise.imageUrl ? (
-                  <img src={infoExercise.imageUrl} className="w-full h-full object-cover" alt={infoExercise.name}/>
-              ) : (
-                  <div className="w-full h-full flex items-center justify-center flex-col gap-4 opacity-30"><Dumbbell size={64} /><span className="font-black uppercase tracking-widest text-xs">Ingen bild tillgänglig</span></div>
-              )}
-              <button onClick={() => setInfoExercise(null)} className="absolute top-4 right-4 bg-black/50 p-3 rounded-full text-white backdrop-blur-md hover:scale-110 active:scale-95 transition-all"><X size={24} /></button>
-            </div>
-            <div className="p-8 space-y-8">
-              <div>
-                  <h2 className="text-3xl font-black italic uppercase leading-none mb-2 tracking-tighter">{infoExercise.name}</h2>
-                  <div className="flex gap-2"><span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">{infoExercise.pattern}</span></div>
-              </div>
-              <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Instruktioner</h4>
-                  {infoExercise.description ? (<p className="text-sm leading-relaxed text-white/80 font-medium whitespace-pre-wrap">{infoExercise.description}</p>) : (<p className="text-xs italic text-white/20 font-bold uppercase tracking-widest">Ingen beskrivning tillgänglig för denna övning.</p>)}
-              </div>
-              <div className="space-y-6">
-                  <div>
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-pink mb-3">Primära Muskler</h4>
-                      <div className="flex flex-wrap gap-2">
-                          {(infoExercise.primaryMuscles?.length ? infoExercise.primaryMuscles : infoExercise.muscleGroups).map(m => (
-                              <span key={m} className="px-3 py-1.5 border border-accent-pink/30 bg-accent-pink/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
-                          ))}
-                      </div>
-                  </div>
-                  {infoExercise.secondaryMuscles && infoExercise.secondaryMuscles.length > 0 && (
-                    <div>
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-accent-blue mb-3">Sekundära Muskler</h4>
-                        <div className="flex flex-wrap gap-2">
-                            {infoExercise.secondaryMuscles.map(m => (
-                                <span key={m} className="px-3 py-1.5 border border-accent-blue/30 bg-accent-blue/5 rounded-xl text-[10px] font-black uppercase tracking-tight">{m}</span>
-                            ))}
-                        </div>
-                    </div>
-                  )}
-                  {infoExercise.equipment && infoExercise.equipment.length > 0 && (
-                    <div>
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-3">Utrustning</h4>
-                        <div className="flex flex-wrap gap-2">
-                            {infoExercise.equipment.map(eq => (
-                                <span key={eq} className="px-3 py-1.5 border border-white/10 bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-tight text-white/80">{eq}</span>
-                            ))}
-                        </div>
-                    </div>
-                  )}
-              </div>
-              {infoExercise.alternativeExIds && infoExercise.alternativeExIds.length > 0 && (
-                  <div className="pt-6 border-t border-white/5">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim mb-4">Bra Alternativ</h4>
-                      <div className="space-y-2">
-                          {infoExercise.alternativeExIds.map(altId => {
-                              const altEx = allExercises.find(e => e.id === altId);
-                              return altEx ? (
-                                  <div key={altId} className="flex items-center gap-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                                      <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center overflow-hidden"><img src={altEx.imageUrl || `https://api.dicebear.com/7.x/identicon/svg?seed=${altEx.name}`} className="w-full h-full object-cover opacity-50" alt={altEx.name}/></div>
-                                      <span className="text-xs font-black uppercase italic tracking-tight">{altEx.name}</span>
-                                  </div>
-                              ) : null;
-                          })}
-                      </div>
-                  </div>
-              )}
+interface ExerciseEditorProps {
+  exercise: Exercise;
+  onClose: () => void;
+  onSave: (ex: Exercise) => void;
+}
+
+const ExerciseEditor: React.FC<ExerciseEditorProps> = ({ exercise, onClose, onSave }) => {
+  const [formData, setFormData] = useState<Exercise>({ ...exercise });
+  const isOfficial = EXERCISE_DATABASE.some(e => e.id === exercise.id);
+
+  const handleFieldChange = (updates: Partial<Exercise>) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      ...updates, 
+      userModified: isOfficial ? true : prev.userModified 
+    }));
+  };
+
+  const toggleMuscle = (m: MuscleGroup) => {
+    const list = formData.muscleGroups.includes(m) 
+      ? formData.muscleGroups.filter(i => i !== m) 
+      : [...formData.muscleGroups, m];
+    handleFieldChange({ muscleGroups: list, primaryMuscles: list });
+  };
+
+  const toggleEq = (eq: Equipment) => {
+    const list = formData.equipment.includes(eq) 
+      ? formData.equipment.filter(i => i !== eq) 
+      : [...formData.equipment, eq];
+    handleFieldChange({ equipment: list });
+  };
+
+  const resetToOriginal = () => {
+    const original = EXERCISE_DATABASE.find(e => e.id === exercise.id);
+    if (original && confirm("Vill du återställa övningen till originalutförande? Dina anpassningar tas bort.")) {
+      setFormData({ ...original, userModified: false });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-[#0f0d15] z-[250] flex flex-col animate-in slide-in-from-bottom-10">
+      <header className="p-6 border-b border-white/10 flex justify-between items-center bg-[#0f0d15]/80 backdrop-blur-xl">
+        <div>
+           <h3 className="text-2xl font-black italic uppercase text-white tracking-tighter">
+             {exercise.id.startsWith('custom-') ? 'Ny Övning' : 'Redigera'}
+           </h3>
+           <p className="text-[10px] text-text-dim font-black uppercase tracking-widest">
+             {isOfficial ? 'Officiell databas' : 'Egen övning'}
+           </p>
+        </div>
+        <div className="flex gap-2">
+           {isOfficial && formData.userModified && (
+              <button 
+                type="button"
+                onClick={resetToOriginal}
+                className="p-3 bg-white/5 rounded-2xl text-accent-blue border border-white/10 active:scale-95 transition-all"
+                title="Återställ till original"
+              >
+                <RotateCcw size={24} />
+              </button>
+           )}
+           <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl"><X size={24}/></button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-40">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn</label>
+            <input 
+              type="text" 
+              value={formData.name} 
+              onChange={e => handleFieldChange({ name: e.target.value })}
+              className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl text-xl font-black outline-none focus:border-accent-pink"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Mätmetod</label>
+            <div className="flex gap-2">
+               <button 
+                 onClick={() => handleFieldChange({ trackingType: 'reps_weight' })}
+                 className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase border flex flex-col items-center gap-2 transition-all ${formData.trackingType !== 'time_only' ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-text-dim'}`}
+               >
+                 <Weight size={18} /> Kilo & Reps
+               </button>
+               <button 
+                 onClick={() => handleFieldChange({ trackingType: 'time_only' })}
+                 className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase border flex flex-col items-center gap-2 transition-all ${formData.trackingType === 'time_only' ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10 text-text-dim'}`}
+               >
+                 <Clock size={18} /> Endast Tid
+               </button>
             </div>
           </div>
+
+          <div className="space-y-4">
+             <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Lokal Bild</label>
+                <ImageUpload 
+                  currentImageId={formData.imageId} 
+                  onImageSaved={(id) => handleFieldChange({ imageId: id })} 
+                />
+             </div>
+
+             <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2">
+                   <ImageIcon size={12} /> Extern Bild / GIF URL
+                </label>
+                <div className="relative group">
+                  <Link className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} />
+                  <input 
+                    type="text" 
+                    value={formData.imageUrl || ''} 
+                    onChange={e => handleFieldChange({ imageUrl: e.target.value })}
+                    placeholder="https://..."
+                    className="w-full bg-white/5 border border-white/10 p-5 pl-12 rounded-2xl font-bold outline-none focus:border-accent-pink text-sm"
+                  />
+                </div>
+                {formData.imageUrl && !formData.imageId && (
+                   <div className="mt-2 w-full h-40 rounded-2xl overflow-hidden border border-white/5 bg-black/20">
+                      <img src={formData.imageUrl} className="w-full h-full object-contain" alt="Preview" />
+                   </div>
+                )}
+             </div>
+          </div>
         </div>
-      )}
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Rörelsemönster</label>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.values(MovementPattern).map(p => (
+              <button 
+                key={p} 
+                onClick={() => handleFieldChange({ pattern: p })}
+                className={`py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.pattern === p ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-text-dim'}`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Muskelgrupper</label>
+          <div className="flex flex-wrap gap-2">
+            {ALL_MUSCLE_GROUPS.map(m => (
+              <button 
+                key={m} 
+                onClick={() => toggleMuscle(m)}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.muscleGroups.includes(m) ? 'bg-accent-pink border-accent-pink text-white' : 'bg-white/5 border-white/5 text-text-dim'}`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Utrustning</label>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.values(Equipment).map(eq => (
+              <button 
+                key={eq} 
+                onClick={() => toggleEq(eq)}
+                className={`py-3 px-3 rounded-xl text-[10px] font-black uppercase border transition-all text-left flex items-center gap-2 ${formData.equipment.includes(eq) ? 'bg-accent-blue border-accent-blue text-white' : 'bg-white/5 border-white/5 text-text-dim'}`}
+              >
+                <div className={`w-3 h-3 rounded-full border ${formData.equipment.includes(eq) ? 'bg-white border-white' : 'border-white/20'}`} />
+                {eq}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Beskrivning</label>
+          <textarea 
+            value={formData.description || ''} 
+            onChange={e => handleFieldChange({ description: e.target.value })}
+            className="w-full bg-white/5 border border-white/10 p-5 rounded-2xl font-bold outline-none focus:border-accent-pink text-sm min-h-[120px]"
+            placeholder="Instruktioner..."
+          />
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 p-6 bg-[#0f0d15]/80 backdrop-blur-xl border-t border-white/5 flex gap-4">
+        <button 
+          onClick={() => onSave(formData)}
+          className="flex-1 py-5 bg-white text-black rounded-[24px] font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"
+        >
+          <Save size={24} strokeWidth={3} /> Spara
+        </button>
+      </div>
     </div>
   );
 };

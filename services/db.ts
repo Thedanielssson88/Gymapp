@@ -1,6 +1,13 @@
 import Dexie, { Table } from 'dexie';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine } from '../types';
 
+export interface StoredImage {
+  id: string;
+  blob: Blob;
+  mimeType: string;
+  date: string;
+}
+
 export class GymDatabase extends Dexie {
   userProfile!: Table<UserProfile, string>; 
   zones!: Table<Zone, string>;
@@ -10,13 +17,13 @@ export class GymDatabase extends Dexie {
   activeSession!: Table<WorkoutSession, string>;
   goalTargets!: Table<GoalTarget, string>;
   workoutRoutines!: Table<WorkoutRoutine, string>;
+  images!: Table<StoredImage, string>;
 
   constructor() {
     super('MorphFitDB');
     
-    // Definiera schema (vilka fält som ska vara sökbara)
-    // FIX: Cast `this` to Dexie to resolve typing issue with extended class
-    (this as Dexie).version(1).stores({
+    // Increment version to 2 to add the images table
+    (this as Dexie).version(2).stores({
       userProfile: 'id',
       zones: 'id',
       exercises: 'id, name, muscleGroups',
@@ -24,7 +31,8 @@ export class GymDatabase extends Dexie {
       biometricLogs: 'id, date',
       activeSession: 'id',
       goalTargets: 'id',
-      workoutRoutines: 'id'
+      workoutRoutines: 'id',
+      images: 'id'
     });
   }
 }
@@ -32,7 +40,6 @@ export class GymDatabase extends Dexie {
 export const db = new GymDatabase();
 
 // --- MIGRERINGS-SKRIPT ---
-// Detta körs bara en gång för att flytta data från localStorage till IndexedDB
 export const migrateFromLocalStorage = async () => {
   const ALREADY_MIGRATED_KEY = 'morphfit_db_migrated';
   if (localStorage.getItem(ALREADY_MIGRATED_KEY)) return;
@@ -51,7 +58,6 @@ export const migrateFromLocalStorage = async () => {
   ];
 
   try {
-    // FIX: Cast `db` to Dexie to resolve typing issue for `transaction` and `tables`
     await (db as Dexie).transaction('rw', (db as Dexie).tables, async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);
@@ -61,7 +67,6 @@ export const migrateFromLocalStorage = async () => {
             if (Array.isArray(data) && data.length > 0) {
               await table.bulkPut(data);
             } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-              // Handle single objects like active_session or user_profile if they are not in an array
               await table.put(data);
             }
           } catch (e) {

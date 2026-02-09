@@ -91,11 +91,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   // --- 3. RADERA KONTO ---
   const handleDeleteAccount = async () => {
     const confirmText = prompt("Skriv 'RADERA' för att permanent ta bort all historik, profil och inställningar. Detta kan inte ångras.");
+    
     if (confirmText === 'RADERA') {
-      // FIX: Cast `db` to Dexie to access tables property.
-      await Promise.all((db as Dexie).tables.map(table => table.clear()));
-      localStorage.clear();
-      window.location.reload();
+      try {
+        // 1. Rensa LocalStorage (tar bort inställningar & migrerings-flaggor)
+        localStorage.clear();
+
+        // 2. Radera hela IndexedDB-databasen
+        // FIX: Cast `db` to `Dexie` to correctly call the `delete` method from the base class.
+        await (db as Dexie).delete();
+
+        // 3. Tvinga omladdning av sidan
+        // Detta kommer köra storage.init() på en "ny" databas
+        window.location.reload();
+        
+      } catch (error) {
+        console.error("Kunde inte radera databasen:", error);
+        alert("Ett fel uppstod vid radering. Försök starta om webbläsaren.");
+      }
     }
   };
 

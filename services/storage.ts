@@ -1,7 +1,6 @@
-
 import { db, migrateFromLocalStorage } from './db';
-import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, GoalTarget, WorkoutRoutine, Goal } from '../types';
-import { EXERCISE_DATABASE, INITIAL_GOAL_TARGETS } from '../constants';
+import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal } from '../types';
+import { EXERCISE_DATABASE, INITIAL_GOAL_TARGETS, INITIAL_ZONES } from '../constants';
 
 const DEFAULT_PROFILE: UserProfile = {
   name: "Atlet",
@@ -18,10 +17,31 @@ export const storage = {
     // 1. Kör migrering från localStorage om det behövs
     await migrateFromLocalStorage();
 
-    // 2. Seeda standard-data om databasen är tom
-    const exCount = await db.exercises.count();
-    if (exCount === 0) {
-      await db.exercises.bulkAdd(EXERCISE_DATABASE);
+    // 2. Uppdatera övningsdatabasen intelligent.
+    const existingExercises = await db.exercises.toArray();
+    const existingMap = new Map<string, Exercise>(existingExercises.map(e => [e.id, e]));
+
+    const updates: Exercise[] = [];
+    for (const coreEx of EXERCISE_DATABASE) {
+      const existing = existingMap.get(coreEx.id);
+      
+      if (!existing || !existing.userModified) {
+        updates.push(coreEx);
+      }
+    }
+
+    if (updates.length > 0) {
+      await db.exercises.bulkPut(updates);
+    }
+    
+    // 3. Seeda övrig data
+    const zoneCount = await db.zones.count();
+    if (zoneCount === 0) {
+      await db.zones.bulkAdd(INITIAL_ZONES);
+    }
+    
+    const targetCount = await db.goalTargets.count();
+    if (targetCount === 0) {
       await db.goalTargets.bulkAdd(INITIAL_GOAL_TARGETS);
     }
     
@@ -39,7 +59,6 @@ export const storage = {
 
   setUserProfile: async (profile: UserProfile) => {
     await db.userProfile.put({ ...profile, id: 'current' });
-    // Logga vikt automatiskt om den ändras
     const newLog: BiometricLog = {
       id: `log-${Date.now()}`,
       date: new Date().toISOString(),
@@ -63,14 +82,25 @@ export const storage = {
       isCompleted: true, 
       date: session.date || new Date().toISOString() 
     };
-    await db.workoutHistory.add(completedSession);
+    await db.workoutHistory.put(completedSession);
   },
 
   // --- ACTIVE SESSION ---
-  getActiveSession: async (): Promise<WorkoutSession | undefined> => await db.activeSession.get('current'),
+  getActiveSession: async (): Promise<WorkoutSession | undefined> => {
+    const sess = await db.activeSession.get('current');
+    if (sess) {
+      return { ...sess, id: (sess as any).originalId || sess.id };
+    }
+    return undefined;
+  },
   setActiveSession: async (session: WorkoutSession | null) => {
     if (session) {
-      await db.activeSession.put({ ...session, id: 'current' });
+      const sessionToStore = { 
+        ...session, 
+        originalId: session.id, 
+        id: 'current' 
+      };
+      await db.activeSession.put(sessionToStore as any);
     } else {
       await db.activeSession.clear();
     }
@@ -82,7 +112,13 @@ export const storage = {
     return await db.exercises.filter(ex => ex.id.startsWith('custom-')).toArray();
   },
   saveExercise: async (exercise: Exercise) => await db.exercises.put(exercise),
-  deleteExercise: async (id: string) => await db.exercises.delete(id),
+  deleteExercise: async (id: string) => {
+    const ex = await db.exercises.get(id);
+    if (ex?.imageId) {
+      await storage.deleteImage(ex.imageId);
+    }
+    await db.exercises.delete(id);
+  },
 
   // --- GOALS & ROUTINES ---
   getGoalTargets: async (): Promise<GoalTarget[]> => await db.goalTargets.toArray(),
@@ -90,5 +126,27 @@ export const storage = {
   
   getRoutines: async (): Promise<WorkoutRoutine[]> => await db.workoutRoutines.toArray(),
   saveRoutine: async (routine: WorkoutRoutine) => await db.workoutRoutines.put(routine),
-  deleteRoutine: async (id: string) => await db.workoutRoutines.delete(id)
+  deleteRoutine: async (id: string) => await db.workoutRoutines.delete(id),
+
+  // --- BILDHANTERING ---
+  saveImage: async (blob: Blob): Promise<string> => {
+    const id = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    await db.images.put({
+      id,
+      blob,
+      mimeType: blob.type,
+      date: new Date().toISOString()
+    });
+    return id;
+  },
+
+  getImage: async (id: string): Promise<string | null> => {
+    const imgData = await db.images.get(id);
+    if (!imgData) return null;
+    return URL.createObjectURL(imgData.blob);
+  },
+  
+  deleteImage: async (id: string) => {
+    await db.images.delete(id);
+  }
 };

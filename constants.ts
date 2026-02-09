@@ -1,4 +1,3 @@
-
 import { MovementPattern, Equipment, Exercise, Zone, GoalTarget } from './types';
 
 export const INITIAL_GOAL_TARGETS: GoalTarget[] = [
@@ -38,6 +37,19 @@ export const EXERCISE_DATABASE: Exercise[] = [
     bodyweightCoefficient: 0.0,
     description: 'Bänkpress på en bänk med 30-45 graders lutning för att fokusera på övre bröstmuskulaturen.',
     alternativeExIds: ['g-br-5', 'h-br-4']
+  },
+   {
+    id: 'g-br-18',
+    name: 'Smal Bänkpress',
+    pattern: MovementPattern.HORIZONTAL_PUSH,
+    primaryMuscles: ['Triceps'],
+    secondaryMuscles: ['Bröst', 'Axlar'],
+    muscleGroups: ['Triceps', 'Bröst', 'Axlar'],
+    equipment: [Equipment.BARBELL, Equipment.BENCH],
+    difficultyMultiplier: 0.9,
+    bodyweightCoefficient: 0.0,
+    description: 'Bänkpress med ett smalare grepp (axelbrett) för att lägga mer fokus på triceps.',
+    alternativeExIds: ['g-br-8', 'h-br-2']
   },
   {
     id: 'g-br-9',
@@ -223,6 +235,18 @@ export const EXERCISE_DATABASE: Exercise[] = [
     description: 'Dra repet i kabelmaskinen mot ansiktet för att stärka baksida axlar.',
     alternativeExIds: ['g-ax-9']
   },
+  {
+    id: 'g-ry-18',
+    name: 'T-Bar Row',
+    pattern: MovementPattern.HORIZONTAL_PULL,
+    primaryMuscles: ['Rygg'],
+    secondaryMuscles: ['Biceps', 'Ryggslut'],
+    muscleGroups: ['Rygg', 'Biceps', 'Ryggslut'],
+    equipment: [Equipment.BARBELL],
+    difficultyMultiplier: 1.0,
+    bodyweightCoefficient: 0.0,
+    description: 'Rodd med en skivstång fixerad i ena änden för att fokusera på ryggens tjocklek.',
+  },
 
   // --- BEN FRAMSIDA (Squat) ---
   {
@@ -289,6 +313,18 @@ export const EXERCISE_DATABASE: Exercise[] = [
     bodyweightCoefficient: 0.0,
     description: 'Enbensknäböj med bakre foten på en bänk. Extremt effektiv för ben och säte.',
     alternativeExIds: ['h-be-2', 'h-be-3']
+  },
+  {
+    id: 'g-be-10',
+    name: 'Box Jumps',
+    pattern: MovementPattern.SQUAT,
+    primaryMuscles: ['Framsida lår', 'Säte'],
+    secondaryMuscles: ['Vader'],
+    muscleGroups: ['Framsida lår', 'Säte', 'Vader'],
+    equipment: [Equipment.BOX, Equipment.BODYWEIGHT],
+    difficultyMultiplier: 1.0,
+    bodyweightCoefficient: 0.0,
+    description: 'Hoppa explosivt upp på en låda. Landa mjukt och kliv ner kontrollerat.',
   },
 
   // --- BEN BAKSIDA & SÄTE (Hinge) ---
@@ -429,6 +465,18 @@ export const EXERCISE_DATABASE: Exercise[] = [
     alternativeExIds: ['h-ma-3']
   },
   {
+    id: 'g-ma-2',
+    name: 'Toes to Bar',
+    pattern: MovementPattern.CORE,
+    primaryMuscles: ['Mage'],
+    secondaryMuscles: ['Underarmar'],
+    muscleGroups: ['Mage', 'Underarmar'],
+    equipment: [Equipment.PULLUP_BAR],
+    difficultyMultiplier: 1.1,
+    bodyweightCoefficient: 0.0,
+    description: 'Hängande från en stång, lyft fötterna för att nudda stången.',
+  },
+  {
     id: 'g-va-1',
     name: 'Vadpress (Stående)',
     pattern: MovementPattern.ISOLATION,
@@ -442,11 +490,45 @@ export const EXERCISE_DATABASE: Exercise[] = [
     alternativeExIds: ['h-be-13']
   },
 
-  // ==========================================
-  // DEL 2: KROPPSVIKT (HEMMA)
-  // ==========================================
+  // --- HYROX & FUNKTIONELLT ---
+  {
+    id: 'hyrox-1',
+    name: 'SkiErg',
+    pattern: MovementPattern.VERTICAL_PULL,
+    primaryMuscles: ['Rygg', 'Triceps'],
+    secondaryMuscles: ['Mage', 'Baksida lår', 'Axlar'],
+    muscleGroups: ['Rygg', 'Triceps', 'Mage', 'Axlar', 'Baksida lår'],
+    equipment: [Equipment.SKI_ERG],
+    difficultyMultiplier: 1.1,
+    bodyweightCoefficient: 0,
+    description: 'Stakmaskin. Dra handtagen nedåt med kraft från bål och armar.',
+  },
+  {
+    id: 'hyrox-2',
+    name: 'Sled Push',
+    pattern: MovementPattern.SQUAT,
+    primaryMuscles: ['Framsida lår', 'Säte'],
+    secondaryMuscles: ['Vader', 'Axlar', 'Mage'],
+    muscleGroups: ['Framsida lår', 'Säte', 'Vader', 'Axlar', 'Mage'],
+    equipment: [Equipment.SLED],
+    difficultyMultiplier: 1.5,
+    bodyweightCoefficient: 0,
+    description: 'Tryck släden framåt med raka armar eller låg position.',
+  },
+   {
+    id: 'hyrox-3',
+    name: 'Sled Pull',
+    pattern: MovementPattern.HORIZONTAL_PULL,
+    primaryMuscles: ['Rygg', 'Säte', 'Baksida lår'],
+    secondaryMuscles: ['Underarmar', 'Biceps'],
+    muscleGroups: ['Rygg', 'Säte', 'Baksida lår', 'Underarmar', 'Biceps'],
+    equipment: [Equipment.SLED],
+    difficultyMultiplier: 1.4,
+    bodyweightCoefficient: 0,
+    description: 'Dra släden mot dig med hjälp av ett rep, antingen med armarna eller genom att gå baklänges.',
+  },
 
-  // --- PRESS (Bröst/Axlar/Triceps) ---
+  // --- KROPPSVIKT (HEMMA) ---
   {
     id: 'h-br-1',
     name: 'Armhävningar',
@@ -461,47 +543,6 @@ export const EXERCISE_DATABASE: Exercise[] = [
     alternativeExIds: ['g-br-1', 'h-br-2']
   },
   {
-    id: 'h-br-2',
-    name: 'Diamantarmhävningar',
-    pattern: MovementPattern.HORIZONTAL_PUSH,
-    primaryMuscles: ['Triceps'],
-    secondaryMuscles: ['Bröst', 'Axlar'],
-    muscleGroups: ['Triceps', 'Bröst'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.65,
-    bodyweightCoefficient: 0.65,
-    description: 'Händerna ihopformade som en diamant under bröstet för fokus på triceps.',
-    alternativeExIds: ['g-ar-3', 'h-br-1']
-  },
-  {
-    id: 'h-ax-1',
-    name: 'Pike Push-Ups',
-    pattern: MovementPattern.VERTICAL_PUSH,
-    primaryMuscles: ['Axlar'],
-    secondaryMuscles: ['Triceps'],
-    muscleGroups: ['Axlar', 'Triceps'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.7,
-    bodyweightCoefficient: 0.5,
-    description: 'V-formad kropp, sänk huvudet mot golvet och pressa upp.',
-    alternativeExIds: ['g-ax-1', 'h-ax-2']
-  },
-  {
-    id: 'h-ax-2',
-    name: 'Handstand Push-Ups (Mot vägg)',
-    pattern: MovementPattern.VERTICAL_PUSH,
-    primaryMuscles: ['Axlar'],
-    secondaryMuscles: ['Triceps'],
-    muscleGroups: ['Axlar', 'Triceps'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 1.2,
-    bodyweightCoefficient: 1.0,
-    description: 'Stå på händer mot en vägg, sänk dig och pressa upp.',
-    alternativeExIds: ['g-ax-1', 'h-ax-1']
-  },
-
-  // --- DRAG (Rygg/Biceps) ---
-  {
     id: 'h-ry-2',
     name: 'Chin-Ups (Underhandsgrepp)',
     pattern: MovementPattern.VERTICAL_PULL,
@@ -514,87 +555,57 @@ export const EXERCISE_DATABASE: Exercise[] = [
     description: 'Underhandsgrepp i stången, dra dig upp tills hakan är över.',
     alternativeExIds: ['g-ry-2', 'g-ar-1']
   },
+
+  // ==========================================
+  // DEL 3: RÖRLIGHET, REHAB & KONDITION
+  // ==========================================
+
+  // --- RÖRLIGHET ---
   {
-    id: 'h-ry-4',
-    name: 'Bordsrodd (Inverted Row)',
-    pattern: MovementPattern.HORIZONTAL_PULL,
-    primaryMuscles: ['Rygg'],
-    secondaryMuscles: ['Biceps', 'Mage'],
-    muscleGroups: ['Rygg', 'Biceps'],
+    id: 'mob-1',
+    name: 'Benpendling',
+    pattern: MovementPattern.MOBILITY,
+    muscleGroups: ['Framsida lår', 'Baksida lår'],
     equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.6,
-    bodyweightCoefficient: 0.5,
-    description: 'Ligg under ett stadigt bord, håll i kanten och dra bröstet mot bordsskivan.',
-    alternativeExIds: ['g-ry-5', 'g-ry-15']
+    difficultyMultiplier: 0,
+    bodyweightCoefficient: 0,
+    trackingType: 'reps_only',
+    description: 'Dynamisk rörlighet. Pendla benet fram och tillbaka i ett kontrollerat rörelseomfång.'
+  },
+  {
+    id: 'mob-2',
+    name: 'Sätesstretch (Duva)',
+    pattern: MovementPattern.MOBILITY,
+    muscleGroups: ['Säte'],
+    equipment: [Equipment.BODYWEIGHT],
+    difficultyMultiplier: 0,
+    bodyweightCoefficient: 0,
+    trackingType: 'time_only',
+    description: 'Sitt på golvet med ena benet böjt framför dig och det andra rakt bakåt. Håll positionen.'
   },
 
-  // --- BEN (Quads/Glutes/Hams) ---
+  // --- REHAB ---
   {
-    id: 'h-be-1',
-    name: 'Knäböj (Air Squat)',
-    pattern: MovementPattern.SQUAT,
-    primaryMuscles: ['Framsida lår'],
-    secondaryMuscles: ['Säte', 'Vader'],
-    muscleGroups: ['Framsida lår', 'Säte'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.4,
-    bodyweightCoefficient: 0.75,
-    description: 'Grundläggande knäböj utan vikt.',
-    alternativeExIds: ['g-be-1', 'h-be-2']
+    id: 'rehab-1',
+    name: 'Utåtrotation (Gummiband)',
+    pattern: MovementPattern.REHAB,
+    muscleGroups: ['Axlar', 'Rotatorcuff'],
+    equipment: [Equipment.BANDS],
+    difficultyMultiplier: 0.5,
+    bodyweightCoefficient: 0,
+    trackingType: 'reps_weight',
+    description: 'Håll armbågen mot sidan och rotera utåt.'
   },
   {
-    id: 'h-be-3',
-    name: 'Pistol Squat',
-    pattern: MovementPattern.SQUAT,
-    primaryMuscles: ['Framsida lår', 'Säte'],
-    secondaryMuscles: ['Mage'],
-    muscleGroups: ['Framsida lår', 'Säte'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 1.1,
-    bodyweightCoefficient: 0.85,
-    description: 'Enbensknäböj. Kräver styrka och balans.',
-    alternativeExIds: ['g-be-1', 'h-be-1']
-  },
-  {
-    id: 'h-be-10',
-    name: 'Glute Bridge',
-    pattern: MovementPattern.HINGE,
-    primaryMuscles: ['Säte'],
-    secondaryMuscles: ['Baksida lår'],
-    muscleGroups: ['Säte', 'Baksida lår'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.4,
-    bodyweightCoefficient: 0.3,
-    description: 'Ligg på rygg och lyft höften mot taket.',
-    alternativeExIds: ['g-be-4', 'h-be-11']
-  },
-
-  // --- MAGE / CORE ---
-  {
-    id: 'h-ma-1',
+    id: 'rehab-2',
     name: 'Plankan',
     pattern: MovementPattern.CORE,
-    primaryMuscles: ['Mage'],
-    secondaryMuscles: ['Ryggslut', 'Axlar'],
     muscleGroups: ['Mage'],
     equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.4,
-    bodyweightCoefficient: 0.0,
-    description: 'Håll kroppen rak som en planka, stöd dig på underarmarna.',
-    alternativeExIds: ['h-ma-2']
-  },
-  {
-    id: 'h-ma-3',
-    name: 'Bicycle Crunch',
-    pattern: MovementPattern.CORE,
-    primaryMuscles: ['Mage'],
-    secondaryMuscles: [],
-    muscleGroups: ['Mage'],
-    equipment: [Equipment.BODYWEIGHT],
-    difficultyMultiplier: 0.5,
-    bodyweightCoefficient: 0.0,
-    description: 'Ligg på rygg, cykla med benen och rör motsatt armbåge mot knä.',
-    alternativeExIds: ['h-ma-1', 'g-ma-1']
+    difficultyMultiplier: 1,
+    bodyweightCoefficient: 0,
+    trackingType: 'time_only',
+    description: 'Stöd dig på underarmarna och håll kroppen rak.'
   }
 ];
 
@@ -641,6 +652,12 @@ export const INITIAL_ZONES: Zone[] = [
       Equipment.PEC_DECK,
       Equipment.ASSISTED_MACHINE,
       Equipment.DIP_STATION,
+
+      // Hyrox & Special
+      Equipment.SKI_ERG,
+      Equipment.ROWER,
+      Equipment.SLED,
+      Equipment.MEDICINE_BALL,
 
       // Övrigt
       Equipment.BODYWEIGHT, 
