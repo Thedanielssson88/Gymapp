@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WorkoutSet, SetType, TrackingType } from '../types';
 import { calculatePlates } from '../utils/plates';
-import { Check, Plus, Calculator, Thermometer, Zap, AlertCircle, Clock, Play, Pause, Repeat } from 'lucide-react';
+import { Check, Plus, Calculator, Thermometer, Zap, AlertCircle, Clock, Play, Pause } from 'lucide-react';
 
 interface SetRowProps {
   setIdx: number;
@@ -25,21 +25,20 @@ export const SetRow: React.FC<SetRowProps> = ({
   const [showPlates, setShowPlates] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
 
-  // --- TIMER STATE (Only for time_only) ---
+  // --- TIMER STATE ---
   const [timeLeft, setTimeLeft] = useState(set.reps || 0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
 
   const isTimeBased = trackingType === 'time_only';
-  const showWeight = trackingType === 'reps_weight';
 
-  // Sync timeLeft if reps (seconds) change manually
+  // Synka timeLeft om användaren ändrar sekunder manuellt och timern inte körs
   useEffect(() => {
-    if (!isTimerRunning && !isCompleted && isTimeBased) {
+    if (!isTimerRunning && !isCompleted) {
       setTimeLeft(set.reps || 0);
     }
-  }, [set.reps, isTimerRunning, isCompleted, isTimeBased]);
+  }, [set.reps, isTimerRunning, isCompleted]);
 
-  // Timer Logic
+  // Timer Logik
   useEffect(() => {
     let interval: any;
     if (isTimerRunning && timeLeft > 0) {
@@ -47,8 +46,11 @@ export const SetRow: React.FC<SetRowProps> = ({
         setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else if (timeLeft === 0 && isTimerRunning) {
+      // Tiden är ute! Slutför setet automatiskt
       setIsTimerRunning(false);
       onUpdate({ completed: true });
+      
+      // Valfritt: Spela upp ett litet ljud eller vibration här om möjligt
       if ('vibrate' in navigator) {
         navigator.vibrate([200, 100, 200]);
       }
@@ -68,6 +70,7 @@ export const SetRow: React.FC<SetRowProps> = ({
 
   const plates = calculatePlates(set.weight || 0);
 
+  // --- LOGIK FÖR ATT BYTA TYP ---
   const toggleSetType = () => {
     const types: SetType[] = ['normal', 'warmup', 'drop', 'failure'];
     const currentType = set.type || 'normal';
@@ -75,8 +78,10 @@ export const SetRow: React.FC<SetRowProps> = ({
     onUpdate({ type: types[nextIndex] });
   };
 
+  // --- TIMER KONTROLL ---
   const handleTimerToggle = () => {
     if (isCompleted) {
+      // Om setet redan är klart, återställ det för att kunna köra timern igen
       onUpdate({ completed: false });
       setTimeLeft(set.reps || 0);
     } else {
@@ -84,6 +89,7 @@ export const SetRow: React.FC<SetRowProps> = ({
     }
   };
 
+  // --- DESIGN BASERAT PÅ TYP ---
   const getStyle = () => {
     switch (set.type) {
       case 'warmup': return {
@@ -118,7 +124,6 @@ export const SetRow: React.FC<SetRowProps> = ({
   };
 
   const style = getStyle();
-  const repsLabel = isTimeBased ? 'SEK' : 'REPS';
 
   return (
     <div className={`relative flex items-center gap-3 p-3 mb-2 rounded-2xl transition-all duration-300 border ${
@@ -127,6 +132,7 @@ export const SetRow: React.FC<SetRowProps> = ({
         : `${style.container} shadow-lg scale-[1.01]`
     }`}>
       
+      {/* 1. SET NUMMER / TYP-KNAPP */}
       <button 
         onClick={toggleSetType}
         className="w-10 flex flex-col items-center justify-center border-r border-white/5 pr-2 active:scale-90 transition-transform cursor-pointer group"
@@ -142,56 +148,61 @@ export const SetRow: React.FC<SetRowProps> = ({
         </span>
       </button>
 
-      {showWeight ? (
-        <div className="flex-1 relative">
-          <label className={`text-[8px] font-black uppercase tracking-wider block mb-0.5 ${style.subText}`}>KG</label>
-          <div className="relative flex items-center">
-            <input 
-              type="number" 
-              value={set.weight || ''} 
-              onChange={(e) => onUpdate({ weight: Number(e.target.value) })} 
-              className={`w-full bg-transparent text-2xl font-black outline-none placeholder-white/10 transition-colors ${isCompleted ? 'text-green-500/50' : 'text-white'}`}
-              placeholder="0"
-            />
-            {!isCompleted && set.weight > 20 && (
-               <button 
-                 onClick={() => setShowPlates(!showPlates)}
-                 className="absolute right-0 p-2 text-accent-blue opacity-50 hover:opacity-100 active:scale-95"
-               >
-                 <Calculator size={16} />
-               </button>
-            )}
+      {/* 2. VIKT (KG) ELLER KLOCKA */}
+      <div className="flex-1 relative">
+        {isTimeBased ? (
+          <div className="flex items-center justify-center h-full opacity-20 py-2">
+            <Clock size={20} />
           </div>
-
-          {showPlates && (
-            <div ref={popupRef} className="absolute bottom-full left-0 mb-3 bg-[#1a1721] border border-white/10 p-4 rounded-2xl shadow-2xl z-50 w-48 animate-in slide-in-from-bottom-2 fade-in">
-               <div className="text-[10px] font-bold text-text-dim mb-2 text-center uppercase tracking-wider">
-                 Per sida (Stång 20kg)
-               </div>
-               <div className="space-y-1.5">
-                  {plates.map((p, i) => (
-                    <div key={i} className="flex justify-between text-xs font-bold">
-                      <div className="flex items-center gap-2">
-                         <div className="w-2 h-4 rounded-sm" style={{backgroundColor: p.color, border: '1px solid rgba(255,255,255,0.2)'}}></div>
-                         <span className="text-white">{p.weight}kg</span>
-                      </div>
-                      <span className="text-text-dim">x{p.count}</span>
-                    </div>
-                  ))}
-                  {plates.length === 0 && <span className="text-xs text-text-dim text-center block">Inga skivor</span>}
-               </div>
+        ) : (
+          <>
+            <label className={`text-[8px] font-black uppercase tracking-wider block mb-0.5 ${style.subText}`}>KG</label>
+            <div className="relative flex items-center">
+              <input 
+                type="number" 
+                value={set.weight || ''} 
+                onChange={(e) => onUpdate({ weight: Number(e.target.value) })} 
+                className={`w-full bg-transparent text-2xl font-black outline-none placeholder-white/10 transition-colors ${isCompleted ? 'text-green-500/50' : 'text-white'}`}
+                placeholder="0"
+              />
+              {!isCompleted && set.weight > 20 && (
+                 <button 
+                   onClick={() => setShowPlates(!showPlates)}
+                   className="absolute right-0 p-2 text-accent-blue opacity-50 hover:opacity-100 active:scale-95"
+                 >
+                   <Calculator size={16} />
+                 </button>
+              )}
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center h-full opacity-20 py-2">
-           {isTimeBased ? <Clock size={20} /> : <Repeat size={20} />}
-        </div>
-      )}
+          </>
+        )}
 
-      <div className={`flex-1 ${showWeight ? 'border-l border-white/5 pl-3' : ''}`}>
+        {/* PLATE CALCULATOR POPUP */}
+        {showPlates && !isTimeBased && (
+          <div ref={popupRef} className="absolute bottom-full left-0 mb-3 bg-[#1a1721] border border-white/10 p-4 rounded-2xl shadow-2xl z-50 w-48 animate-in slide-in-from-bottom-2 fade-in">
+             <div className="text-[10px] font-bold text-text-dim mb-2 text-center uppercase tracking-wider">
+               Per sida (Stång 20kg)
+             </div>
+             <div className="space-y-1.5">
+                {plates.map((p, i) => (
+                  <div key={i} className="flex justify-between text-xs font-bold">
+                    <div className="flex items-center gap-2">
+                       <div className="w-2 h-4 rounded-sm" style={{backgroundColor: p.color, border: '1px solid rgba(255,255,255,0.2)'}}></div>
+                       <span className="text-white">{p.weight}kg</span>
+                    </div>
+                    <span className="text-text-dim">x{p.count}</span>
+                  </div>
+                ))}
+                {plates.length === 0 && <span className="text-xs text-text-dim text-center block">Inga skivor</span>}
+             </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. REPS ELLER SEKUNDER */}
+      <div className="flex-1 border-l border-white/5 pl-3">
         <label className={`text-[8px] font-black uppercase tracking-wider block mb-0.5 ${style.subText}`}>
-          {repsLabel}
+          {isTimeBased ? 'SEK' : 'REPS'}
         </label>
         <input 
           type="number" 
@@ -203,6 +214,7 @@ export const SetRow: React.FC<SetRowProps> = ({
         />
       </div>
 
+      {/* 4. CHECK BUTTON ELLER TIMER */}
       <div className="pl-2">
         {isTimeBased ? (
            <button 

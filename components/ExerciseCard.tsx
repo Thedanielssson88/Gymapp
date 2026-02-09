@@ -50,6 +50,11 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                <h3 className="text-xl font-black italic uppercase text-white leading-none truncate pr-2">
                  {exData.name}
                </h3>
+               {exData.englishName && (
+                  <p className="text-[11px] font-bold text-white/30 italic leading-none mt-1 mb-1 tracking-tight truncate">
+                    {exData.englishName}
+                  </p>
+               )}
                <p className="text-[10px] font-bold text-accent-pink uppercase tracking-widest mt-1.5 truncate">
                  {exData.primaryMuscles?.[0] || exData.muscleGroups[0]} • {exData.equipment[0]}
                </p>
@@ -97,8 +102,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
              autoFocus
              value={item.notes || ''} 
              onChange={(e) => onUpdateNotes(e.target.value)}
-             placeholder="Anteckningar för övningen (t.ex. maskininställning)..."
-             className="w-full bg-[#0f0d15] text-white text-xs font-bold p-4 rounded-2xl border border-white/10 outline-none focus:border-accent-blue/50 min-h-[80px] shadow-inner"
+             placeholder="Anteckningar..."
+             className="w-full bg-[#0f0d15] text-white text-xs font-bold p-4 rounded-2xl border border-white/10 outline-none focus:border-accent-blue/50 min-h-[80px]"
            />
         </div>
       )}
@@ -119,20 +124,15 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         ))}
       </div>
       
-      {/* FOOTER PÅ KORTET */}
+      {/* FOOTER */}
       <div className="px-5 py-3.5 border-t border-white/5 flex justify-between items-center bg-black/20">
-         <button 
-           onClick={onToggleNotes} 
-           className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${item.notes ? 'text-accent-blue' : 'text-text-dim hover:text-white'}`}
-         >
+         <button onClick={onToggleNotes} className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${item.notes ? 'text-accent-blue' : 'text-text-dim hover:text-white'}`}>
             <MessageSquare size={14} /> {item.notes ? 'Redigera Notis' : 'Lägg till anteckning'}
          </button>
-         
          <div className="text-[9px] font-black uppercase tracking-widest text-white/20 italic">
             Volym: {exData.trackingType === 'time_only' ? '--' : item.sets.reduce((sum, s) => s.completed ? sum + (s.weight * s.reps) : sum, 0).toLocaleString() + ' kg'}
          </div>
       </div>
-
     </div>
   );
 };

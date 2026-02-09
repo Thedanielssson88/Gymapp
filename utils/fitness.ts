@@ -1,165 +1,160 @@
-import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal } from '../types';
+import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal, UserProfile, ExerciseTier, MovementPattern } from '../types';
+import { calculateMuscleRecovery } from './recovery';
 
 /**
- * Epley Formula for Estimated 1RM
+ * PT Blueprints per Goal
  */
+const SESSION_BLUEPRINTS: Record<string, { tier: ExerciseTier; sets: number; reps: number }[]> = {
+  [Goal.STRENGTH]: [
+    { tier: 'tier_1', sets: 5, reps: 5 },  // Main Lift
+    { tier: 'tier_2', sets: 3, reps: 8 },  // Heavy Accessory
+    { tier: 'tier_2', sets: 3, reps: 8 },  // Accessory
+    { tier: 'tier_3', sets: 3, reps: 12 }  // Support/Prehab
+  ],
+  [Goal.HYPERTROPHY]: [
+    { tier: 'tier_1', sets: 3, reps: 8 },  // Main Base
+    { tier: 'tier_2', sets: 3, reps: 10 }, // Volume
+    { tier: 'tier_2', sets: 3, reps: 12 }, // Volume
+    { tier: 'tier_3', sets: 3, reps: 12 }, // Isolation
+    { tier: 'tier_3', sets: 2, reps: 15 }  // Finisher/Pump
+  ],
+  [Goal.ENDURANCE]: [
+    { tier: 'tier_1', sets: 3, reps: 12 },
+    { tier: 'tier_2', sets: 3, reps: 15 },
+    { tier: 'tier_2', sets: 3, reps: 15 },
+    { tier: 'tier_3', sets: 3, reps: 20 }
+  ],
+  [Goal.REHAB]: [
+    { tier: 'tier_3', sets: 3, reps: 15 },
+    { tier: 'tier_3', sets: 3, reps: 15 },
+    { tier: 'tier_3', sets: 3, reps: 15 }
+  ]
+};
+
 export const calculate1RM = (weight: number, reps: number): number => {
   if (reps === 1) return weight;
   if (reps === 0) return 0;
   return weight * (1 + reps / 30);
 };
 
-/**
- * Finds the best replacement exercise in a target zone based on movement pattern.
- */
-export const findReplacement = (
-  currentExercise: Exercise,
-  targetZone: Zone,
-  allExercises: Exercise[]
-): Exercise => {
+export const findReplacement = (currentExercise: Exercise, targetZone: Zone, allExercises: Exercise[]): Exercise => {
   const candidates = allExercises.filter(ex => 
     ex.pattern === currentExercise.pattern &&
     ex.equipment.every(eq => targetZone.inventory.includes(eq))
   );
-
-  if (candidates.length === 0) {
-    const fallback = allExercises.find(ex => 
-      ex.pattern === currentExercise.pattern &&
-      ex.equipment.some(eq => targetZone.inventory.includes(eq))
-    );
-    return fallback || currentExercise;
-  }
-
+  if (candidates.length === 0) return currentExercise;
   return candidates.sort((a, b) => 
     Math.abs(b.difficultyMultiplier - currentExercise.difficultyMultiplier) - 
     Math.abs(a.difficultyMultiplier - currentExercise.difficultyMultiplier)
   )[0];
 };
 
-/**
- * Adapts volume when context switching (e.g. Barbell to Bodyweight)
- */
-export const adaptVolume = (
-  originalSets: WorkoutSet[],
-  originalEx: Exercise,
-  newEx: Exercise,
-  userGoal: Goal
-): WorkoutSet[] => {
+export const adaptVolume = (originalSets: WorkoutSet[], originalEx: Exercise, newEx: Exercise, userGoal: Goal): WorkoutSet[] => {
   const diffRatio = originalEx.difficultyMultiplier / newEx.difficultyMultiplier;
-  
-  return originalSets.map(set => {
-    let newReps = Math.ceil(set.reps * diffRatio);
-    if (newReps > 30) newReps = 30; 
-    
-    return {
-      ...set,
-      reps: newReps,
-      weight: Math.round((set.weight / diffRatio) * 2) / 2,
-      completed: false
-    };
-  });
+  return originalSets.map(set => ({
+    ...set,
+    reps: Math.min(30, Math.ceil(set.reps * diffRatio)),
+    weight: Math.round((set.weight / diffRatio) * 2) / 2,
+    completed: false
+  }));
 };
 
-/**
- * 1. HISTORY LOOKUP
- * Hittar senaste passet där övningen utfördes.
- */
 export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]): WorkoutSet[] | null => {
   const sortedHistory = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  
   for (const session of sortedHistory) {
     const ex = session.exercises.find(e => e.exerciseId === exerciseId);
-    if (ex && ex.sets.some(s => s.completed)) {
-      return ex.sets.filter(s => s.completed); 
-    }
+    if (ex && ex.sets.some(s => s.completed)) return ex.sets.filter(s => s.completed); 
   }
   return null;
 };
 
 /**
- * Hämtar de senaste passen där en specifik övning utfördes.
- */
-export const getExerciseHistory = (exerciseId: string, allHistory: WorkoutSession[], limit = 5) => {
-  const relevantSessions = allHistory.filter(session => 
-    session.exercises.some(e => e.exerciseId === exerciseId)
-  );
-
-  relevantSessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  return relevantSessions.slice(0, limit).map(session => {
-    const exData = session.exercises.find(e => e.exerciseId === exerciseId);
-    return {
-      date: session.date,
-      sets: exData?.sets || [],
-      sessionName: session.name
-    };
-  });
-};
-
-
-/**
- * 2. PROGRESSION LOGIC
- * Skapar nya set baserat på historik, med valfri överbelastning.
- * Viktigt: Behåller SetType (Warmup, Drop etc.) från föregående pass.
+ * Creates sets with Progressive Overload logic.
  */
 export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean): WorkoutSet[] => {
   return lastSets.map(s => {
     let newWeight = s.weight;
     let newReps = s.reps;
 
-    // Vi applicerar bara progression på "normala" set eller failure-set. 
-    // Uppvärmning lämnas oftast oförändrad om vikten inte är extremt låg.
-    if (applyOverload && s.type !== 'warmup') {
-      if (newReps >= 10) {
-         newWeight += 2.5; 
+    if (applyOverload && s.completed && s.type !== 'warmup') {
+      const rpe = s.rpe || 8;
+      if (rpe < 7) {
+        newWeight += 2.5; // Too light
+      } else if (rpe >= 9) {
+        // Heavy: maintain weight, UI will manage reps
       } else {
-         newReps += 1;
+        newWeight += 1.25; // Standard micro-loading
       }
     }
 
-    return {
-      reps: newReps,
-      weight: newWeight,
-      type: s.type || 'normal', // Ärv taggar (Warmup, Drop, Failure)
-      completed: false,
-      rpe: undefined 
+    return { 
+      reps: newReps, 
+      weight: newWeight, 
+      type: s.type || 'normal', 
+      completed: false 
     };
   });
 };
 
 /**
- * 3. WORKOUT GENERATOR
- * Genererar ett pass baserat på muskler och utrustning.
+ * SMART WORKOUT GENERATOR
  */
 export const generateWorkoutSession = (
   targetMuscles: MuscleGroup[], 
   zone: Zone, 
-  allExercises: Exercise[]
+  allExercises: Exercise[],
+  userProfile: UserProfile,
+  history: WorkoutSession[]
 ): PlannedExercise[] => {
   
   const plannedExercises: PlannedExercise[] = [];
-  const selectedIds = new Set<string>();
+  const blueprint = SESSION_BLUEPRINTS[userProfile.goal] || SESSION_BLUEPRINTS[Goal.HYPERTROPHY];
+  const recoveryStatus = calculateMuscleRecovery(history, allExercises, userProfile);
+  const injuries = userProfile.injuries || [];
 
-  const availableExercises = allExercises.filter(ex => 
-    ex.equipment.every(eq => zone.inventory.includes(eq)) &&
-    ex.muscleGroups.some(m => targetMuscles.includes(m))
-  );
+  // 1. Filter candidates by Zone and INJURIES
+  let candidates = allExercises.filter(ex => {
+    const hasEquipment = ex.equipment.every(eq => zone.inventory.includes(eq));
+    if (!hasEquipment) return false;
 
-  availableExercises.sort((a, b) => b.difficultyMultiplier - a.difficultyMultiplier);
+    const impactsInjuredMuscle = ex.primaryMuscles.some(m => injuries.includes(m));
+    if (impactsInjuredMuscle) {
+      // If muscle is injured, only allow REHAB exercises
+      return ex.pattern === MovementPattern.REHAB;
+    }
 
-  availableExercises.forEach(ex => {
-    if (plannedExercises.length >= 6) return; 
-    if (selectedIds.has(ex.id)) return;
+    return true;
+  });
+
+  // 2. Build session based on Blueprint
+  blueprint.forEach(slot => {
+    const slotCandidates = candidates.filter(ex => 
+      ex.tier === slot.tier && 
+      ex.primaryMuscles.some(m => targetMuscles.includes(m)) &&
+      !plannedExercises.find(p => p.exerciseId === ex.id)
+    );
+
+    if (slotCandidates.length === 0) return;
+
+    // 3. Prioritize Recovery Score
+    slotCandidates.sort((a, b) => {
+       const scoreA = recoveryStatus[a.primaryMuscles[0]] || 100;
+       const scoreB = recoveryStatus[b.primaryMuscles[0]] || 100;
+       
+       if (Math.abs(scoreA - scoreB) > 15) return scoreB - scoreA;
+       return 0.5 - Math.random();
+    });
+
+    const chosen = slotCandidates[0];
+    const historyData = getLastPerformance(chosen.id, history);
 
     plannedExercises.push({
-      exerciseId: ex.id,
-      sets: [
-        { reps: 10, weight: 0, completed: false, type: 'normal' },
-        { reps: 10, weight: 0, completed: false, type: 'normal' },
-        { reps: 10, weight: 0, completed: false, type: 'normal' }
-      ]
+      exerciseId: chosen.id,
+      sets: historyData 
+        ? createSmartSets(historyData, true) 
+        : Array(slot.sets).fill({ reps: slot.reps, weight: 0, completed: false, type: 'normal' }),
+      notes: historyData ? 'Coach: Baserat på din förra prestation!' : 'Ny utmaning!'
     });
-    selectedIds.add(ex.id);
   });
 
   return plannedExercises;

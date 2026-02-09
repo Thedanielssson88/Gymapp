@@ -1,136 +1,85 @@
-
-import React, { useMemo } from 'react';
+import React from 'react';
 import { MuscleGroup } from '../types';
-import { MuscleStatus, getRecoveryColor, getRecoveryStatus, ALL_MUSCLE_GROUPS } from '../utils/recovery';
-import { Activity, Info } from 'lucide-react';
+
+export type MapMode = 'recovery' | 'injuries';
 
 interface RecoveryMapProps {
-  status?: MuscleStatus;            // Används på startsidan (Recovery)
-  loadMap?: Record<string, number>; // Används i passet (Belastning)
-  selectedMuscles?: MuscleGroup[];
-  onToggleMuscle?: (muscle: MuscleGroup) => void;
-  interactive?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  mode: MapMode;
+  recoveryScores?: Record<MuscleGroup, number>;
+  injuries?: MuscleGroup[];
+  onToggle?: (muscle: MuscleGroup) => void;
 }
 
 export const RecoveryMap: React.FC<RecoveryMapProps> = ({ 
-  status, 
-  loadMap,
-  selectedMuscles = [], 
-  onToggleMuscle, 
-  interactive = false,
-  size = 'md'
+  mode,
+  recoveryScores, 
+  injuries = [], 
+  onToggle
 }) => {
-  
-  const muscleScores = useMemo(() => {
-    const list = ALL_MUSCLE_GROUPS.map(muscle => {
-      let score = 100;
-      let loadCount = 0;
-      
-      if (status) {
-        score = Math.round(status[muscle] ?? 100);
-      } else if (loadMap) {
-        loadCount = loadMap[muscle] || 0;
-        score = Math.max(0, 100 - loadCount);
-      }
 
-      return { muscle, score, loadCount };
-    });
+  const getColor = (muscle: MuscleGroup) => {
+    const isInjured = injuries.includes(muscle);
 
-    if (loadMap) {
-        return list.sort((a, b) => b.loadCount - a.loadCount);
-    } else {
-        return list.sort((a, b) => a.score - b.score);
+    // 1. INJURY MODE (Editing)
+    if (mode === 'injuries') {
+      if (isInjured) return '#ef4444'; // Red
+      return 'rgba(255, 255, 255, 0.1)'; // Gray
     }
-  }, [status, loadMap]);
+
+    // 2. RECOVERY MODE (Status)
+    if (isInjured) return '#ef4444'; 
+
+    const score = recoveryScores?.[muscle] ?? 100;
+    if (score >= 90) return '#22c55e'; // Green
+    if (score >= 50) return '#eab308'; // Yellow
+    return '#f97316'; // Orange
+  };
 
   const handleClick = (muscle: MuscleGroup) => {
-    if (interactive && onToggleMuscle) {
-      onToggleMuscle(muscle);
+    if (mode === 'injuries' && onToggle) {
+      onToggle(muscle);
     }
   };
 
-  const getLoadColor = (percentage: number) => {
-      if (percentage <= 5) return 'rgba(255,255,255,0.1)';
-      if (percentage < 40) return '#2ed573';
-      if (percentage < 75) return '#ffa502';
-      return '#ff2d55';
-  };
+  const pathProps = (muscle: MuscleGroup) => ({
+    fill: getColor(muscle),
+    onClick: () => handleClick(muscle),
+    className: `transition-all duration-300 ${mode === 'injuries' ? 'cursor-pointer hover:opacity-80 active:scale-95' : ''}`,
+    stroke: mode === 'injuries' ? 'rgba(255,255,255,0.05)' : 'none',
+    strokeWidth: "1"
+  });
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex justify-between items-end px-2">
-        <div>
-          <h3 className="text-[10px] font-black uppercase text-accent-pink tracking-[0.3em] mb-1">
-            {loadMap ? 'Passets Fokus' : 'Aktiv Återhämtning'}
-          </h3>
-          <p className="text-xl font-black italic uppercase tracking-tighter">
-            {loadMap ? 'Muskelbelastning' : 'Status per zon'}
-          </p>
+    <div className="flex flex-col items-center gap-8 py-4 select-none">
+      <div className="flex justify-center gap-12 w-full">
+        <div className="flex flex-col items-center gap-2">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/20">Front</span>
+          <svg viewBox="0 0 200 500" className="h-72 w-auto drop-shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+            <path d="M65,95 Q100,105 135,95 L125,145 Q100,155 75,145 Z" {...pathProps('Bröst')} />
+            <circle cx="50" cy="100" r="18" {...pathProps('Axlar')} />
+            <circle cx="150" cy="100" r="18" {...pathProps('Axlar')} />
+            <rect x="80" y="160" width="40" height="70" rx="8" {...pathProps('Mage')} />
+            <path d="M65,240 L85,360 L55,360 Z" {...pathProps('Framsida lår')} />
+            <path d="M135,240 L115,360 L145,360 Z" {...pathProps('Framsida lår')} />
+            <ellipse cx="40" cy="140" rx="10" ry="22" {...pathProps('Biceps')} />
+            <ellipse cx="160" cy="140" rx="10" ry="22" {...pathProps('Biceps')} />
+          </svg>
         </div>
-        {!loadMap && (
-           <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
-              <Activity size={12} className="text-accent-pink" />
-              <span className="text-[8px] font-black uppercase tracking-widest text-text-dim">Live status</span>
-           </div>
-        )}
+        <div className="flex flex-col items-center gap-2">
+          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/20">Back</span>
+          <svg viewBox="0 0 200 500" className="h-72 w-auto drop-shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+            <path d="M60,90 L140,90 L125,200 L75,200 Z" {...pathProps('Rygg')} />
+            <ellipse cx="40" cy="140" rx="10" ry="22" {...pathProps('Triceps')} />
+            <ellipse cx="160" cy="140" rx="10" ry="22" {...pathProps('Triceps')} />
+            <circle cx="75" cy="235" r="22" {...pathProps('Säte')} />
+            <circle cx="125" cy="235" r="22" {...pathProps('Säte')} />
+            <rect x="62" y="265" width="28" height="85" rx="6" {...pathProps('Baksida lår')} />
+            <rect x="110" y="265" width="28" height="85" rx="6" {...pathProps('Baksida lår')} />
+            <ellipse cx="75" cy="400" rx="14" ry="35" {...pathProps('Vader')} />
+            <ellipse cx="125" cy="400" rx="14" ry="35" {...pathProps('Vader')} />
+          </svg>
+        </div>
       </div>
-
-      <div className={`grid gap-2 ${size === 'lg' ? 'max-h-[60vh]' : 'max-h-[40vh]'} overflow-y-auto scrollbar-hide pr-1`}>
-        {muscleScores.map(({ muscle, score, loadCount }) => {
-          const isSelected = selectedMuscles.includes(muscle);
-          const displayScore = loadMap ? loadCount : score;
-          const color = loadMap 
-            ? getLoadColor(displayScore) 
-            : getRecoveryColor(displayScore, isSelected);
-
-          const statusText = loadMap 
-            ? (loadCount > 0 ? `Belastning: ${Math.round(loadCount)}` : '-')
-            : getRecoveryStatus(score);
-
-          const opacity = loadMap && loadCount === 0 ? 0.3 : 1;
-
-          return (
-            <div 
-              key={muscle}
-              onClick={() => handleClick(muscle)}
-              className={`p-4 rounded-2xl transition-all border flex flex-col gap-2 ${
-                isSelected 
-                  ? 'bg-accent-pink/10 border-accent-pink' 
-                  : 'bg-white/5 border-white/5 hover:border-white/10'
-              } ${interactive ? 'cursor-pointer active:scale-[0.98]' : ''}`}
-              style={{ opacity }}
-            >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className={`w-1.5 h-1.5 rounded-full`} style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }} />
-                  <span className="font-black uppercase italic text-xs tracking-tight">{muscle}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-text-dim">{statusText}</span>
-                  {!loadMap && <span className="text-[11px] font-black italic text-white/80">{score}%</span>}
-                </div>
-              </div>
-
-              <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden relative">
-                <div 
-                  className="h-full transition-all duration-1000 ease-out rounded-full"
-                  style={{ 
-                    width: `${displayScore}%`, 
-                    backgroundColor: color,
-                  }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      
-      {loadMap && (
-          <p className="text-[9px] text-center text-text-dim uppercase tracking-widest pt-2">
-              Muskler högst upp får mest träning detta pass.
-          </p>
-      )}
     </div>
   );
 };

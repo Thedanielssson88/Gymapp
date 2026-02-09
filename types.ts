@@ -13,7 +13,9 @@ export enum MovementPattern {
   CARDIO = 'Kondition'
 }
 
-export type TrackingType = 'reps_weight' | 'reps_only' | 'time_only';
+export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only';
+
+export type ExerciseTier = 'tier_1' | 'tier_2' | 'tier_3';
 
 export type MuscleGroup = 
   | 'Mage' 
@@ -35,23 +37,18 @@ export type MuscleGroup =
   | 'Rotatorcuff';
 
 export enum Equipment {
-  // --- FRIA VIKTER & STÄNGER ---
   BARBELL = 'Skivstång',
   EZ_BAR = 'EZ-stång',
   TRAP_BAR = 'Trap-bar / Hex-bar',
   DUMBBELL = 'Hantlar',
   KETTLEBELL = 'Kettlebell',
   PLATE = 'Viktskiva',
-
-  // --- MASKINER (BEN) ---
   LEG_PRESS = 'Benpress',
   HACK_SQUAT = 'Hack Squat',
   LEG_EXTENSION = 'Benspark',
   LEG_CURL = 'Lårcurl',
   CALF_RAISE = 'Vadpress',
   SMITH_MACHINE = 'Smith-maskin',
-
-  // --- MASKINER (ÖVERKROPP) ---
   CABLES = 'Kabelmaskin',
   LAT_PULLDOWN = 'Latsdrag',
   SEATED_ROW = 'Sittande Rodd',
@@ -59,8 +56,6 @@ export enum Equipment {
   SHOULDER_PRESS = 'Axelpress',
   PEC_DECK = 'Pec Deck / Flyes',
   ASSISTED_MACHINE = 'Assisterad Chins/Dips',
-
-  // --- KROPPSVIKT & FUNKTIONELLT ---
   BODYWEIGHT = 'Kroppsvikt',
   PULLUP_BAR = 'Räckhävsstång',
   DIP_STATION = 'Dipsställning',
@@ -69,13 +64,11 @@ export enum Equipment {
   MEDICINE_BALL = 'Medicinboll',
   BOX = 'Box / Låda',
   BENCH = 'Träningsbänk',
-  
-  // --- HYROX & SPECIAL ---
   SKI_ERG = 'SkiErg',
   ROWER = 'Roddmaskin',
   SLED = 'Släde',
-
-  // --- LEGACY / ÖVRIGT ---
+  SANDBAG = 'Sandbag',
+  TREADMILL = 'Löpband',
   MACHINES = 'Maskiner (Övriga)'
 }
 
@@ -96,9 +89,11 @@ export interface GoalTarget {
 export interface Exercise {
   id: string;
   name: string;
+  englishName?: string;
   pattern: MovementPattern;
+  tier: ExerciseTier;
   muscleGroups: MuscleGroup[]; 
-  primaryMuscles?: MuscleGroup[]; 
+  primaryMuscles: MuscleGroup[]; 
   secondaryMuscles?: MuscleGroup[];
   equipment: Equipment[];
   difficultyMultiplier: number;
@@ -126,6 +121,13 @@ export interface BodyMeasurements {
   bodyFat?: number;
 }
 
+export interface UserSettings {
+  includeWarmupInStats: boolean;
+  restTimer?: number;
+  keepAwake?: boolean;
+  bodyViewMode?: 'list' | 'map';
+}
+
 export interface UserProfile {
   id?: string;
   name: string;
@@ -133,8 +135,9 @@ export interface UserProfile {
   height: number;
   level: 'Nybörjare' | 'Medel' | 'Avancerad' | 'Elit';
   goal: Goal;
-  injuries: string[];
+  injuries: MuscleGroup[];
   measurements: BodyMeasurements;
+  settings?: UserSettings;
 }
 
 export interface Zone {
