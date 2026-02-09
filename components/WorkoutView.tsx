@@ -8,7 +8,8 @@ import { WorkoutGenerator } from './WorkoutGenerator';
 import { WorkoutHeader } from './WorkoutHeader';
 import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
-import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap } from 'lucide-react';
+import { useExerciseImage } from '../hooks/useExerciseImage';
+import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy } from 'lucide-react';
 
 interface WorkoutViewProps {
   session: WorkoutSession;
@@ -333,75 +334,148 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   );
 };
 
-const InfoModal: React.FC<{ exercise: Exercise; exIdx: number; onClose: () => void; history: WorkoutSession[]; onApplyHistory: (exIdx: number, sets: WorkoutSet[]) => void; onSwap: (exIdx: number, newExId: string) => void; allExercises: Exercise[]; activeZone: Zone; }> = ({ exercise, exIdx, onClose, history, onApplyHistory, onSwap, allExercises, activeZone }) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
-  const exerciseHistory = useMemo(() => history.map(s => ({ ...s, exercises: s.exercises.filter(e => e.exerciseId === exercise.id) })).filter(s => s.exercises.length > 0).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [history, exercise.id]);
+const InfoModal: React.FC<{ 
+  exercise: Exercise; 
+  exIdx: number; 
+  onClose: () => void; 
+  history: WorkoutSession[]; 
+  onApplyHistory: (exIdx: number, sets: WorkoutSet[]) => void; 
+  onSwap: (exIdx: number, newExId: string) => void; 
+  allExercises: Exercise[]; 
+  activeZone: Zone; 
+}> = ({ exercise, exIdx, onClose, history, onApplyHistory, onSwap, allExercises, activeZone }) => {
   
+  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
+  const imageSrc = useExerciseImage(exercise);
+
+  const exerciseHistory = useMemo(() => {
+    return history
+      .map(session => {
+        const exData = session.exercises.find(e => e.exerciseId === exercise.id && e.sets.some(s => s.completed));
+        return { session, exData };
+      })
+      .filter(item => item.exData)
+      .sort((a, b) => new Date(b.session.date).getTime() - new Date(a.session.date).getTime())
+      .map(({ session, exData }) => {
+        const bestSet = exData!.sets.reduce((prev, current) => {
+           if (!current.completed) return prev;
+           const currentVolume = (current.weight || 0) * (current.reps || 0);
+           const prevVolume = (prev.weight || 0) * (prev.reps || 0);
+           return currentVolume > prevVolume ? current : prev;
+        }, { weight: 0, reps: 0, completed: false } as WorkoutSet);
+        return {
+          date: session.date,
+          sessionName: session.name,
+          bestSet,
+          fullSets: exData!.sets
+        };
+      })
+      .slice(0, 10);
+  }, [history, exercise.id]);
+
   const alternatives = useMemo(() => {
     const hasDefinedAlts = exercise.alternativeExIds && exercise.alternativeExIds.length > 0;
-    
-    // Använd användardefinierade alternativ om de finns, annars fall tillbaka på rörelsemönster
     const sourceList = hasDefinedAlts
       ? allExercises.filter(ex => exercise.alternativeExIds!.includes(ex.id))
       : allExercises.filter(ex => ex.pattern === exercise.pattern && ex.id !== exercise.id);
-
-    // Filtrera alltid listan baserat på tillgänglig utrustning i den aktiva zonen
     return sourceList.filter(alt => alt.equipment.every(eq => activeZone.inventory.includes(eq)));
   }, [allExercises, exercise, activeZone]);
 
-
-  const TabButton = ({ id, label, icon }: { id: 'info' | 'history' | 'alternatives', label: string, icon: React.ReactNode }) => (
-    <button onClick={() => setActiveTab(id)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-2 transition-all ${activeTab === id ? 'text-white' : 'text-text-dim opacity-50'}`}>
-      {icon} {label}
-    </button>
-  );
-
   return (
-    <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-xl z-[250] flex flex-col animate-in fade-in duration-300">
-      <header className="p-6 flex justify-between items-center"><h2 className="text-2xl font-black italic uppercase leading-none tracking-tighter">{exercise.name}</h2><button onClick={onClose} className="p-2 bg-white/5 rounded-full text-white/60"><X size={24}/></button></header>
-      <div className="flex border-y border-white/5 bg-black/20"><TabButton id="info" label="Info" icon={<Info size={16}/>} /><TabButton id="history" label="Historik" icon={<History size={16}/>} /><TabButton id="alternatives" label="Alternativ" icon={<ArrowRightLeft size={16}/>} /></div>
-      
-      <div className="flex-1 overflow-y-auto scrollbar-hide p-6 space-y-6">
+    <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-md z-[250] flex flex-col animate-in fade-in duration-300">
+      <div className="p-6 border-b border-white/5 bg-[#0f0d15] flex justify-between items-start shrink-0">
+        <div className="flex items-center gap-4">
+           <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 bg-white/5 flex-shrink-0">
+              {imageSrc ? (
+                <img src={imageSrc} alt={exercise.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Dumbbell className="text-white/20" size={24} />
+                </div>
+              )}
+           </div>
+           <div>
+             <h2 className="text-2xl font-black italic uppercase leading-none mb-1 tracking-tighter text-white">
+               {exercise.name}
+             </h2>
+             {exercise.englishName && (
+               <p className="text-xs font-bold text-white/40 italic leading-none tracking-tight">
+                 {exercise.englishName}
+               </p>
+             )}
+           </div>
+        </div>
+        <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl text-text-dim hover:bg-white/10 transition-colors"><X size={24} /></button>
+      </div>
+      <div className="flex p-4 gap-2 border-b border-white/5 shrink-0">
+        {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'history', label: 'Historik', icon: History }, { id: 'alternatives', label: 'Alternativ', icon: Shuffle }].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1.5 transition-all ${activeTab === tab.id ? 'bg-white text-black shadow-lg scale-[1.02]' : 'bg-white/5 text-text-dim hover:bg-white/10'}`}>
+            <tab.icon size={16} /> {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {activeTab === 'info' && (
-          <div className="space-y-6 animate-in fade-in">
-             <InfoSection title="Instruktioner" content={exercise.description || 'Inga instruktioner.'} />
-             <InfoSection title="Primära Muskler" tags={exercise.primaryMuscles} />
-             {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 && <InfoSection title="Sekundära Muskler" tags={exercise.secondaryMuscles} />}
-             <InfoSection title="Utrustning" tags={exercise.equipment} />
+          <div className="space-y-6 animate-in slide-in-from-bottom-2">
+             <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1.5 bg-accent-blue/10 border border-accent-blue/20 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-blue">{exercise.pattern}</span>
+                <span className="px-3 py-1.5 bg-accent-pink/10 border border-accent-pink/20 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">{exercise.tier.replace('_', ' ')}</span>
+                {exercise.equipment.map(eq => (<span key={eq} className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-text-dim">{eq}</span>))}
+             </div>
+             <div className="bg-[#1a1721] p-5 rounded-3xl border border-white/5">
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mb-3 flex items-center gap-2"><BookOpen size={12} /> Utförande</h4>
+                <p className="text-sm leading-relaxed text-white/90 font-medium">{exercise.description || 'Ingen beskrivning tillgänglig.'}</p>
+             </div>
+             <div>
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mb-3 ml-1">Muskler</h4>
+                <div className="flex flex-wrap gap-2">
+                   {exercise.primaryMuscles.map(m => (<div key={m} className="px-4 py-2 bg-[#1a1721] border-l-2 border-accent-pink rounded-r-xl text-xs font-bold text-white shadow-sm">{m}</div>))}
+                   {exercise.secondaryMuscles?.map(m => (<div key={m} className="px-4 py-2 bg-[#1a1721] border-l-2 border-white/20 rounded-r-xl text-xs font-bold text-text-dim shadow-sm">{m}</div>))}
+                </div>
+             </div>
           </div>
         )}
         {activeTab === 'history' && (
-          <div className="space-y-4 animate-in fade-in">
-            {exerciseHistory.length > 0 ? exerciseHistory.map(session => (
-              <div key={session.id} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5">
-                <div className="flex justify-between items-center mb-3">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-text-dim">{new Date(session.date).toLocaleDateString('sv-SE')}</p>
-                  <button onClick={() => onApplyHistory(exIdx, session.exercises[0].sets)} className="bg-accent-blue/10 text-accent-blue px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95">Använd detta</button>
-                </div>
-                <div className="space-y-1">{session.exercises[0].sets.filter(s=>s.completed).map((s,i) => <p key={i} className="text-xs font-mono text-white/80">Set {i+1}: {s.weight}kg x {s.reps} reps</p>)}</div>
-              </div>
-            )) : <p className="text-center text-text-dim text-xs">Ingen historik för denna övning.</p>}
+          <div className="space-y-3 animate-in slide-in-from-bottom-2">
+             {exerciseHistory.length > 0 ? (
+               exerciseHistory.map((item, idx) => (
+                 <div key={idx} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 flex justify-between items-center group">
+                    <div>
+                       <div className="flex items-center gap-2 mb-1"><Calendar size={12} className="text-text-dim" /><span className="text-[10px] font-black uppercase text-text-dim tracking-widest">{new Date(item.date).toLocaleDateString('sv-SE')}</span></div>
+                       <p className="text-xs font-bold text-white/60">{item.sessionName}</p>
+                       <button onClick={() => onApplyHistory(exIdx, item.fullSets)} className="mt-2 bg-accent-blue/10 text-accent-blue text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">Använd detta</button>
+                    </div>
+                    {item.bestSet && (
+                      <div className="text-right">
+                         <span className="text-xl font-black italic text-white block leading-none">{item.bestSet.weight} <span className="text-[10px] text-text-dim not-italic font-bold">kg</span></span>
+                         <span className="text-[10px] font-bold text-accent-blue uppercase tracking-wider">x {item.bestSet.reps} reps</span>
+                      </div>
+                    )}
+                 </div>
+               ))
+             ) : ( <div className="py-12 text-center opacity-40"><History size={48} className="mx-auto mb-4" strokeWidth={1} /><p className="text-xs font-bold uppercase tracking-widest">Ingen historik än</p></div>)}
           </div>
         )}
         {activeTab === 'alternatives' && (
-          <div className="space-y-3 animate-in fade-in">
-            {alternatives.length > 0 ? alternatives.map(alt => (
-              <div key={alt.id} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 flex items-center justify-between">
-                <div><p className="font-black italic uppercase text-sm">{alt.name}</p><p className="text-[9px] text-text-dim font-bold uppercase tracking-widest">{alt.equipment.join(', ')}</p></div>
-                <button onClick={() => onSwap(exIdx, alt.id)} className="bg-white/5 text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 hover:bg-white/10">Byt</button>
-              </div>
-            )) : <p className="text-center text-text-dim text-xs">Inga tillgängliga alternativ i {activeZone.name}.</p>}
+          <div className="space-y-3 animate-in slide-in-from-bottom-2">
+             <p className="text-[10px] font-black uppercase text-text-dim tracking-widest mb-2 ml-1">Liknande övningar ({exercise.primaryMuscles[0]})</p>
+             {alternatives.length > 0 ? (
+               alternatives.map(alt => (
+                 <div key={alt.id} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 flex items-center justify-between group">
+                    <div className="flex items-center gap-4">
+                       <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/5"><Shuffle size={16} className="text-white/40" /></div>
+                       <div>
+                          <p className="text-sm font-black italic uppercase text-white">{alt.name}</p>
+                          <p className="text-[9px] font-bold text-text-dim uppercase tracking-widest">{alt.equipment.join(', ')}</p>
+                       </div>
+                    </div>
+                    <button onClick={() => onSwap(exIdx, alt.id)} className="bg-white/5 text-white px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 hover:bg-white/10">Byt</button>
+                 </div>
+               ))
+             ) : (<div className="py-12 text-center opacity-40"><Shuffle size={48} className="mx-auto mb-4" strokeWidth={1} /><p className="text-xs font-bold uppercase tracking-widest">Inga alternativ hittades</p></div>)}
           </div>
         )}
       </div>
     </div>
   );
 };
-
-const InfoSection = ({ title, content, tags }: { title: string, content?: string, tags?: string[] }) => (
-  <div>
-    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2 mb-3">{title}</h4>
-    {content && <p className="text-sm leading-relaxed text-white/80 font-medium">{content}</p>}
-    {tags && <div className="flex flex-wrap gap-2">{tags.map(t => <span key={t} className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-white/80">{t}</span>)}</div>}
-  </div>
-);

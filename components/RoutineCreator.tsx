@@ -115,8 +115,11 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
             return (
               <div key={`${item.exerciseId}-${exIdx}`} className="bg-[#1a1721] border border-white/5 rounded-2xl p-4">
                 <div className="flex justify-between items-start mb-4">
-                  <h4 className="text-lg font-black italic uppercase text-white">{exData.name}</h4>
-                  <button onClick={() => removeExercise(exIdx)} className="text-text-dim hover:text-red-500"><Trash2 size={16} /></button>
+                  <div className="min-w-0">
+                    <h4 className="text-lg font-black italic uppercase text-white truncate">{exData.name}</h4>
+                    {exData.englishName && <p className="text-xs text-white/40 italic truncate">{exData.englishName}</p>}
+                  </div>
+                  <button onClick={() => removeExercise(exIdx)} className="text-text-dim hover:text-red-500 shrink-0"><Trash2 size={16} /></button>
                 </div>
                 <div className="space-y-2">
                   <div className="grid grid-cols-10 gap-2 text-[9px] font-black uppercase text-text-dim mb-1 px-2">

@@ -10,7 +10,8 @@ export enum MovementPattern {
   ISOLATION = 'Isolering',
   MOBILITY = 'Rörlighet / Stretch',
   REHAB = 'Rehab / Prehab',
-  CARDIO = 'Kondition'
+  CARDIO = 'Kondition',
+  EXPLOSIVE = 'Explosiv / Olympisk'
 }
 
 export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only';
@@ -34,6 +35,8 @@ export type MuscleGroup =
   | 'Adduktorer' 
   | 'Underarmar' 
   | 'Nacke'
+  | 'Höftböjare'
+  | 'Tibialis' // Ny för löpar-prehab
   | 'Rotatorcuff';
 
 export enum Equipment {
@@ -62,13 +65,21 @@ export enum Equipment {
   TRX = 'TRX / Ringar',
   BANDS = 'Gummiband',
   MEDICINE_BALL = 'Medicinboll',
+  SANDBAG = 'Sandbag',
   BOX = 'Box / Låda',
   BENCH = 'Träningsbänk',
   SKI_ERG = 'SkiErg',
   ROWER = 'Roddmaskin',
   SLED = 'Släde',
-  SANDBAG = 'Sandbag',
   TREADMILL = 'Löpband',
+  ASSAULT_BIKE = 'Assault Bike / Echo Bike',
+  BIKE_ERG = 'BikeErg',
+  TECHNOGYM_SKILLMILL = 'Kurvband / Skillmill',
+  BOSU_BALL = 'Bosuboll / Balansplatta',
+  FOAM_ROLLER = 'Foam Roller',
+  ROPE = 'Klätterrep',
+  JUMP_ROPE = 'Hopprep',
+  LANDMINE = 'Landmine / Skivstångshörna',
   MACHINES = 'Maskiner (Övriga)'
 }
 

@@ -1,9 +1,6 @@
 
-
-
-
-// FIX: Switched to a named import for Dexie to resolve issues with type resolution.
-import { Dexie, type Table } from 'dexie';
+// FIX: When subclassing Dexie, the default import must be used. A named import `{ Dexie }` will not correctly extend the class prototype, leading to errors where methods like `.version()` are not found.
+import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
   GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan 
@@ -16,8 +13,6 @@ export interface StoredImage {
   date: string;
 }
 
-// GymDatabase extends Dexie to provide a typed interface to the IndexedDB.
-// Always use named imports for Dexie to ensure proper type resolution in modern TypeScript environments.
 export class GymDatabase extends Dexie {
   userProfile!: Table<UserProfile, string>; 
   zones!: Table<Zone, string>;
