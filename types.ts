@@ -13,7 +13,7 @@ export enum MovementPattern {
   CARDIO = 'Kondition'
 }
 
-export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only';
+export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only';
 
 export type ExerciseTier = 'tier_1' | 'tier_2' | 'tier_3';
 
@@ -187,4 +187,27 @@ export interface BiometricLog {
   date: string;
   weight: number;
   measurements: BodyMeasurements;
+}
+
+export type ActivityType = 'gym' | 'cardio' | 'rehab' | 'mobility' | 'rest';
+
+export interface ScheduledActivity {
+  id: string;
+  date: string; // YYYY-MM-DD
+  type: ActivityType;
+  title: string;
+  isCompleted: boolean;
+  linkedSessionId?: string;
+  recurrenceId?: string;
+  exercises?: PlannedExercise[];
+}
+
+export interface RecurringPlan {
+  id: string;
+  type: ActivityType;
+  title: string;
+  daysOfWeek: number[]; // 0=Sunday, 1=Monday...
+  startDate: string;
+  endDate?: string;
+  exercises?: PlannedExercise[];
 }

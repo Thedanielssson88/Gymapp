@@ -1,5 +1,5 @@
 import { db, migrateFromLocalStorage } from './db';
-import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal } from '../types';
+import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan } from '../types';
 import { EXERCISE_DATABASE, INITIAL_GOAL_TARGETS, INITIAL_ZONES } from '../constants';
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -14,17 +14,14 @@ const DEFAULT_PROFILE: UserProfile = {
 
 export const storage = {
   init: async () => {
-    // 1. Kör migrering från localStorage om det behövs
     await migrateFromLocalStorage();
 
-    // 2. Uppdatera övningsdatabasen intelligent.
     const existingExercises = await db.exercises.toArray();
     const existingMap = new Map<string, Exercise>(existingExercises.map(e => [e.id, e]));
 
     const updates: Exercise[] = [];
     for (const coreEx of EXERCISE_DATABASE) {
       const existing = existingMap.get(coreEx.id);
-      
       if (!existing || !existing.userModified) {
         updates.push(coreEx);
       }
@@ -34,7 +31,6 @@ export const storage = {
       await db.exercises.bulkPut(updates);
     }
     
-    // 3. Seeda övrig data
     const zoneCount = await db.zones.count();
     if (zoneCount === 0) {
       await db.zones.bulkAdd(INITIAL_ZONES);
@@ -51,7 +47,6 @@ export const storage = {
     }
   },
 
-  // --- USER PROFILE ---
   getUserProfile: async (): Promise<UserProfile> => {
     const profile = await db.userProfile.get('current');
     return profile || { id: 'current', ...DEFAULT_PROFILE };
@@ -68,13 +63,11 @@ export const storage = {
     await db.biometricLogs.put(newLog);
   },
 
-  // --- BASIC GETTERS ---
   getBiometricLogs: async (): Promise<BiometricLog[]> => await db.biometricLogs.toArray(),
   getZones: async (): Promise<Zone[]> => await db.zones.toArray(),
   saveZone: async (zone: Zone) => await db.zones.put(zone),
   deleteZone: async (id: string) => await db.zones.delete(id),
 
-  // --- HISTORY ---
   getHistory: async (): Promise<WorkoutSession[]> => await db.workoutHistory.toArray(),
   saveToHistory: async (session: WorkoutSession) => {
     const completedSession = { 
@@ -83,9 +76,15 @@ export const storage = {
       date: session.date || new Date().toISOString() 
     };
     await db.workoutHistory.put(completedSession);
+    
+    // Check if we can mark a scheduled activity as completed
+    const dateStr = completedSession.date.split('T')[0];
+    const scheduled = await db.scheduledActivities.where('date').equals(dateStr).and(a => !a.isCompleted).first();
+    if (scheduled) {
+      await db.scheduledActivities.update(scheduled.id, { isCompleted: true, linkedSessionId: completedSession.id });
+    }
   },
 
-  // --- ACTIVE SESSION ---
   getActiveSession: async (): Promise<WorkoutSession | undefined> => {
     const sess = await db.activeSession.get('current');
     if (sess) {
@@ -106,11 +105,7 @@ export const storage = {
     }
   },
 
-  // --- EXERCISES ---
   getAllExercises: async (): Promise<Exercise[]> => await db.exercises.toArray(),
-  getCustomExercises: async (): Promise<Exercise[]> => {
-    return await db.exercises.filter(ex => ex.id.startsWith('custom-')).toArray();
-  },
   saveExercise: async (exercise: Exercise) => await db.exercises.put(exercise),
   deleteExercise: async (id: string) => {
     const ex = await db.exercises.get(id);
@@ -120,7 +115,6 @@ export const storage = {
     await db.exercises.delete(id);
   },
 
-  // --- GOALS & ROUTINES ---
   getGoalTargets: async (): Promise<GoalTarget[]> => await db.goalTargets.toArray(),
   saveGoalTarget: async (target: GoalTarget) => await db.goalTargets.put(target),
   
@@ -128,7 +122,6 @@ export const storage = {
   saveRoutine: async (routine: WorkoutRoutine) => await db.workoutRoutines.put(routine),
   deleteRoutine: async (id: string) => await db.workoutRoutines.delete(id),
 
-  // --- BILDHANTERING ---
   saveImage: async (blob: Blob): Promise<string> => {
     const id = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     await db.images.put({
@@ -148,5 +141,81 @@ export const storage = {
   
   deleteImage: async (id: string) => {
     await db.images.delete(id);
+  },
+
+  // --- PLANNING METHODS ---
+  getScheduledActivities: async (): Promise<ScheduledActivity[]> => {
+    await storage.generateRecurringActivities();
+    return await db.scheduledActivities.toArray();
+  },
+
+  addScheduledActivity: async (activity: ScheduledActivity) => {
+    await db.scheduledActivities.put(activity);
+  },
+
+  deleteScheduledActivity: async (id: string) => {
+    await db.scheduledActivities.delete(id);
+  },
+
+  toggleScheduledActivity: async (id: string) => {
+    const act = await db.scheduledActivities.get(id);
+    if (act) {
+      await db.scheduledActivities.update(id, { isCompleted: !act.isCompleted });
+    }
+  },
+
+  getRecurringPlans: async (): Promise<RecurringPlan[]> => await db.recurringPlans.toArray(),
+
+  addRecurringPlan: async (plan: RecurringPlan) => {
+    await db.recurringPlans.put(plan);
+    await storage.generateRecurringActivities();
+  },
+
+  deleteRecurringPlan: async (id: string) => {
+    await db.recurringPlans.delete(id);
+    const today = new Date().toISOString().split('T')[0];
+    // Delete future uncompleted activities from this plan
+    await db.scheduledActivities
+      .where('recurrenceId').equals(id)
+      .filter(act => act.date >= today && !act.isCompleted)
+      .delete();
+  },
+
+  generateRecurringActivities: async () => {
+    const plans = await db.recurringPlans.toArray();
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    
+    const generateUntil = new Date(today);
+    generateUntil.setDate(today.getDate() + 30); // Generate 1 month ahead
+
+    for (const plan of plans) {
+      let loopDate = new Date(Math.max(new Date(plan.startDate).getTime(), today.getTime()));
+      
+      while (loopDate <= generateUntil) {
+        if (plan.endDate && new Date(plan.endDate) < loopDate) break;
+
+        if (plan.daysOfWeek.includes(loopDate.getDay())) {
+          const dateStr = loopDate.toISOString().split('T')[0];
+          
+          const exists = await db.scheduledActivities
+            .where({ recurrenceId: plan.id, date: dateStr })
+            .first();
+
+          if (!exists) {
+            await db.scheduledActivities.put({
+              id: `gen-${plan.id}-${dateStr}`,
+              date: dateStr,
+              type: plan.type,
+              title: plan.title,
+              isCompleted: false,
+              recurrenceId: plan.id,
+              exercises: plan.exercises
+            });
+          }
+        }
+        loopDate.setDate(loopDate.getDate() + 1);
+      }
+    }
   }
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, MuscleGroup } from './types';
+import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan } from './types';
 import { WorkoutView } from './components/WorkoutView';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { WorkoutLog } from './components/WorkoutLog';
@@ -10,16 +10,14 @@ import { MeasurementsView } from './components/MeasurementsView';
 import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
 import { calculateMuscleRecovery } from './utils/recovery';
-import { RecoveryMap, MapMode } from './components/RecoveryMap';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
-import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings, Zap, ShieldAlert } from 'lucide-react';
+import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings } from 'lucide-react';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms'>('body');
-  const [bodySubTab, setBodySubTab] = useState<'status' | 'measurements' | 'stats' | 'settings'>('status');
-  const [mapMode, setMapMode] = useState<MapMode>('recovery');
+  const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'analytics' | 'settings'>('recovery');
   
   const [user, setUser] = useState<UserProfile | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -29,13 +27,14 @@ export default function App() {
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [goalTargets, setGoalTargets] = useState<GoalTarget[]>([]);
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
+  const [plannedActivities, setPlannedActivities] = useState<ScheduledActivity[]>([]);
 
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const refreshData = async () => {
-    const [p, z, h, logs, sess, ex, gt, r] = await Promise.all([
+    const [p, z, h, logs, sess, ex, gt, r, plans] = await Promise.all([
       storage.getUserProfile(),
       storage.getZones(),
       storage.getHistory(),
@@ -44,6 +43,7 @@ export default function App() {
       storage.getAllExercises(),
       storage.getGoalTargets(),
       storage.getRoutines(),
+      storage.getScheduledActivities()
     ]);
 
     if (z.length === 0 || p.name === "Atlet") {
@@ -60,6 +60,7 @@ export default function App() {
     setAllExercises(ex);
     setGoalTargets(gt);
     setRoutines(r);
+    setPlannedActivities(plans);
   };
 
   useEffect(() => {
@@ -71,7 +72,6 @@ export default function App() {
     initApp();
   }, []);
 
-  const recoveryStatus = useMemo(() => calculateMuscleRecovery(history, allExercises, user), [history, allExercises, user]);
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
   const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
@@ -109,18 +109,33 @@ export default function App() {
     setActiveTab('workout');
   };
 
-  const handleToggleInjury = async (muscle: MuscleGroup) => {
-    if (!user) return;
-    const currentInjuries = user.injuries || [];
-    let newInjuries;
-    if (currentInjuries.includes(muscle)) {
-      newInjuries = currentInjuries.filter(m => m !== muscle);
+  const handleAddPlan = async (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => {
+    if (isRecurring && days) {
+      const plan: RecurringPlan = {
+        id: `rec-${Date.now()}`,
+        type: activity.type,
+        title: activity.title,
+        daysOfWeek: days,
+        startDate: activity.date,
+        exercises: activity.exercises
+      };
+      await storage.addRecurringPlan(plan);
     } else {
-      newInjuries = [...currentInjuries, muscle];
+      await storage.addScheduledActivity(activity);
     }
-    const updatedProfile = { ...user, injuries: newInjuries };
-    await storage.setUserProfile(updatedProfile);
-    refreshData();
+    await refreshData();
+  };
+
+  const handleTogglePlan = async (id: string) => {
+    await storage.toggleScheduledActivity(id);
+    await refreshData();
+  };
+
+  const handleDeletePlan = async (id: string) => {
+    if (confirm("Ta bort planering?")) {
+      await storage.deleteScheduledActivity(id);
+      await refreshData();
+    }
   };
 
   if (!isReady || !user) {
@@ -132,7 +147,6 @@ export default function App() {
     );
   }
 
-  // Dölj navigering om vi är inne i ett aktivt pass
   const isWorkoutActive = activeTab === 'workout' && currentSession;
 
   const renderContent = () => {
@@ -166,68 +180,47 @@ export default function App() {
       case 'body':
         return (
           <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen">
-            <nav className="flex items-center justify-center gap-6 pt-8 border-b border-white/5 pb-4 px-2">
-              <button onClick={() => setBodySubTab('status')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'status' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Body Map</button>
-              <button onClick={() => setBodySubTab('measurements')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'measurements' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Mått</button>
-              <button onClick={() => setBodySubTab('stats')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'stats' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Stats</button>
-              <button onClick={() => setBodySubTab('settings')} className={`text-[10px] font-black uppercase tracking-[0.2em] transition-all ${bodySubTab === 'settings' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>
+            <nav className="flex items-center justify-center gap-4 pt-8 border-b border-white/5 pb-4 px-2">
+              <button 
+                onClick={() => setBodySubTab('recovery')} 
+                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'recovery' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
+              >
+                Återhämtning
+              </button>
+              <button 
+                onClick={() => setBodySubTab('measurements')} 
+                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'measurements' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
+              >
+                Mått
+              </button>
+              <button 
+                onClick={() => setBodySubTab('analytics')} 
+                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'analytics' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
+              >
+                Statistik
+              </button>
+              <button 
+                onClick={() => setBodySubTab('settings')} 
+                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'settings' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
+              >
                  <Settings size={16} />
               </button>
             </nav>
-            {bodySubTab === 'status' && (
-              <div className="animate-in zoom-in-95 space-y-6">
-                <div className="bg-[#1a1721] rounded-[32px] border border-white/5 overflow-hidden shadow-2xl">
-                  {/* SUB-TABS FÖR MAP MODE */}
-                  <div className="p-2 flex gap-2 border-b border-white/5">
-                    <button 
-                      onClick={() => setMapMode('recovery')}
-                      className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-                        mapMode === 'recovery' 
-                          ? 'bg-white/10 text-white shadow-lg' 
-                          : 'text-text-dim hover:bg-white/5'
-                      }`}
-                    >
-                      <Zap size={14} className={mapMode === 'recovery' ? 'text-accent-green' : ''} />
-                      Återhämtning
-                    </button>
-                    
-                    <button 
-                      onClick={() => setMapMode('injuries')}
-                      className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-                        mapMode === 'injuries' 
-                          ? 'bg-red-500/20 text-red-500 shadow-lg border border-red-500/20' 
-                          : 'text-text-dim hover:bg-white/5'
-                      }`}
-                    >
-                      <ShieldAlert size={14} />
-                      Skador
-                    </button>
-                  </div>
-
-                  <div className="p-6">
-                    <RecoveryMap 
-                      mode={mapMode}
-                      recoveryScores={recoveryStatus} 
-                      injuries={user.injuries}
-                      onToggle={handleToggleInjury}
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 text-center">
-                  <p className="text-[10px] font-black text-text-dim uppercase tracking-[0.3em] mb-2">Din dagsform</p>
-                  <p className="text-4xl font-black italic text-white uppercase tracking-tighter">
-                    {user.injuries.length > 0 ? 'Hanterar Skada' : 'Peak Performance'}
-                  </p>
-                </div>
-              </div>
+            {(bodySubTab === 'recovery' || bodySubTab === 'analytics') && (
+              <StatsView 
+                logs={biometricLogs} 
+                history={history} 
+                allExercises={allExercises} 
+                userProfile={user} 
+                onUpdateProfile={refreshData}
+                initialMode={bodySubTab === 'analytics' ? 'analytics' : 'recovery'}
+              />
             )}
             {bodySubTab === 'measurements' && <MeasurementsView profile={user} onUpdate={refreshData} />}
-            {bodySubTab === 'stats' && <StatsView logs={biometricLogs} history={history} allExercises={allExercises} userProfile={user} onUpdateProfile={refreshData} />}
             {bodySubTab === 'settings' && user && ( <SettingsView userProfile={user} onUpdate={refreshData} /> )}
           </div>
         );
-      case 'log': return <WorkoutLog history={history} allExercises={allExercises} />;
+      case 'log': return <WorkoutLog history={history} plannedActivities={plannedActivities} routines={routines} allExercises={allExercises} onAddPlan={handleAddPlan} onTogglePlan={handleTogglePlan} onDeletePlan={handleDeletePlan} />;
       case 'targets': return <TargetsView history={history} goalTargets={goalTargets} allExercises={allExercises} />;
       case 'library': return <ExerciseLibrary allExercises={allExercises} onUpdate={refreshData} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;

@@ -20,66 +20,121 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
   const getColor = (muscle: MuscleGroup) => {
     const isInjured = injuries.includes(muscle);
 
-    // 1. INJURY MODE (Editing)
-    if (mode === 'injuries') {
-      if (isInjured) return '#ef4444'; // Red
-      return 'rgba(255, 255, 255, 0.1)'; // Gray
-    }
-
-    // 2. RECOVERY MODE (Status)
+    // SKADELÄGE (Eller om muskeln är skadad i recovery-läge)
     if (isInjured) return '#ef4444'; 
 
+    // REDIGERING AV SKADOR (Ej valda är grå)
+    if (mode === 'injuries') return 'rgba(255, 255, 255, 0.1)';
+
+    // RECOVERYLÄGE
     const score = recoveryScores?.[muscle] ?? 100;
-    if (score >= 90) return '#22c55e'; // Green
-    if (score >= 50) return '#eab308'; // Yellow
+    if (score >= 90) return '#22c55e'; // Grön
+    if (score >= 50) return '#eab308'; // Gul
     return '#f97316'; // Orange
   };
 
   const handleClick = (muscle: MuscleGroup) => {
-    if (mode === 'injuries' && onToggle) {
-      onToggle(muscle);
+    if ((mode === 'injuries' || mode === 'recovery') && onToggle) {
+       onToggle(muscle);
     }
   };
 
-  const pathProps = (muscle: MuscleGroup) => ({
+  const p = (muscle: MuscleGroup) => ({
     fill: getColor(muscle),
     onClick: () => handleClick(muscle),
     className: `transition-all duration-300 ${mode === 'injuries' ? 'cursor-pointer hover:opacity-80 active:scale-95' : ''}`,
-    stroke: mode === 'injuries' ? 'rgba(255,255,255,0.05)' : 'none',
-    strokeWidth: "1"
+    stroke: 'rgba(255,255,255,0.1)',
+    strokeWidth: "0.5"
   });
 
   return (
-    <div className="flex flex-col items-center gap-8 py-4 select-none">
-      <div className="flex justify-center gap-12 w-full">
-        <div className="flex flex-col items-center gap-2">
-          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/20">Front</span>
-          <svg viewBox="0 0 200 500" className="h-72 w-auto drop-shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-            <path d="M65,95 Q100,105 135,95 L125,145 Q100,155 75,145 Z" {...pathProps('Bröst')} />
-            <circle cx="50" cy="100" r="18" {...pathProps('Axlar')} />
-            <circle cx="150" cy="100" r="18" {...pathProps('Axlar')} />
-            <rect x="80" y="160" width="40" height="70" rx="8" {...pathProps('Mage')} />
-            <path d="M65,240 L85,360 L55,360 Z" {...pathProps('Framsida lår')} />
-            <path d="M135,240 L115,360 L145,360 Z" {...pathProps('Framsida lår')} />
-            <ellipse cx="40" cy="140" rx="10" ry="22" {...pathProps('Biceps')} />
-            <ellipse cx="160" cy="140" rx="10" ry="22" {...pathProps('Biceps')} />
-          </svg>
-        </div>
-        <div className="flex flex-col items-center gap-2">
-          <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/20">Back</span>
-          <svg viewBox="0 0 200 500" className="h-72 w-auto drop-shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-            <path d="M60,90 L140,90 L125,200 L75,200 Z" {...pathProps('Rygg')} />
-            <ellipse cx="40" cy="140" rx="10" ry="22" {...pathProps('Triceps')} />
-            <ellipse cx="160" cy="140" rx="10" ry="22" {...pathProps('Triceps')} />
-            <circle cx="75" cy="235" r="22" {...pathProps('Säte')} />
-            <circle cx="125" cy="235" r="22" {...pathProps('Säte')} />
-            <rect x="62" y="265" width="28" height="85" rx="6" {...pathProps('Baksida lår')} />
-            <rect x="110" y="265" width="28" height="85" rx="6" {...pathProps('Baksida lår')} />
-            <ellipse cx="75" cy="400" rx="14" ry="35" {...pathProps('Vader')} />
-            <ellipse cx="125" cy="400" rx="14" ry="35" {...pathProps('Vader')} />
-          </svg>
-        </div>
-      </div>
+    <div className="flex justify-center gap-4 py-4 select-none overflow-x-auto scrollbar-hide">
+      
+      {/* --- FRAMSIDA --- */}
+      <svg viewBox="0 0 200 500" className="h-80 w-auto drop-shadow-xl shrink-0">
+        <text x="100" y="20" textAnchor="middle" fill="white" fontSize="10" opacity="0.3" fontWeight="900">FRONT</text>
+        
+        {/* Nacke */}
+        <rect x="90" y="35" width="20" height="15" rx="5" {...p('Nacke')} />
+        
+        {/* Trapezius (Övre) */}
+        <path d="M70,55 L90,40 L110,40 L130,55" {...p('Trapezius')} />
+
+        {/* Axlar */}
+        <circle cx="55" cy="75" r="18" {...p('Axlar')} />
+        <circle cx="145" cy="75" r="18" {...p('Axlar')} />
+
+        {/* Bröst */}
+        <path d="M73,75 Q100,95 127,75 L120,130 Q100,140 80,130 Z" {...p('Bröst')} />
+
+        {/* Biceps */}
+        <ellipse cx="40" cy="115" rx="12" ry="22" {...p('Biceps')} />
+        <ellipse cx="160" cy="115" rx="12" ry="22" {...p('Biceps')} />
+
+        {/* Underarmar */}
+        <path d="M35,145 L55,145 L50,190 L40,190 Z" {...p('Underarmar')} />
+        <path d="M165,145 L145,145 L150,190 L160,190 Z" {...p('Underarmar')} />
+
+        {/* Mage */}
+        <rect x="80" y="135" width="40" height="75" rx="5" {...p('Mage')} />
+
+        {/* Framsida lår */}
+        <path d="M75,220 L95,220 L95,330 L65,330 Z" {...p('Framsida lår')} />
+        <path d="M125,220 L105,220 L105,330 L135,330 Z" {...p('Framsida lår')} />
+
+        {/* Adduktorer (Insida lår) */}
+        <path d="M95,230 L95,300 L100,230 Z" {...p('Adduktorer')} />
+        <path d="M105,230 L105,300 L100,230 Z" {...p('Adduktorer')} />
+
+        {/* Abduktorer (Utsida höft/lår) */}
+        <path d="M65,220 L60,280 L75,230 Z" {...p('Abduktorer')} />
+        <path d="M135,220 L140,280 L125,230 Z" {...p('Abduktorer')} />
+        
+        {/* Vader (Syns lite framifrån) */}
+        <path d="M70,340 L90,340 L85,420 L75,420 Z" {...p('Vader')} />
+        <path d="M130,340 L110,340 L115,420 L125,420 Z" {...p('Vader')} />
+      </svg>
+
+      {/* --- BAKSIDA --- */}
+      <svg viewBox="0 0 200 500" className="h-80 w-auto drop-shadow-xl shrink-0">
+        <text x="100" y="20" textAnchor="middle" fill="white" fontSize="10" opacity="0.3" fontWeight="900">BACK</text>
+        
+        {/* Nacke */}
+        <rect x="90" y="35" width="20" height="15" rx="5" {...p('Nacke')} />
+
+        {/* Trapezius (Stor diamant på ryggen) */}
+        <path d="M70,55 L130,55 L100,140 Z" {...p('Trapezius')} />
+
+        {/* Axlar (Baksida) */}
+        <circle cx="50" cy="75" r="15" {...p('Axlar')} />
+        <circle cx="150" cy="75" r="15" {...p('Axlar')} />
+
+        {/* Rygg (Lats) */}
+        <path d="M65,80 L55,160 L100,190 L145,160 L135,80 L100,140 Z" {...p('Rygg')} />
+
+        {/* Ryggslut (Lower Back) */}
+        <rect x="85" y="190" width="30" height="25" {...p('Ryggslut')} />
+
+        {/* Triceps */}
+        <ellipse cx="40" cy="115" rx="11" ry="20" {...p('Triceps')} />
+        <ellipse cx="160" cy="115" rx="11" ry="20" {...p('Triceps')} />
+
+        {/* Underarmar (Bak) */}
+        <path d="M30,145 L50,145 L45,190 L35,190 Z" {...p('Underarmar')} />
+        <path d="M170,145 L150,145 L155,190 L165,190 Z" {...p('Underarmar')} />
+
+        {/* Säte */}
+        <path d="M60,220 Q100,210 140,220 Q140,260 100,260 Q60,260 60,220" {...p('Säte')} />
+
+        {/* Baksida lår */}
+        <path d="M70,265 L95,265 L90,340 L75,340 Z" {...p('Baksida lår')} />
+        <path d="M130,265 L105,265 L110,340 L125,340 Z" {...p('Baksida lår')} />
+
+        {/* Vader */}
+        <ellipse cx="82" cy="380" rx="13" ry="35" {...p('Vader')} />
+        <ellipse cx="118" cy="380" rx="13" ry="35" {...p('Vader')} />
+      </svg>
+
     </div>
   );
 };

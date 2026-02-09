@@ -117,9 +117,10 @@ export const generateWorkoutSession = (
     const hasEquipment = ex.equipment.every(eq => zone.inventory.includes(eq));
     if (!hasEquipment) return false;
 
+    // INJURY PROTECTION
     const impactsInjuredMuscle = ex.primaryMuscles.some(m => injuries.includes(m));
     if (impactsInjuredMuscle) {
-      // If muscle is injured, only allow REHAB exercises
+      // If muscle is injured, strictly only allow REHAB exercises
       return ex.pattern === MovementPattern.REHAB;
     }
 
@@ -128,16 +129,31 @@ export const generateWorkoutSession = (
 
   // 2. Build session based on Blueprint
   blueprint.forEach(slot => {
+    // Priority: Find exercises that target the muscle AND match the blueprint slot
     const slotCandidates = candidates.filter(ex => 
       ex.tier === slot.tier && 
       ex.primaryMuscles.some(m => targetMuscles.includes(m)) &&
       !plannedExercises.find(p => p.exerciseId === ex.id)
     );
 
-    if (slotCandidates.length === 0) return;
+    if (slotCandidates.length === 0) {
+      // Fallback: If no tier matches (especially common with injuries), try any tier for that muscle
+      const fallbackCandidates = candidates.filter(ex => 
+        ex.primaryMuscles.some(m => targetMuscles.includes(m)) &&
+        !plannedExercises.find(p => p.exerciseId === ex.id)
+      );
+      if (fallbackCandidates.length === 0) return;
+      
+      // Select the fallback
+      selectAndPlan(fallbackCandidates, slot);
+    } else {
+      selectAndPlan(slotCandidates, slot);
+    }
+  });
 
+  function selectAndPlan(pool: Exercise[], slot: any) {
     // 3. Prioritize Recovery Score
-    slotCandidates.sort((a, b) => {
+    pool.sort((a, b) => {
        const scoreA = recoveryStatus[a.primaryMuscles[0]] || 100;
        const scoreB = recoveryStatus[b.primaryMuscles[0]] || 100;
        
@@ -145,7 +161,7 @@ export const generateWorkoutSession = (
        return 0.5 - Math.random();
     });
 
-    const chosen = slotCandidates[0];
+    const chosen = pool[0];
     const historyData = getLastPerformance(chosen.id, history);
 
     plannedExercises.push({
@@ -153,9 +169,9 @@ export const generateWorkoutSession = (
       sets: historyData 
         ? createSmartSets(historyData, true) 
         : Array(slot.sets).fill({ reps: slot.reps, weight: 0, completed: false, type: 'normal' }),
-      notes: historyData ? 'Coach: Baserat på din förra prestation!' : 'Ny utmaning!'
+      notes: chosen.pattern === MovementPattern.REHAB ? 'Rehab-fokus pga skada.' : (historyData ? 'Coach: Baserat på din förra prestation!' : 'Ny utmaning!')
     });
-  });
+  }
 
   return plannedExercises;
 };

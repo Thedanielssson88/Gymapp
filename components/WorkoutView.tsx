@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType } from '../types';
-// Fixed: Removed non-existent export getExerciseHistory
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -23,8 +22,6 @@ interface WorkoutViewProps {
   onCancel: () => void;
 }
 
-type LibraryTab = 'all' | 'muscles' | 'equipment';
-
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session,
   allExercises,
@@ -43,13 +40,12 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeLibraryTab, setActiveLibraryTab] = useState<LibraryTab>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isLoadMapOpen, setIsLoadMapOpen] = useState(false);
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
-  const [infoExercise, setInfoExercise] = useState<Exercise | null>(null);
+  const [infoModalData, setInfoModalData] = useState<{ exercise: Exercise; index: number } | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [showZonePicker, setShowZonePicker] = useState(false);
+  const [suggestedPlan, setSuggestedPlan] = useState<ScheduledActivity | null>(null);
 
   useEffect(() => {
     let interval: any;
@@ -60,6 +56,17 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   }, [isTimerActive]);
 
   useEffect(() => {
+    const checkScheduled = async () => {
+       if (localSession.exercises.length > 0) return;
+       const today = new Date().toISOString().split('T')[0];
+       const plans = await storage.getScheduledActivities();
+       const planForToday = plans.find(p => p.date === today && !p.isCompleted && p.exercises && p.exercises.length > 0);
+       if (planForToday) setSuggestedPlan(planForToday);
+    };
+    checkScheduled();
+  }, [localSession.exercises.length]);
+
+  useEffect(() => {
     let interval: any;
     if (restTimer !== null && restTimer > 0) {
       interval = setInterval(() => setRestTimer(r => (r !== null ? r - 1 : 0)), 1000);
@@ -68,6 +75,16 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     }
     return () => clearInterval(interval);
   }, [restTimer]);
+
+  const handleApplySuggested = () => {
+    if (!suggestedPlan || !suggestedPlan.exercises) return;
+    setLocalSession(prev => {
+      const updated = { ...prev, exercises: suggestedPlan.exercises!, name: suggestedPlan.title };
+      storage.setActiveSession(updated);
+      return updated;
+    });
+    setSuggestedPlan(null);
+  };
 
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
@@ -84,6 +101,33 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       return updatedSession;
     });
     onZoneChange(targetZone);
+  };
+
+  const handleSwapExercise = (exIdx: number, newExerciseId: string) => {
+    setLocalSession(prev => {
+        const updatedExercises = [...prev.exercises];
+        const itemToSwap = updatedExercises[exIdx];
+        const currentEx = allExercises.find(e => e.id === itemToSwap.exerciseId)!;
+        const newEx = allExercises.find(e => e.id === newExerciseId)!;
+        const newSets = adaptVolume(itemToSwap.sets, currentEx, newEx, userProfile.goal);
+        updatedExercises[exIdx] = { ...itemToSwap, exerciseId: newExerciseId, sets: newSets };
+        const updatedSession = { ...prev, exercises: updatedExercises };
+        storage.setActiveSession(updatedSession);
+        return updatedSession;
+    });
+    setInfoModalData(null);
+  };
+
+  const handleApplyHistory = (exIdx: number, setsToApply: WorkoutSet[]) => {
+      setLocalSession(prev => {
+          const updatedExercises = [...prev.exercises];
+          const newSets = setsToApply.map(s => ({ ...s, completed: false, rpe: undefined }));
+          updatedExercises[exIdx] = { ...updatedExercises[exIdx], sets: newSets };
+          const updatedSession = { ...prev, exercises: updatedExercises };
+          storage.setActiveSession(updatedSession);
+          return updatedSession;
+      });
+      setInfoModalData(null);
   };
 
   const updateSet = useCallback((exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => {
@@ -156,7 +200,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   };
 
   const handleGenerate = (muscles: MuscleGroup[]) => {
-     // SMART GENERATOR CALL
      const generated = generateWorkoutSession(muscles, activeZone, allExercises, userProfile, history);
      if (generated.length === 0) { alert("Hittade inga övningar i denna zon för valda muskler."); return; }
      
@@ -183,16 +226,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return { results, loadMap: load };
   }, [localSession.exercises, allExercises, userProfile.weight]);
 
-  const filteredExercises = useMemo(() => {
-    return allExercises.filter(ex => {
-      const q = searchQuery.toLowerCase();
-      const matchesSearch = ex.name.toLowerCase().includes(q) || ex.englishName?.toLowerCase().includes(q);
-      let matchesCategory = true;
-      if (activeLibraryTab === 'muscles' && selectedCategory) matchesCategory = ex.muscleGroups.includes(selectedCategory as MuscleGroup);
-      else if (activeLibraryTab === 'equipment' && selectedCategory) matchesCategory = ex.equipment.includes(selectedCategory as Equipment);
-      return matchesSearch && matchesCategory;
-    });
-  }, [searchQuery, allExercises, activeLibraryTab, selectedCategory]);
+  const filteredExercises = useMemo(() => allExercises.filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()) || ex.englishName?.toLowerCase().includes(searchQuery.toLowerCase())), [searchQuery, allExercises]);
 
   return (
     <div className="space-y-4 pb-64 animate-in fade-in duration-500">
@@ -208,6 +242,19 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
            alert("Rutinen sparad!");
         }} 
       />
+
+      {suggestedPlan && (
+        <div className="mx-4 p-5 bg-accent-blue/10 border border-accent-blue/30 rounded-[32px] flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
+          <div className="flex items-center gap-4">
+             <div className="w-12 h-12 bg-accent-blue/20 rounded-2xl flex items-center justify-center text-accent-blue"><History size={24}/></div>
+             <div>
+               <p className="text-[10px] font-black uppercase text-accent-blue/70 tracking-widest leading-none mb-1">Planerat för idag</p>
+               <p className="text-base font-black italic uppercase text-white leading-none">{suggestedPlan.title}</p>
+             </div>
+          </div>
+          <button onClick={handleApplySuggested} className="bg-accent-blue text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Ladda</button>
+        </div>
+      )}
 
       <div className="px-4 space-y-4">
         <WorkoutStats results={muscleStats.results} loadMap={muscleStats.loadMap} isLoadMapOpen={isLoadMapOpen} onToggleLoadMap={() => setIsLoadMapOpen(!isLoadMapOpen)} />
@@ -233,7 +280,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         {localSession.exercises.map((item, exIdx) => {
           const exData = allExercises.find(e => e.id === item.exerciseId)!;
           return exData ? (
-            <ExerciseCard key={`${item.exerciseId}-${exIdx}`} item={item} exIdx={exIdx} exData={exData} userWeight={userProfile.weight} isNotesOpen={openNotesIdx === exIdx} onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)} onUpdateNotes={(notes) => updateNotes(exIdx, notes)} onRemove={() => removeExercise(exIdx)} onAddSet={() => addSetToExercise(exIdx)} onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} onShowInfo={() => setInfoExercise(exData)} />
+            <ExerciseCard key={`${item.exerciseId}-${exIdx}`} item={item} exIdx={exIdx} exData={exData} userWeight={userProfile.weight} isNotesOpen={openNotesIdx === exIdx} onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)} onUpdateNotes={(notes) => updateNotes(exIdx, notes)} onRemove={() => removeExercise(exIdx)} onAddSet={() => addSetToExercise(exIdx)} onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })} />
           ) : null;
         })}
       </div>
@@ -281,21 +328,80 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               })}</div>
         </div>
       )}
-      {infoExercise && <InfoModal exercise={infoExercise} onClose={() => setInfoExercise(null)} history={history} onApplyHistory={(sets) => {}} onSwap={(id) => {}} allExercises={allExercises} />}
+      {infoModalData && <InfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onSwap={handleSwapExercise} allExercises={allExercises} activeZone={activeZone} />}
     </div>
   );
 };
 
-const InfoModal: React.FC<{ exercise: Exercise, onClose: () => void, history: any[], onApplyHistory: (sets: WorkoutSet[]) => void, onSwap: (id: string) => void, allExercises: Exercise[] }> = ({ exercise, onClose, history, onSwap, allExercises }) => {
+const InfoModal: React.FC<{ exercise: Exercise; exIdx: number; onClose: () => void; history: WorkoutSession[]; onApplyHistory: (exIdx: number, sets: WorkoutSet[]) => void; onSwap: (exIdx: number, newExId: string) => void; allExercises: Exercise[]; activeZone: Zone; }> = ({ exercise, exIdx, onClose, history, onApplyHistory, onSwap, allExercises, activeZone }) => {
+  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
+  const exerciseHistory = useMemo(() => history.map(s => ({ ...s, exercises: s.exercises.filter(e => e.exerciseId === exercise.id) })).filter(s => s.exercises.length > 0).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [history, exercise.id]);
+  
+  const alternatives = useMemo(() => {
+    const hasDefinedAlts = exercise.alternativeExIds && exercise.alternativeExIds.length > 0;
+    
+    // Använd användardefinierade alternativ om de finns, annars fall tillbaka på rörelsemönster
+    const sourceList = hasDefinedAlts
+      ? allExercises.filter(ex => exercise.alternativeExIds!.includes(ex.id))
+      : allExercises.filter(ex => ex.pattern === exercise.pattern && ex.id !== exercise.id);
+
+    // Filtrera alltid listan baserat på tillgänglig utrustning i den aktiva zonen
+    return sourceList.filter(alt => alt.equipment.every(eq => activeZone.inventory.includes(eq)));
+  }, [allExercises, exercise, activeZone]);
+
+
+  const TabButton = ({ id, label, icon }: { id: 'info' | 'history' | 'alternatives', label: string, icon: React.ReactNode }) => (
+    <button onClick={() => setActiveTab(id)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-2 transition-all ${activeTab === id ? 'text-white' : 'text-text-dim opacity-50'}`}>
+      {icon} {label}
+    </button>
+  );
+
   return (
-    <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-sm z-[250] p-6 overflow-y-auto animate-in fade-in">
-      <div className="max-w-md mx-auto bg-[#1a1721] rounded-[40px] border border-white/10 overflow-hidden shadow-2xl pb-12">
-        <div className="p-8 space-y-8">
-          <div><h2 className="text-3xl font-black italic uppercase leading-none mb-1 tracking-tighter">{exercise.name}</h2>{exercise.englishName && <p className="text-sm font-bold text-white/40 italic leading-none mb-3 tracking-tight">{exercise.englishName}</p>}<div className="flex gap-2"><span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">{exercise.pattern}</span><span className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-blue">{exercise.tier.replace('_', ' ')}</span></div></div>
-          <div className="space-y-3"><h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2">Beskrivning</h4><p className="text-sm leading-relaxed text-white/80 font-medium">{exercise.description || 'Ingen beskrivning.'}</p></div>
-          <button onClick={onClose} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl font-black uppercase italic tracking-widest">Stäng</button>
-        </div>
+    <div className="fixed inset-0 bg-[#0f0d15]/90 backdrop-blur-xl z-[250] flex flex-col animate-in fade-in duration-300">
+      <header className="p-6 flex justify-between items-center"><h2 className="text-2xl font-black italic uppercase leading-none tracking-tighter">{exercise.name}</h2><button onClick={onClose} className="p-2 bg-white/5 rounded-full text-white/60"><X size={24}/></button></header>
+      <div className="flex border-y border-white/5 bg-black/20"><TabButton id="info" label="Info" icon={<Info size={16}/>} /><TabButton id="history" label="Historik" icon={<History size={16}/>} /><TabButton id="alternatives" label="Alternativ" icon={<ArrowRightLeft size={16}/>} /></div>
+      
+      <div className="flex-1 overflow-y-auto scrollbar-hide p-6 space-y-6">
+        {activeTab === 'info' && (
+          <div className="space-y-6 animate-in fade-in">
+             <InfoSection title="Instruktioner" content={exercise.description || 'Inga instruktioner.'} />
+             <InfoSection title="Primära Muskler" tags={exercise.primaryMuscles} />
+             {exercise.secondaryMuscles && exercise.secondaryMuscles.length > 0 && <InfoSection title="Sekundära Muskler" tags={exercise.secondaryMuscles} />}
+             <InfoSection title="Utrustning" tags={exercise.equipment} />
+          </div>
+        )}
+        {activeTab === 'history' && (
+          <div className="space-y-4 animate-in fade-in">
+            {exerciseHistory.length > 0 ? exerciseHistory.map(session => (
+              <div key={session.id} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-text-dim">{new Date(session.date).toLocaleDateString('sv-SE')}</p>
+                  <button onClick={() => onApplyHistory(exIdx, session.exercises[0].sets)} className="bg-accent-blue/10 text-accent-blue px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95">Använd detta</button>
+                </div>
+                <div className="space-y-1">{session.exercises[0].sets.filter(s=>s.completed).map((s,i) => <p key={i} className="text-xs font-mono text-white/80">Set {i+1}: {s.weight}kg x {s.reps} reps</p>)}</div>
+              </div>
+            )) : <p className="text-center text-text-dim text-xs">Ingen historik för denna övning.</p>}
+          </div>
+        )}
+        {activeTab === 'alternatives' && (
+          <div className="space-y-3 animate-in fade-in">
+            {alternatives.length > 0 ? alternatives.map(alt => (
+              <div key={alt.id} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div><p className="font-black italic uppercase text-sm">{alt.name}</p><p className="text-[9px] text-text-dim font-bold uppercase tracking-widest">{alt.equipment.join(', ')}</p></div>
+                <button onClick={() => onSwap(exIdx, alt.id)} className="bg-white/5 text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 hover:bg-white/10">Byt</button>
+              </div>
+            )) : <p className="text-center text-text-dim text-xs">Inga tillgängliga alternativ i {activeZone.name}.</p>}
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+const InfoSection = ({ title, content, tags }: { title: string, content?: string, tags?: string[] }) => (
+  <div>
+    <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-text-dim border-b border-white/5 pb-2 mb-3">{title}</h4>
+    {content && <p className="text-sm leading-relaxed text-white/80 font-medium">{content}</p>}
+    {tags && <div className="flex flex-wrap gap-2">{tags.map(t => <span key={t} className="px-3 py-1 bg-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-white/80">{t}</span>)}</div>}
+  </div>
+);

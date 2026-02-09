@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BarChart3, ChevronUp, ChevronDown } from 'lucide-react';
 import { RecoveryMap } from './RecoveryMap';
@@ -50,7 +49,8 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({
 
       {isLoadMapOpen && (
         <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-          <RecoveryMap loadMap={loadMap} size="md" />
+          {/* Use recoveryScores instead of loadMap and provide the required mode prop */}
+          <RecoveryMap mode="recovery" recoveryScores={loadMap} />
         </div>
       )}
     </div>

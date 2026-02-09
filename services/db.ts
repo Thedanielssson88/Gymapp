@@ -1,5 +1,13 @@
-import Dexie, { Table } from 'dexie';
-import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine } from '../types';
+
+
+
+
+// FIX: Switched to a named import for Dexie to resolve issues with type resolution.
+import { Dexie, type Table } from 'dexie';
+import { 
+  UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
+  GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan 
+} from '../types';
 
 export interface StoredImage {
   id: string;
@@ -8,6 +16,8 @@ export interface StoredImage {
   date: string;
 }
 
+// GymDatabase extends Dexie to provide a typed interface to the IndexedDB.
+// Always use named imports for Dexie to ensure proper type resolution in modern TypeScript environments.
 export class GymDatabase extends Dexie {
   userProfile!: Table<UserProfile, string>; 
   zones!: Table<Zone, string>;
@@ -18,12 +28,14 @@ export class GymDatabase extends Dexie {
   goalTargets!: Table<GoalTarget, string>;
   workoutRoutines!: Table<WorkoutRoutine, string>;
   images!: Table<StoredImage, string>;
+  scheduledActivities!: Table<ScheduledActivity, string>;
+  recurringPlans!: Table<RecurringPlan, string>;
 
   constructor() {
     super('MorphFitDB');
     
-    // Increment version to 2 to add the images table
-    (this as Dexie).version(2).stores({
+    // Schema definition for the Dexie database. The version number must be incremented for migrations.
+    this.version(4).stores({
       userProfile: 'id',
       zones: 'id',
       exercises: 'id, name, muscleGroups',
@@ -32,7 +44,9 @@ export class GymDatabase extends Dexie {
       activeSession: 'id',
       goalTargets: 'id',
       workoutRoutines: 'id',
-      images: 'id'
+      images: 'id',
+      scheduledActivities: 'id, date, type, recurrenceId',
+      recurringPlans: 'id'
     });
   }
 }
@@ -58,7 +72,8 @@ export const migrateFromLocalStorage = async () => {
   ];
 
   try {
-    await (db as Dexie).transaction('rw', (db as Dexie).tables, async () => {
+    // Perform migration within a transaction for data integrity.
+    await db.transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.activeSession, db.goalTargets, db.workoutRoutines], async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);
         if (raw) {

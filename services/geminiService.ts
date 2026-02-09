@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, WorkoutSession } from "../types";
 
@@ -14,7 +13,7 @@ export const getWorkoutInsights = async (
   try {
     // Initialisera Gemini klienten med API-nyckel från miljövariabler enligt riktlinjer.
     // Vi skapar en ny instans vid varje anrop för att säkerställa att vi har den senaste konfigurationen.
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',

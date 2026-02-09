@@ -1,36 +1,88 @@
 import React, { useState, useMemo } from 'react';
-import { WorkoutSession, Exercise, SetType, MovementPattern } from '../types';
+import { WorkoutSession, ScheduledActivity, ActivityType, WorkoutRoutine, Exercise, MovementPattern } from '../types';
 import { 
-  Share2, History, Settings, Plus, ChevronDown, X, Clock, 
-  Activity, Zap, Heart, ChevronRight, Dumbbell, 
-  Thermometer, AlertCircle 
+  Calendar as CalIcon, ChevronLeft, ChevronRight, CheckCircle2, 
+  Circle, Plus, Dumbbell, History, Repeat, Trash2, X, Share2, Settings, ChevronDown 
 } from 'lucide-react';
 
 interface WorkoutLogProps {
   history: WorkoutSession[];
+  plannedActivities: ScheduledActivity[];
+  routines: WorkoutRoutine[];
   allExercises: Exercise[];
+  onAddPlan: (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => void;
+  onTogglePlan: (id: string) => void;
+  onDeletePlan: (id: string) => void;
 }
 
-export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises }) => {
+export const WorkoutLog: React.FC<WorkoutLogProps> = ({ 
+  history, plannedActivities, routines, allExercises, onAddPlan, onTogglePlan, onDeletePlan 
+}) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [showPlanModal, setShowPlanModal] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   
-  const today = new Date();
-  const weekDays = ['SÖ', 'MÅ', 'TI', 'ON', 'TO', 'FR', 'LÖ'];
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
-  
-  const calendarDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(today.getDate() - today.getDay() + i);
-    return {
-      day: weekDays[d.getDay()],
-      date: d.getDate(),
-      isToday: d.toDateString() === today.toDateString()
-    };
-  });
+  // State for the modal
+  const [planTitle, setPlanTitle] = useState('');
+  const [planDate, setPlanDate] = useState('');
+  const [planType, setPlanType] = useState<ActivityType>('gym');
+  const [selectedRoutineId, setSelectedRoutineId] = useState<string>('');
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return `${d.getDate()} ${monthNames[d.getMonth()].toUpperCase()}`;
+  // --- CALENDAR LOGIC (Weekly View) ---
+  const startOfWeek = useMemo(() => {
+    const d = new Date(currentDate);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+  }, [currentDate]);
+
+  const weekDays = useMemo(() => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek);
+      d.setDate(d.getDate() + i);
+      days.push(new Date(d));
+    }
+    return days;
+  }, [startOfWeek]);
+
+  const dateKey = (d: Date) => d.toISOString().split('T')[0];
+
+  const handleSavePlan = () => {
+    const routine = routines.find(r => r.id === selectedRoutineId);
+    const exercises = routine ? routine.exercises : [];
+    const finalTitle = planTitle || routine?.name || 'Träning';
+
+    const activity: ScheduledActivity = {
+      id: `manual-${Date.now()}`,
+      date: planDate || dateKey(new Date()),
+      type: planType,
+      title: finalTitle,
+      isCompleted: false,
+      exercises: exercises
+    };
+
+    onAddPlan(activity, isRecurring, selectedDays);
+    
+    setShowPlanModal(false);
+    setPlanTitle('');
+    setSelectedRoutineId('');
+    setIsRecurring(false);
+    setSelectedDays([]);
+  };
+
+  const toggleDay = (d: number) => {
+    if(selectedDays.includes(d)) setSelectedDays(selectedDays.filter(x => x !== d));
+    else setSelectedDays([...selectedDays, d]);
+  };
+
+  const getWeekNumber = (d: Date) => {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay()||7));
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+    return Math.ceil(( ( (date.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
   };
 
   const selectedSession = useMemo(() => 
@@ -41,294 +93,223 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({ history, allExercises })
   const calculateTotalVolume = (session: WorkoutSession) => {
     return session.exercises.reduce((total, pe) => {
       const exData = allExercises.find(e => e.id === pe.exerciseId);
-      if (exData?.trackingType === 'time_only' || exData?.pattern === MovementPattern.MOBILITY) {
-        return total;
-      }
-      const exVol = pe.sets.reduce((sum, s) => s.completed ? sum + (s.weight * s.reps) : sum, 0);
-      return total + exVol;
+      if (exData?.trackingType === 'time_only' || exData?.pattern === MovementPattern.MOBILITY) return total;
+      return total + pe.sets.reduce((sum, s) => s.completed ? sum + (s.weight * s.reps) : sum, 0);
     }, 0);
   };
 
-  const getFeelingIcon = (feeling?: string) => {
-    switch(feeling?.toLowerCase()) {
-      case 'pigg': return '⚡';
-      case 'stark': return '💪';
-      case 'trött': return '😴';
-      case 'sliten': return '🤕';
-      default: return '😐';
-    }
-  };
-
-  const getRpeColor = (rpe?: number) => {
-    if (!rpe) return 'text-text-dim';
-    if (rpe <= 4) return 'text-green-400';
-    if (rpe <= 7) return 'text-accent-blue';
-    if (rpe <= 9) return 'text-orange-400';
-    return 'text-accent-pink';
-  };
-
-  // --- HJÄLPFUNKTION FÖR SET-TYP BADGES ---
-  const renderSetTypeIndicator = (type?: SetType) => {
-    switch (type) {
-      case 'warmup':
-        return (
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/20 ml-2">
-            <Thermometer size={8} className="text-yellow-500" />
-            <span className="text-[7px] font-black text-yellow-500 uppercase tracking-tighter">VÄRM</span>
-          </div>
-        );
-      case 'drop':
-        return (
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 ml-2">
-            <Zap size={8} className="text-purple-500" />
-            <span className="text-[7px] font-black text-purple-500 uppercase tracking-tighter">DROP</span>
-          </div>
-        );
-      case 'failure':
-        return (
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 ml-2">
-            <AlertCircle size={8} className="text-red-500" />
-            <span className="text-[7px] font-black text-red-500 uppercase tracking-tighter">FAIL</span>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
-    <div className="min-h-screen pb-40 animate-in fade-in duration-700">
-      <header className="px-6 pt-8 pb-6 flex justify-between items-center">
-        <h1 className="text-4xl font-black tracking-tighter">Athlete</h1>
-        <div className="flex gap-4 items-center">
-          <button className="p-2 text-white/80 hover:text-white transition-colors">
-            <Share2 size={22} />
-          </button>
-          <button className="p-2 text-white/80 hover:text-white transition-colors">
-            <History size={22} />
-          </button>
-          <button className="p-2 text-white/80 hover:text-white transition-colors">
-            <Settings size={22} />
-          </button>
-        </div>
+    <div className="min-h-screen pb-40 animate-in fade-in duration-700 bg-[#0f0d15] text-white">
+      <header className="px-6 pt-12 pb-6 flex justify-between items-center">
+        <h1 className="text-4xl font-black italic uppercase tracking-tighter">Planering</h1>
+        <button 
+          onClick={() => { setPlanDate(dateKey(new Date())); setShowPlanModal(true); }}
+          className="bg-accent-pink text-white p-3 rounded-2xl shadow-[0_0_20px_rgba(255,45,85,0.3)] active:scale-95 transition-all"
+        >
+          <Plus size={28} strokeWidth={3} />
+        </button>
       </header>
 
-      <section className="px-6 mb-10">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold">Kalender</h2>
-          <button className="flex items-center gap-1 text-sm font-medium text-white/60">
-            {monthNames[today.getMonth()]} <ChevronDown size={14} />
-          </button>
-        </div>
-        
-        <div className="flex justify-between">
-          {calendarDays.map((d, i) => (
-            <div key={i} className="flex flex-col items-center gap-3">
-              <span className={`text-[10px] font-black tracking-widest ${d.isToday ? 'text-white' : 'text-white/40'}`}>
-                {d.day}
-              </span>
-              <span className={`text-base font-bold ${d.isToday ? 'text-white' : 'text-white/40'}`}>
-                {d.date}
-              </span>
-            </div>
-          ))}
+      {/* WEEK NAVIGATOR */}
+      <section className="px-4 mb-6">
+        <div className="flex items-center justify-between bg-[#1a1721] p-2 rounded-[24px] border border-white/5">
+          <button onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() - 7)))} className="p-3 text-text-dim hover:text-white"><ChevronLeft size={20}/></button>
+          <div className="text-center">
+            <span className="text-[9px] font-black uppercase text-text-dim tracking-widest block mb-0.5">Vecka {getWeekNumber(currentDate)}</span>
+            <span className="text-xs font-bold text-white uppercase tracking-tight">{currentDate.toLocaleDateString('sv-SE', { month: 'long', year: 'numeric' })}</span>
+          </div>
+          <button onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() + 7)))} className="p-3 text-text-dim hover:text-white"><ChevronRight size={20}/></button>
         </div>
       </section>
 
-      <section className="px-6">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-black italic tracking-tighter">Tidigare pass</h2>
-          <button className="bg-white/5 p-2 rounded-lg border border-white/5">
-            <Plus size={20} />
-          </button>
-        </div>
+      {/* CALENDAR DAYS */}
+      <section className="px-4 space-y-4">
+        {weekDays.map(day => {
+          const dKey = dateKey(day);
+          const isToday = dKey === dateKey(new Date());
+          const dayHistory = history.filter(h => h.date.startsWith(dKey));
+          const dayPlans = plannedActivities.filter(p => p.date === dKey);
 
-        <div className="space-y-8 relative">
-          <div className="absolute left-[3px] top-2 bottom-0 w-[1px] bg-white/10"></div>
+          return (
+            <div key={dKey} className={`min-h-[100px] rounded-[32px] border p-4 flex gap-4 transition-all ${isToday ? 'bg-white/5 border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.02)]' : 'bg-[#1a1721] border-white/5'}`}>
+              <div className="flex flex-col items-center w-12 pt-1 border-r border-white/5 pr-4">
+                <span className="text-[10px] font-black uppercase text-text-dim tracking-widest">{day.toLocaleDateString('sv-SE', {weekday:'short'}).toUpperCase()}</span>
+                <span className={`text-xl font-black italic ${isToday ? 'text-accent-pink' : 'text-white'}`}>{day.getDate()}</span>
+              </div>
 
-          {history.length > 0 ? (
-            history.slice().sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((session, idx) => (
-              <div key={session.id} className="relative pl-8">
-                <div className="absolute left-0 top-1.5 w-2 h-2 rounded-full bg-white/20 border border-[#0f0d15] z-10"></div>
-                
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-white/60">
-                    {formatDate(session.date)}
-                  </span>
-                  <div className="flex items-center gap-3">
-                    {session.rpe && (
-                       <span className={`text-[9px] font-black uppercase tracking-widest ${getRpeColor(session.rpe)}`}>
-                         RPE {session.rpe}
-                       </span>
-                    )}
-                    <span className="text-[10px] font-black text-white/40">
-                      {session.duration ? Math.floor(session.duration / 60) : 0} min
-                    </span>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => setSelectedSessionId(session.id)}
-                  className="w-full text-left bg-[#1a1721] rounded-3xl p-5 border border-white/5 flex gap-4 items-center shadow-lg relative group active:scale-[0.98] transition-all"
-                >
-                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-white/10 to-white/5 overflow-hidden flex items-center justify-center border border-white/5">
-                     <img 
-                       src={`https://api.dicebear.com/7.x/identicon/svg?seed=${session.name}-${idx}`} 
-                       className="w-10 h-10 opacity-30 grayscale"
-                       alt="icon"
-                     />
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h3 className="text-lg font-black uppercase tracking-tight mb-2 leading-none group-hover:text-accent-pink transition-colors">
-                      {session.name.toUpperCase()}
-                    </h3>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest block mb-0.5">Övningar</span>
-                        <span className="text-sm font-bold">{session.exercises.length}</span>
-                      </div>
-                      <div>
-                        <span className="text-[8px] font-black text-white/30 uppercase tracking-widest block mb-0.5">Volym</span>
-                        <span className="text-sm font-bold text-white/60">{calculateTotalVolume(session).toLocaleString()} kg</span>
+              <div className="flex-1 space-y-3 pt-1">
+                {dayHistory.map(h => (
+                  <button 
+                    key={h.id} 
+                    onClick={() => setSelectedSessionId(h.id)}
+                    className="w-full bg-green-500/10 border border-green-500/20 p-4 rounded-2xl flex items-center justify-between group active:scale-[0.98] transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 size={18} className="text-green-500" />
+                      <div className="text-left">
+                        <p className="text-sm font-black italic uppercase text-green-500/70 truncate">{h.name}</p>
+                        <p className="text-[9px] text-green-500/40 font-black uppercase tracking-widest">Slutfört • {h.duration ? Math.floor(h.duration / 60) : 0} MIN</p>
                       </div>
                     </div>
-                  </div>
+                    <History size={16} className="text-green-500/20" />
+                  </button>
+                ))}
 
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-60">
-                    <ChevronRight size={18} className="text-white/20 group-hover:text-accent-pink group-hover:translate-x-1 transition-all" />
-                  </div>
-                </button>
+                {dayPlans.map(p => {
+                  const isDone = p.isCompleted;
+                  if (isDone && dayHistory.some(h => h.id === p.linkedSessionId)) return null;
+                  
+                  return (
+                    <div key={p.id} className="relative group">
+                      <div 
+                        onClick={() => onTogglePlan(p.id)}
+                        className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                          isDone ? 'bg-white/5 border-white/5 opacity-50' : 'bg-accent-blue/10 border-accent-blue/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {isDone ? <CheckCircle2 size={18} className="text-text-dim"/> : <Circle size={18} className="text-accent-blue"/>}
+                          <div>
+                            <p className={`text-sm font-black italic uppercase ${isDone ? 'text-text-dim line-through' : 'text-white'}`}>{p.title}</p>
+                            <p className="text-[9px] text-text-dim font-black uppercase tracking-widest flex items-center gap-2">
+                              {p.type} 
+                              {p.exercises && p.exercises.length > 0 && `• ${p.exercises.length} Övningar`}
+                              {p.recurrenceId && <Repeat size={10} className="text-accent-blue" />}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <button onClick={(e) => {e.stopPropagation(); onDeletePlan(p.id)}} className="absolute -top-3 -right-3 bg-red-500/20 text-red-500 p-2 rounded-full border border-red-500/20 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                    </div>
+                  );
+                })}
+
+                {dayHistory.length === 0 && dayPlans.length === 0 && (
+                  <button 
+                    onClick={() => { setPlanDate(dKey); setShowPlanModal(true); }}
+                    className="w-full h-full flex items-center gap-3 px-4 py-3 border-2 border-dashed border-white/5 rounded-2xl text-text-dim/20 hover:text-text-dim hover:border-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                  >
+                    <Plus size={16}/> Planera Pass
+                  </button>
+                )}
               </div>
-            ))
-          ) : (
-            <div className="py-20 text-center text-white/20 font-black uppercase italic tracking-widest">
-              Inga sparade pass ännu
             </div>
-          )}
-        </div>
+          );
+        })}
       </section>
 
+      {/* PLAN MODAL */}
+      {showPlanModal && (
+        <div className="fixed inset-0 z-[200] bg-[#0f0d15]/95 backdrop-blur-xl flex items-end sm:items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-[#1a1721] w-full max-w-sm rounded-[40px] border border-white/10 p-8 shadow-2xl animate-in slide-in-from-bottom-10">
+            <header className="flex justify-between items-center mb-8">
+              <h3 className="text-2xl font-black italic uppercase text-white tracking-tighter">Planera</h3>
+              <button onClick={() => setShowPlanModal(false)} className="p-2 text-text-dim hover:text-white"><X size={24}/></button>
+            </header>
+            
+            <div className="space-y-6">
+              <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5">
+                <button onClick={() => setIsRecurring(false)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!isRecurring ? 'bg-white text-black' : 'text-text-dim'}`}>Enstaka</button>
+                <button onClick={() => setIsRecurring(true)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isRecurring ? 'bg-white text-black' : 'text-text-dim'}`}>Återkommande</button>
+              </div>
+
+              {isRecurring ? (
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-text-dim block text-center">Välj dagar</label>
+                  <div className="flex justify-between gap-1">
+                    {['S','M','T','O','T','F','L'].map((d, i) => (
+                      <button key={i} onClick={() => toggleDay(i)} className={`w-9 h-9 rounded-full text-[10px] font-black transition-all border ${selectedDays.includes(i) ? 'bg-accent-pink text-white border-accent-pink shadow-[0_0_10px_rgba(255,45,85,0.3)]' : 'bg-white/5 border-white/5 text-text-dim'}`}>{d}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-text-dim block mb-2">Datum</label>
+                  <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-accent-pink" />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-text-dim block mb-2">Vad ska köras?</label>
+                {routines.length > 0 && (
+                  <select 
+                    value={selectedRoutineId} 
+                    onChange={(e) => setSelectedRoutineId(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white text-sm font-bold outline-none mb-3"
+                  >
+                    <option value="">-- Välj Rutin --</option>
+                    {routines.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                )}
+                {!selectedRoutineId && (
+                  <input 
+                    type="text" 
+                    placeholder="Egen titel (t.ex. Rehab Axel)..." 
+                    value={planTitle} 
+                    onChange={e => setPlanTitle(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none placeholder:text-white/20"
+                  />
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                {(['gym', 'rehab', 'cardio'] as ActivityType[]).map(t => (
+                  <button key={t} onClick={() => setPlanType(t)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${planType === t ? 'bg-white text-black border-white' : 'bg-transparent border-white/10 text-text-dim'}`}>{t}</button>
+                ))}
+              </div>
+
+              <button onClick={handleSavePlan} className="w-full py-6 bg-accent-pink text-white rounded-[24px] font-black italic uppercase tracking-widest shadow-2xl mt-4 active:scale-95 transition-all">Spara Planering</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SESSION DETAIL MODAL (REUSED FROM PREVIOUS LOG) */}
       {selectedSession && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-0 flex flex-col animate-in slide-in-from-bottom-6 duration-500 overflow-y-auto scrollbar-hide">
+        <div className="fixed inset-0 bg-[#0f0d15] z-[250] p-0 flex flex-col animate-in slide-in-from-bottom-6 duration-500 overflow-y-auto scrollbar-hide">
           <header className="px-6 pt-12 pb-8 flex justify-between items-start sticky top-0 bg-[#0f0d15]/80 backdrop-blur-xl z-10 border-b border-white/5">
             <div>
               <span className="text-[10px] font-black text-accent-pink uppercase tracking-[0.4em] block mb-2">
-                {formatDate(selectedSession.date)} • {selectedSession.duration ? Math.floor(selectedSession.duration / 60) : 0} MIN
+                {selectedSession.date.split('T')[0]} • {selectedSession.duration ? Math.floor(selectedSession.duration / 60) : 0} MIN
               </span>
               <h2 className="text-4xl font-black italic uppercase tracking-tighter leading-none">{selectedSession.name}</h2>
             </div>
-            <button 
-              onClick={() => setSelectedSessionId(null)} 
-              className="p-3 bg-white/5 rounded-2xl border border-white/10 text-white/40 hover:text-white"
-            >
-              <X size={28}/>
-            </button>
+            <button onClick={() => setSelectedSessionId(null)} className="p-3 bg-white/5 rounded-2xl border border-white/10 text-white/40"><X size={28}/></button>
           </header>
 
           <div className="p-6 space-y-8 pb-32">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Zap size={14} className="text-accent-blue" />
-                  <span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Ansträngning</span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-3xl font-black italic ${getRpeColor(selectedSession.rpe)}`}>
-                    {selectedSession.rpe || '--'}
-                  </span>
-                  <span className="text-[10px] font-bold text-white/20 uppercase">RPE</span>
-                </div>
-              </div>
-              
-              <div className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Heart size={14} className="text-accent-pink" />
-                  <span className="text-[9px] font-black uppercase tracking-widest text-text-dim">Känsla</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{getFeelingIcon(selectedSession.feeling)}</span>
-                  <span className="text-lg font-black italic uppercase text-white/80">{selectedSession.feeling || 'OK'}</span>
-                </div>
-              </div>
-            </div>
-
             <div className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5">
               <div className="flex justify-between items-center mb-6">
-                 <div className="flex items-center gap-3">
-                   <Activity size={18} className="text-accent-pink" />
-                   <h4 className="text-xs font-black uppercase tracking-[0.2em]">Övningar & Belastning</h4>
-                 </div>
+                 <div className="flex items-center gap-3"><Dumbbell size={18} className="text-accent-pink" /><h4 className="text-xs font-black uppercase tracking-[0.2em]">Genomförda övningar</h4></div>
                  <span className="text-[10px] font-black text-white/40 uppercase">Totalt {calculateTotalVolume(selectedSession).toLocaleString()} kg</span>
               </div>
-
               <div className="space-y-6">
                 {selectedSession.exercises.map((pe, idx) => {
                   const ex = allExercises.find(e => e.id === pe.exerciseId);
-                  const completedSets = pe.sets.filter(s => s.completed);
-                  const exerciseVolume = completedSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-                  const isTimeOnly = ex?.trackingType === 'time_only';
-                  
                   return (
                     <div key={idx} className="space-y-3">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-3">
-                           <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center">
-                             <Dumbbell size={14} className="text-white/20" />
-                           </div>
-                           <div>
-                             <h5 className="font-black uppercase italic text-sm tracking-tight leading-none">{ex?.name || 'Okänd Övning'}</h5>
-                             <span className="text-[8px] font-black text-text-dim uppercase tracking-widest">{ex?.pattern}</span>
-                           </div>
+                           <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center"><Dumbbell size={14} className="text-white/20" /></div>
+                           <div><h5 className="font-black uppercase italic text-sm tracking-tight leading-none">{ex?.name || 'Okänd'}</h5><span className="text-[8px] font-black text-text-dim uppercase tracking-widest">{ex?.pattern}</span></div>
                         </div>
-                        {!isTimeOnly && <span className="text-[9px] font-black text-accent-pink uppercase">{exerciseVolume.toLocaleString()} KG</span>}
                       </div>
-
                       <div className="grid grid-cols-1 gap-1.5 pl-11">
-                        {pe.sets.map((set, sIdx) => (
-                          <div key={sIdx} className={`flex items-center justify-between text-[11px] py-1 px-3 rounded-lg border ${set.completed ? 'bg-white/5 border-white/5' : 'bg-transparent border-white/5 opacity-30'}`}>
+                        {pe.sets.filter(s => s.completed).map((set, sIdx) => (
+                          <div key={sIdx} className="flex items-center justify-between text-[11px] py-1 px-3 rounded-lg border border-white/5 bg-white/5">
                              <div className="flex items-center gap-4">
                                <span className="font-black text-text-dim/60 w-3">{sIdx + 1}</span>
-                               <span className="font-bold text-white/80">
-                                 {isTimeOnly ? `${set.reps} sek` : `${set.weight} kg x ${set.reps} reps`}
-                               </span>
-                               {renderSetTypeIndicator(set.type)}
+                               <span className="font-bold text-white/80">{set.weight} kg x {set.reps} reps</span>
                              </div>
-                             {set.completed ? (
-                               <div className="w-3 h-3 rounded-full bg-green-500/40 border border-green-500/20" />
-                             ) : (
-                               <div className="w-3 h-3 rounded-full border border-white/10" />
-                             )}
                           </div>
                         ))}
                       </div>
-
-                      {pe.notes && (
-                        <div className="pl-11 pt-1">
-                          <p className="text-[10px] italic text-text-dim font-medium border-l-2 border-accent-pink/20 pl-3">"{pe.notes}"</p>
-                        </div>
-                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
-
-            <button 
-              className="w-full py-6 bg-white/5 border border-white/10 rounded-3xl flex items-center justify-center gap-3 text-white/60 font-black uppercase tracking-[0.2em] italic active:scale-95 transition-all"
-              onClick={() => {
-                const text = `Jag tränade ${selectedSession.name} i ${Math.floor((selectedSession.duration || 0) / 60)} minuter och lyfte totalt ${calculateTotalVolume(selectedSession)} kg! #MorphFit`;
-                if(navigator.share) {
-                  navigator.share({ title: 'Mitt MorphFit Pass', text: text });
-                } else {
-                  alert("Kopierat till urklipp!");
-                  navigator.clipboard.writeText(text);
-                }
-              }}
-            >
-              <Share2 size={18} /> Dela Passet
-            </button>
+            <button onClick={() => setSelectedSessionId(null)} className="w-full py-6 bg-white/5 border border-white/10 rounded-3xl text-white/60 font-black uppercase tracking-widest italic">Stäng</button>
           </div>
         </div>
       )}
