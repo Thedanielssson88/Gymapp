@@ -258,7 +258,7 @@ export interface UserMission {
   targetValue: number; // Målvärdet (t.ex. 100 kg, 3 ggr, 75 cm)
   exerciseId?: string; // Om målet är viktspecifikt för en övning
   muscleGroup?: MuscleGroup; // Om målet är kopplat till en muskelgrupp (kan användas med 'weight' eller 'frequency' för att spåra volym i specifik muskelgrupp t.ex.)
-  measurementKey?: keyof BodyMeasurements; // Om målet är kopplat till ett kroppsmått (t.ex. 'waist', 'bicepsL')
+  measurementKey?: keyof BodyMeasurements | 'weight'; // Om målet är kopplat till ett kroppsmått (t.ex. 'waist', 'bicepsL') ELLER 'weight'
   isCompleted: boolean;
   createdAt: string;
   completedAt?: string;

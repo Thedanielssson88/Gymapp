@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { UserProfile, Goal } from '../types';
 import { storage } from '../services/storage';
@@ -50,7 +51,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   };
 
   return (
-    <div className="space-y-8 pb-24 px-2 animate-in fade-in">
+    <div className="space-y-8 pb-32 px-2 animate-in fade-in">
       
       {/* BASIC INFO SECTION */}
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-4">

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -36,6 +35,10 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // NEW: State for animated nav bar
+  const [isNavbarVisible, setIsNavbarVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([
@@ -102,7 +105,7 @@ export default function App() {
       if (!history.length || !userMissions.length || !user) return;
 
       let missionsUpdated = false;
-      const latestSession = history[history.length - 1]; // Assuming history is ordered by date
+      // const latestSession = history[history.length - 1]; // Assuming history is ordered by date - not used directly
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const recentWorkoutsCount = history.filter(s => new Date(s.date) > thirtyDaysAgo).length;
@@ -142,6 +145,23 @@ export default function App() {
 
     checkMissions();
   }, [history, userMissions, user]); // Re-run when history or userMissions change
+
+  // NEW: Navbar scroll control logic
+  useEffect(() => {
+    const controlNavbar = () => {
+      if (window.scrollY > lastScrollY && window.scrollY > 100) { 
+        // Scrolling down - hide menu
+        setIsNavbarVisible(false);
+      } else { 
+        // Scrolling up - show menu
+        setIsNavbarVisible(true);
+      }
+      setLastScrollY(window.scrollY);
+    };
+
+    window.addEventListener('scroll', controlNavbar);
+    return () => window.removeEventListener('scroll', controlNavbar);
+  }, [lastScrollY]);
 
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
@@ -377,14 +397,50 @@ export default function App() {
       )}
 
       {!isWorkoutActive && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-[#0f0d15]/80 backdrop-blur-3xl border-t border-white/5 z-[100] max-w-md mx-auto px-4 pb-12 pt-4">
-          <div className="flex justify-between items-center">
-            <NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" />
-            <NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" />
-            <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
-            <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Trophy size={24} />} label="Mål" /> {/* Updated icon to Trophy */}
-            <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
-            <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
+        <nav className={`fixed bottom-0 left-0 right-0 z-50 px-6 pb-8 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent transition-transform duration-500 ${isNavbarVisible ? 'translate-y-0' : 'translate-y-full'}`}>
+          <div className="max-w-md mx-auto flex justify-between items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl pb-safe">
+            <button 
+              onClick={() => setActiveTab('workout')}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <Dumbbell size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Träning</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('gyms')}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <MapPin size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Platser</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('body')}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <User2 size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Kropp</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('targets')}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <Trophy size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Mål</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('library')}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <BookOpen size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Övningar</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('log')}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <Calendar size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Logg</span>
+            </button>
           </div>
         </nav>
       )}
@@ -392,4 +448,4 @@ export default function App() {
   );
 }
 
-const NavButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (<button onClick={onClick} className={`flex flex-col items-center gap-2 transition-all flex-1 ${active ? 'text-white' : 'text-text-dim'}`}><div className={`p-1.5 transition-all ${active ? 'text-accent-pink scale-110 drop-shadow-[0_0_10px_rgba(255,45,85,0.5)]' : ''}`}>{icon}</div><span className="text-[7px] font-black uppercase tracking-[0.2em]">{label}</span></button>);
+// Removed the old NavButton component definition as it's no longer used.

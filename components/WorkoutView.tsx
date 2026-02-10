@@ -49,8 +49,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [timer, setTimer] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [restTimer, setRestTimer] = useState<number | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showGenerator, setShowGenerator] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false); // Used for adding exercises during active session or from quick add
+  const [showGenerator, setShowGenerator] = useState(false); // Used for generating workout during active session or from quick add
   const [isLoadMapOpen, setIsLoadMapOpen] = useState(false);
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoModalData, setInfoModalData] = useState<{ exercise: Exercise; index: number } | null>(null);
@@ -233,17 +233,17 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return { results, loadMap: load };
   }, [localSession?.exercises, allExercises, userProfile.weight]); // Depend on localSession?.exercises
 
+
   // --- LOGIK FÖR DAGENS PLANERADE PASS ---
   const todaysPlans = useMemo(() => {
-    const today = new Date();
-    today.setHours(0,0,0,0); // Normalize to start of day
-    const dKey = today.toISOString().split('T')[0];
-    const dayOfWeekNum = today.getDay(); // 0 for Sunday, 1 for Monday
+    // FIX: Use local date to avoid timezone shifts showing yesterday's plans
+    const now = new Date();
+    const dKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const dayOfWeekNum = now.getDay(); // 0 for Sunday, 1 for Monday
 
     const plansForToday: PlannedActivityForLogDisplay[] = [];
     const recurringPlanIdsAlreadyInstanced: Set<string> = new Set();
 
-    // First, add all concrete ScheduledActivity instances for today
     plannedActivities.filter(p => !('isTemplate' in p)).forEach(p => {
       if ((p as ScheduledActivity).date === dKey) {
         plansForToday.push(p);
@@ -253,13 +253,16 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       }
     });
 
-    // Then, add RecurringPlan templates that match today's day of week,
-    // but only if a concrete instance from that template hasn't already been added
     plannedActivities.filter(p => 'isTemplate' in p).forEach(p => {
       const recurringPlan = p as RecurringPlanForDisplay;
       if (recurringPlan.daysOfWeek?.includes(dayOfWeekNum) && !recurringPlanIdsAlreadyInstanced.has(recurringPlan.id)) {
-        // Also ensure the plan's startDate is not in the future relative to today
-        if (new Date(recurringPlan.startDate) <= today) {
+        // Compare dates by stripping time
+        const planStart = new Date(recurringPlan.startDate);
+        planStart.setHours(0,0,0,0);
+        const todayAtStart = new Date(now);
+        todayAtStart.setHours(0,0,0,0);
+
+        if (planStart <= todayAtStart) {
           plansForToday.push(recurringPlan);
         }
       }
@@ -268,20 +271,55 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return plansForToday;
   }, [plannedActivities]);
 
+  // Hjälpfunktion för att hämta övningsnamn till förhandsvisningen
+  const getExercisePreview = (plan: PlannedActivityForLogDisplay) => {
+    return (plan.exercises || [])
+      .map(pe => allExercises.find(e => e.id === pe.exerciseId)?.name)
+      .filter(Boolean)
+      .slice(0, 3) // Visa de 3 första övningarna
+      .join(', ');
+  };
+
+  // Handler for updating session name
+  const handleUpdateSessionName = useCallback(async (name: string) => {
+    if (localSession) {
+      const updatedSession = { ...localSession, name };
+      setLocalSession(updatedSession);
+      await storage.setActiveSession(updatedSession);
+    }
+  }, [localSession]);
+
+
   // --- RENDER CONTENT BASED ON SESSION STATE ---
   if (!localSession) {
     // Show start menu if no session is active
     return (
       <div className="pb-32 space-y-8 animate-in fade-in px-4 pt-8 min-h-screen">
-        <header>
-          <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">Träning</h2>
-          <p className="text-[10px] text-text-dim font-bold uppercase tracking-[0.2em]">Dags att prestera</p>
-        </header>
+        {/* --- HERO SECTION: KLAR FÖR KAMP --- */}
+        <section className="text-center py-6 space-y-4">
+          <div className="relative inline-block">
+            <div className="absolute inset-0 bg-accent-pink/20 blur-3xl rounded-full animate-pulse" />
+            <Dumbbell 
+              size={48} 
+              className="text-accent-pink relative z-10 mx-auto animate-bounce" 
+              style={{ animationDuration: '3s' }}
+            />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-4xl font-black italic uppercase text-white tracking-tighter leading-none">
+              Klar för <span className="text-accent-pink">Kamp</span>
+            </h2>
+            <p className="text-[10px] text-text-dim font-bold uppercase tracking-[0.3em]">
+              Ge allt eller gå hem
+            </p>
+          </div>
+        </section>
 
-        <section className="space-y-4">
+        {/* --- STARTA PASS (HUVUDKNAPP) --- */}
+        <section className="space-y-6">
           <button
-            onClick={onStartEmptyWorkout} // Triggers App.tsx to show zone/routine picker
-            className="w-full bg-white text-black p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.98] transition-all shadow-2xl"
+            onClick={onStartEmptyWorkout}
+            className="w-full bg-white text-black p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.98] transition-all shadow-[0_20px_40px_rgba(0,0,0,0.3)]"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center text-white">
@@ -289,39 +327,51 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               </div>
               <div className="text-left">
                 <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Snabbstart</span>
-                <h3 className="text-xl font-black italic uppercase leading-none">Starta tomt pass</h3>
+                <h3 className="text-xl font-black italic uppercase leading-none">Starta Pass</h3>
               </div>
             </div>
             <ArrowRight className="group-hover:translate-x-1 transition-transform" />
           </button>
 
+          {/* --- DAGENS PLANERING --- */}
           {todaysPlans.length > 0 && (
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4 pt-2">
               <div className="flex items-center gap-2 px-2">
                 <Calendar size={14} className="text-accent-pink" />
                 <h3 className="text-[10px] font-black uppercase text-text-dim tracking-widest">Dagens Planering</h3>
               </div>
               
-              <div className="grid gap-3">
+              <div className="grid gap-4">
                 {todaysPlans.map(plan => (
                   <button
                     key={plan.id}
-                    onClick={() => onStartActivity(plan as ScheduledActivity)} // Cast to ScheduledActivity as onStartActivity expects it
-                    className="bg-[#1a1721] border border-white/5 rounded-[28px] p-5 flex justify-between items-center group active:scale-[0.98] transition-all"
+                    onClick={() => onStartActivity(plan as ScheduledActivity)}
+                    className="bg-[#1a1721] border border-white/5 rounded-[32px] p-6 flex flex-col gap-4 group active:scale-[0.98] transition-all shadow-xl hover:border-accent-pink/20"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-accent-blue/10 rounded-xl flex items-center justify-center text-accent-blue">
-                        {'isTemplate' in plan ? <Repeat size={18} /> : <Calendar size={18} />}
+                    <div className="flex justify-between items-center w-full">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-accent-blue/10 rounded-xl flex items-center justify-center text-accent-blue">
+                          {'isTemplate' in plan ? <Repeat size={24} /> : <Calendar size={24} />}
+                        </div>
+                        <div className="text-left">
+                          <h4 className="text-lg font-black italic uppercase text-white leading-tight">{plan.title}</h4>
+                          <p className="text-[9px] text-text-dim font-bold uppercase tracking-widest">
+                            {plan.exercises?.length || 0} övningar • {'isTemplate' in plan ? 'Återkommande' : 'Idag'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-black italic uppercase text-white leading-tight">{plan.title}</h4>
-                        <p className="text-[9px] text-text-dim font-bold uppercase tracking-tighter">
-                          {plan.exercises?.length || 0} övningar • {'isTemplate' in plan ? 'Återkommande' : 'Idag'}
-                        </p>
+                      <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-text-dim group-hover:border-accent-blue group-hover:text-accent-blue transition-colors">
+                        <Play size={18} fill="currentColor" />
                       </div>
                     </div>
-                    <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-text-dim group-hover:border-accent-blue group-hover:text-accent-blue transition-colors">
-                      <ArrowRight size={16} />
+
+                    {/* FÖRHANDSVISNING AV ÖVNINGAR */}
+                    <div className="flex items-center gap-2 px-1 py-3 bg-white/5 rounded-2xl border border-white/5">
+                      <Dumbbell size={12} className="text-accent-pink ml-3 shrink-0" />
+                      <p className="text-[10px] text-text-dim font-medium uppercase tracking-tight truncate pr-3">
+                        {getExercisePreview(plan)}
+                        {(plan.exercises?.length || 0) > 3 && '...'}
+                      </p>
                     </div>
                   </button>
                 ))}
@@ -330,29 +380,15 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           )}
         </section>
 
-        <section className="pt-2">
-          <div className="flex items-center gap-2 px-2 mb-4">
-            <Zap size={14} className="text-accent-blue" />
-            <h3 className="text-[10px] font-black uppercase text-text-dim tracking-widest">Snabbgenerator</h3>
-          </div>
-          <div className="flex gap-2 mx-2">
-            <button onClick={() => setShowGenerator(true)} className="flex-1 py-10 bg-accent-blue/5 border-2 border-dashed border-accent-blue/10 rounded-[40px] flex flex-col items-center justify-center gap-3 text-accent-blue hover:bg-accent-blue/10 transition-all active:scale-95"><Sparkles size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Smart PT Generator</span></button>
-            <button onClick={() => setShowAddModal(true)} className="flex-1 py-10 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-3 text-text-dim hover:border-accent-pink/30 active:scale-95"><Plus size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Lägg till övning</span></button>
-          </div>
-        </section>
-
-        {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
-        {showAddModal && (
-          <div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500">
-            <ExerciseLibrary 
-                allExercises={allExercises}
-                onSelect={addNewExercise}
-                onClose={() => setShowAddModal(false)}
-                onUpdate={() => {}}
-                activeZone={activeZone}
-            />
+        {/* FOOTER-INFO OM TOMT */}
+        {todaysPlans.length === 0 && (
+          <div className="pt-4 text-center opacity-10">
+            <p className="text-[8px] font-black uppercase tracking-[0.2em]">Ready for battle</p>
           </div>
         )}
+
+        {/* No Generator/Add Exercise buttons or modals here when no session is active */}
+        {/* They remain visible when a session IS active below */}
       </div>
     );
   }
@@ -371,6 +407,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
            await storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: localSession.exercises.map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: pe.sets.map(s => ({ reps: s.reps, weight: s.weight, type: s.type, completed: false })) })) });
            alert("Rutinen sparad!");
         }} 
+        sessionName={localSession.name} // Pass the session name
+        onUpdateSessionName={handleUpdateSessionName} // Pass the update handler
       />
 
       <div className="px-4 space-y-4">
@@ -402,6 +440,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         })}
       </div>
 
+      {/* Kept here for active sessions */}
       <div className="flex gap-2 mx-2 mt-4 mb-12">
         <button onClick={() => setShowGenerator(true)} className="flex-1 py-10 bg-accent-blue/5 border-2 border-dashed border-accent-blue/10 rounded-[40px] flex flex-col items-center justify-center gap-3 text-accent-blue hover:bg-accent-blue/10 transition-all active:scale-95"><Sparkles size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Smart PT Generator</span></button>
         <button onClick={() => setShowAddModal(true)} className="flex-1 py-10 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-3 text-text-dim hover:border-accent-pink/30 active:scale-95"><Plus size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Lägg till övning</span></button>
@@ -424,6 +463,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       </div>
 
       {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling) => { onComplete({...localSession!, rpe, feeling}, timer); setShowSummary(false); }} />}
+      {/* Kept here for active sessions */}
       {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
       {showAddModal && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500">
@@ -447,7 +487,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               })}</div>
         </div>
       )}
-      {infoModalData && <InfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onSwap={handleSwapExercise} allExercises={allExercises} activeZone={activeZone} />}
+      {/* Fix: Pass `handleSwapExercise` to `onExerciseSwap` prop */}
+      {infoModalData && <InfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onExerciseSwap={handleSwapExercise} allExercises={allExercises} activeZone={activeZone} />}
     </div>
   );
 };
@@ -458,10 +499,10 @@ const InfoModal: React.FC<{
   onClose: () => void; 
   history: WorkoutSession[]; 
   onApplyHistory: (exIdx: number, sets: WorkoutSet[]) => void; 
-  onSwap: (exIdx: number, newExId: string) => void; 
+  onExerciseSwap: (exIdx: number, newExId: string) => void; // Renamed
   allExercises: Exercise[]; 
   activeZone: Zone; 
-}> = ({ exercise, exIdx, onClose, history, onApplyHistory, onSwap, allExercises, activeZone }) => {
+}> = ({ exercise, exIdx, onClose, history, onApplyHistory, onExerciseSwap, allExercises, activeZone }) => {
   
   const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
   const imageSrc = useExerciseImage(exercise);
@@ -526,6 +567,7 @@ const InfoModal: React.FC<{
         <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl text-text-dim hover:bg-white/10 transition-colors"><X size={24} /></button>
       </div>
       <div className="flex p-4 gap-2 border-b border-white/5 shrink-0">
+        {/* Fix: Remove duplicate 'label' property */}
         {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'history', label: 'Historik', icon: History }, { id: 'alternatives', label: 'Alternativ', icon: Shuffle }].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1.5 transition-all ${activeTab === tab.id ? 'bg-white text-black shadow-lg scale-[1.02]' : 'bg-white/5 text-text-dim hover:bg-white/10'}`}>
             <tab.icon size={16} /> {tab.label}
@@ -587,7 +629,7 @@ const InfoModal: React.FC<{
                           <p className="text-[9px] font-bold text-text-dim uppercase tracking-widest">{alt.equipment.join(', ')}</p>
                        </div>
                     </div>
-                    <button onClick={() => onSwap(exIdx, alt.id)} className="bg-white/5 text-white px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 hover:bg-white/10">Byt</button>
+                    <button onClick={() => onExerciseSwap(exIdx, alt.id)} className="bg-white/5 text-white px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 hover:bg-white/10">Byt</button>
                  </div>
                ))
              ) : (<div className="py-12 text-center opacity-40"><Shuffle size={48} className="mx-auto mb-4" strokeWidth={1} /><p className="text-xs font-bold uppercase tracking-widest">Inga alternativ hittades</p></div>)}
