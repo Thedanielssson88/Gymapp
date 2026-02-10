@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -10,10 +11,11 @@ import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { ExerciseLibrary } from './ExerciseLibrary';
-import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy } from 'lucide-react';
+// Fix: Import 'Repeat' icon from 'lucide-react'
+import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat } from 'lucide-react';
 
 interface WorkoutViewProps {
-  session: WorkoutSession;
+  session: WorkoutSession | null; // Can be null if no session is active
   allExercises: Exercise[];
   userProfile: UserProfile;
   allZones: Zone[];
@@ -22,6 +24,10 @@ interface WorkoutViewProps {
   onZoneChange: (zone: Zone) => void;
   onComplete: (session: WorkoutSession, duration: number) => void;
   onCancel: () => void;
+  // New props for initial state when no session is active
+  plannedActivities: PlannedActivityForLogDisplay[];
+  onStartActivity: (activity: ScheduledActivity) => void;
+  onStartEmptyWorkout: () => void;
 }
 
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
@@ -33,9 +39,13 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   activeZone, 
   onZoneChange,
   onComplete,
-  onCancel
+  onCancel,
+  plannedActivities,
+  onStartActivity,
+  onStartEmptyWorkout
 }) => {
-  const [localSession, setLocalSession] = useState(session);
+  // localSession will be the actual session object when a workout is active
+  const [localSession, setLocalSession] = useState<WorkoutSession | null>(session);
   const [timer, setTimer] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [restTimer, setRestTimer] = useState<number | null>(null);
@@ -46,7 +56,15 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [infoModalData, setInfoModalData] = useState<{ exercise: Exercise; index: number } | null>(null);
   const [showSummary, setShowSummary] = useState(false);
   const [showZonePicker, setShowZonePicker] = useState(false);
-  const [suggestedPlan, setSuggestedPlan] = useState<ScheduledActivity | null>(null);
+
+  // Update localSession when the prop changes (e.g., when a new session starts)
+  useEffect(() => {
+    setLocalSession(session);
+    if (session) {
+      setIsTimerActive(true); // Automatically start timer when session begins
+      setTimer(0); // Reset timer for new session
+    }
+  }, [session]);
 
   useEffect(() => {
     let interval: any;
@@ -55,17 +73,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     }
     return () => clearInterval(interval);
   }, [isTimerActive]);
-
-  useEffect(() => {
-    const checkScheduled = async () => {
-       if (localSession.exercises.length > 0) return;
-       const today = new Date().toISOString().split('T')[0];
-       const plans = await storage.getScheduledActivities();
-       const planForToday = plans.find(p => p.date === today && !p.isCompleted && p.exercises && p.exercises.length > 0);
-       if (planForToday) setSuggestedPlan(planForToday);
-    };
-    checkScheduled();
-  }, [localSession.exercises.length]);
 
   useEffect(() => {
     let interval: any;
@@ -77,19 +84,10 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return () => clearInterval(interval);
   }, [restTimer]);
 
-  const handleApplySuggested = () => {
-    if (!suggestedPlan || !suggestedPlan.exercises) return;
-    setLocalSession(prev => {
-      const updated = { ...prev, exercises: suggestedPlan.exercises!, name: suggestedPlan.title };
-      storage.setActiveSession(updated);
-      return updated;
-    });
-    setSuggestedPlan(null);
-  };
-
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
     setLocalSession(prev => {
+      if (!prev) return null; // Should not happen if a session is active
       const newExercises = prev.exercises.map(item => {
         const currentEx = allExercises.find(e => e.id === item.exerciseId)!;
         const replacement = findReplacement(currentEx, targetZone, allExercises);
@@ -106,12 +104,13 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   const handleSwapExercise = (exIdx: number, newExerciseId: string) => {
     setLocalSession(prev => {
+        if (!prev) return null;
         const updatedExercises = [...prev.exercises];
         const itemToSwap = updatedExercises[exIdx];
         const currentEx = allExercises.find(e => e.id === itemToSwap.exerciseId)!;
         const newEx = allExercises.find(e => e.id === newExerciseId)!;
         const newSets = adaptVolume(itemToSwap.sets, currentEx, newEx, userProfile.goal);
-        updatedExercises[exIdx] = { ...itemToSwap, exerciseId: newExerciseId, sets: newSets };
+        updatedExercises[exIdx] = { ...itemToSwap, exerciseId: newEx.id, sets: newSets };
         const updatedSession = { ...prev, exercises: updatedExercises };
         storage.setActiveSession(updatedSession);
         return updatedSession;
@@ -121,6 +120,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   const handleApplyHistory = (exIdx: number, setsToApply: WorkoutSet[]) => {
       setLocalSession(prev => {
+          if (!prev) return null;
           const updatedExercises = [...prev.exercises];
           const newSets = setsToApply.map(s => ({ ...s, completed: false, rpe: undefined }));
           updatedExercises[exIdx] = { ...updatedExercises[exIdx], sets: newSets };
@@ -133,6 +133,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   const updateSet = useCallback((exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => {
     setLocalSession(prev => {
+      if (!prev) return null;
       const updatedExercises = [...prev.exercises];
       const updatedSets = [...updatedExercises[exIdx].sets];
       updatedSets[setIdx] = { ...updatedSets[setIdx], ...updates };
@@ -142,12 +143,13 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       return updatedSession;
     });
     if (updates.completed) {
-      setRestTimer(90);
+      setRestTimer(90); // Default rest timer, can be from user settings
     }
   }, []);
 
   const updateNotes = useCallback((exIdx: number, notes: string) => {
     setLocalSession(prev => {
+      if (!prev) return null;
       const updatedExercises = [...prev.exercises];
       updatedExercises[exIdx] = { ...updatedExercises[exIdx], notes };
       const updatedSession = { ...prev, exercises: updatedExercises };
@@ -159,6 +161,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const removeExercise = useCallback((exIdx: number) => {
     if (confirm("Ta bort övning?")) {
       setLocalSession(prevSession => {
+        if (!prevSession) return null;
         const updatedExercises = prevSession.exercises.filter((_, index) => index !== exIdx);
         const newSession = { ...prevSession, exercises: updatedExercises };
         storage.setActiveSession(newSession);
@@ -170,6 +173,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   const addSetToExercise = useCallback((exIdx: number) => {
     setLocalSession(prev => {
+      if (!prev) return null;
       const updatedExercises = [...prev.exercises];
       const currentSets = updatedExercises[exIdx].sets;
       const lastSet = currentSets[currentSets.length - 1];
@@ -193,6 +197,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       : [{ reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }];
 
     setLocalSession(prev => {
+      if (!prev) return null;
       const updatedSession = { ...prev, exercises: [...prev.exercises, { exerciseId: ex.id, sets: newSets, notes: lastSetData ? 'Smart laddat från historik' : '' }] };
       storage.setActiveSession(updatedSession);
       return updatedSession;
@@ -205,6 +210,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
      if (generated.length === 0) { alert("Hittade inga övningar i denna zon för valda muskler."); return; }
      
      setLocalSession(prev => {
+       if (!prev) return null;
        const updatedSession = { ...prev, exercises: [...prev.exercises, ...generated] };
        storage.setActiveSession(updatedSession);
        return updatedSession;
@@ -215,7 +221,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const muscleStats = useMemo(() => {
     const load: Record<string, number> = {};
     let totalLoadPoints = 0;
-    localSession.exercises.forEach(item => {
+    localSession?.exercises.forEach(item => { // Use localSession?.exercises
       const ex = allExercises.find(e => e.id === item.exerciseId);
       if (!ex) return;
       const impact = calculateExerciseImpact(ex, item.sets, userProfile.weight);
@@ -225,8 +231,133 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
     const results = Object.entries(load).map(([name, score]) => ({ name, percentage: totalLoadPoints > 0 ? Math.round((score / totalLoadPoints) * 100) : 0, count: score })).sort((a, b) => b.count - a.count);
     return { results, loadMap: load };
-  }, [localSession.exercises, allExercises, userProfile.weight]);
+  }, [localSession?.exercises, allExercises, userProfile.weight]); // Depend on localSession?.exercises
 
+  // --- LOGIK FÖR DAGENS PLANERADE PASS ---
+  const todaysPlans = useMemo(() => {
+    const today = new Date();
+    today.setHours(0,0,0,0); // Normalize to start of day
+    const dKey = today.toISOString().split('T')[0];
+    const dayOfWeekNum = today.getDay(); // 0 for Sunday, 1 for Monday
+
+    const plansForToday: PlannedActivityForLogDisplay[] = [];
+    const recurringPlanIdsAlreadyInstanced: Set<string> = new Set();
+
+    // First, add all concrete ScheduledActivity instances for today
+    plannedActivities.filter(p => !('isTemplate' in p)).forEach(p => {
+      if ((p as ScheduledActivity).date === dKey) {
+        plansForToday.push(p);
+        if ((p as ScheduledActivity).recurrenceId) {
+          recurringPlanIdsAlreadyInstanced.add((p as ScheduledActivity).recurrenceId!);
+        }
+      }
+    });
+
+    // Then, add RecurringPlan templates that match today's day of week,
+    // but only if a concrete instance from that template hasn't already been added
+    plannedActivities.filter(p => 'isTemplate' in p).forEach(p => {
+      const recurringPlan = p as RecurringPlanForDisplay;
+      if (recurringPlan.daysOfWeek?.includes(dayOfWeekNum) && !recurringPlanIdsAlreadyInstanced.has(recurringPlan.id)) {
+        // Also ensure the plan's startDate is not in the future relative to today
+        if (new Date(recurringPlan.startDate) <= today) {
+          plansForToday.push(recurringPlan);
+        }
+      }
+    });
+
+    return plansForToday;
+  }, [plannedActivities]);
+
+  // --- RENDER CONTENT BASED ON SESSION STATE ---
+  if (!localSession) {
+    // Show start menu if no session is active
+    return (
+      <div className="pb-32 space-y-8 animate-in fade-in px-4 pt-8 min-h-screen">
+        <header>
+          <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">Träning</h2>
+          <p className="text-[10px] text-text-dim font-bold uppercase tracking-[0.2em]">Dags att prestera</p>
+        </header>
+
+        <section className="space-y-4">
+          <button
+            onClick={onStartEmptyWorkout} // Triggers App.tsx to show zone/routine picker
+            className="w-full bg-white text-black p-6 rounded-[32px] flex items-center justify-between group active:scale-[0.98] transition-all shadow-2xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center text-white">
+                <Play size={24} fill="currentColor" />
+              </div>
+              <div className="text-left">
+                <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Snabbstart</span>
+                <h3 className="text-xl font-black italic uppercase leading-none">Starta tomt pass</h3>
+              </div>
+            </div>
+            <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          {todaysPlans.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center gap-2 px-2">
+                <Calendar size={14} className="text-accent-pink" />
+                <h3 className="text-[10px] font-black uppercase text-text-dim tracking-widest">Dagens Planering</h3>
+              </div>
+              
+              <div className="grid gap-3">
+                {todaysPlans.map(plan => (
+                  <button
+                    key={plan.id}
+                    onClick={() => onStartActivity(plan as ScheduledActivity)} // Cast to ScheduledActivity as onStartActivity expects it
+                    className="bg-[#1a1721] border border-white/5 rounded-[28px] p-5 flex justify-between items-center group active:scale-[0.98] transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-accent-blue/10 rounded-xl flex items-center justify-center text-accent-blue">
+                        {'isTemplate' in plan ? <Repeat size={18} /> : <Calendar size={18} />}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black italic uppercase text-white leading-tight">{plan.title}</h4>
+                        <p className="text-[9px] text-text-dim font-bold uppercase tracking-tighter">
+                          {plan.exercises?.length || 0} övningar • {'isTemplate' in plan ? 'Återkommande' : 'Idag'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-text-dim group-hover:border-accent-blue group-hover:text-accent-blue transition-colors">
+                      <ArrowRight size={16} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="pt-2">
+          <div className="flex items-center gap-2 px-2 mb-4">
+            <Zap size={14} className="text-accent-blue" />
+            <h3 className="text-[10px] font-black uppercase text-text-dim tracking-widest">Snabbgenerator</h3>
+          </div>
+          <div className="flex gap-2 mx-2">
+            <button onClick={() => setShowGenerator(true)} className="flex-1 py-10 bg-accent-blue/5 border-2 border-dashed border-accent-blue/10 rounded-[40px] flex flex-col items-center justify-center gap-3 text-accent-blue hover:bg-accent-blue/10 transition-all active:scale-95"><Sparkles size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Smart PT Generator</span></button>
+            <button onClick={() => setShowAddModal(true)} className="flex-1 py-10 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-3 text-text-dim hover:border-accent-pink/30 active:scale-95"><Plus size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Lägg till övning</span></button>
+          </div>
+        </section>
+
+        {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
+        {showAddModal && (
+          <div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500">
+            <ExerciseLibrary 
+                allExercises={allExercises}
+                onSelect={addNewExercise}
+                onClose={() => setShowAddModal(false)}
+                onUpdate={() => {}}
+                activeZone={activeZone}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // --- RENDER AKTIV SESSION ---
   return (
     <div className="space-y-4 pb-64 animate-in fade-in duration-500">
       <WorkoutHeader 
@@ -241,19 +372,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
            alert("Rutinen sparad!");
         }} 
       />
-
-      {suggestedPlan && (
-        <div className="mx-4 p-5 bg-accent-blue/10 border border-accent-blue/30 rounded-[32px] flex items-center justify-between animate-in slide-in-from-top-4 duration-500">
-          <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-accent-blue/20 rounded-2xl flex items-center justify-center text-accent-blue"><History size={24}/></div>
-             <div>
-               <p className="text-[10px] font-black uppercase text-accent-blue/70 tracking-widest leading-none mb-1">Planerat för idag</p>
-               <p className="text-base font-black italic uppercase text-white leading-none">{suggestedPlan.title}</p>
-             </div>
-          </div>
-          <button onClick={handleApplySuggested} className="bg-accent-blue text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Ladda</button>
-        </div>
-      )}
 
       <div className="px-4 space-y-4">
         <WorkoutStats results={muscleStats.results} loadMap={muscleStats.loadMap} isLoadMapOpen={isLoadMapOpen} onToggleLoadMap={() => setIsLoadMapOpen(!isLoadMapOpen)} />
@@ -286,7 +404,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
       <div className="flex gap-2 mx-2 mt-4 mb-12">
         <button onClick={() => setShowGenerator(true)} className="flex-1 py-10 bg-accent-blue/5 border-2 border-dashed border-accent-blue/10 rounded-[40px] flex flex-col items-center justify-center gap-3 text-accent-blue hover:bg-accent-blue/10 transition-all active:scale-95"><Sparkles size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Smart PT Generator</span></button>
-        <button onClick={() => setShowAddModal(true)} className="flex-1 py-10 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-3 text-text-dim hover:border-accent-pink/30 active:scale-95 transition-all"><Plus size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Lägg till övning</span></button>
+        <button onClick={() => setShowAddModal(true)} className="flex-1 py-10 border-2 border-dashed border-white/5 rounded-[40px] flex flex-col items-center justify-center gap-3 text-text-dim hover:border-accent-pink/30 active:scale-95"><Plus size={28} /><span className="font-black uppercase tracking-widest text-[9px] italic">Lägg till övning</span></button>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-[150] pb-safe">
@@ -305,7 +423,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         </div>
       </div>
 
-      {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling) => { onComplete({...localSession, rpe, feeling}, timer); setShowSummary(false); }} />}
+      {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling) => { onComplete({...localSession!, rpe, feeling}, timer); setShowSummary(false); }} />}
       {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
       {showAddModal && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500">

@@ -1,5 +1,7 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan } from './types';
+import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements } from './types';
 import { WorkoutView } from './components/WorkoutView';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { WorkoutLog } from './components/WorkoutLog';
@@ -13,7 +15,7 @@ import { db } from './services/db'; // Importera db
 import { calculateMuscleRecovery } from './utils/recovery';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
-import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings } from 'lucide-react';
+import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy } from 'lucide-react'; // Import Trophy
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -26,16 +28,17 @@ export default function App() {
   const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>([]);
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(null);
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
-  const [goalTargets, setGoalTargets] = useState<GoalTarget[]>([]);
+  const [goalTargets, setGoalTargets] = useState<GoalTarget[]>([]); // Keeping existing goalTargets
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
-  const [plannedActivities, setPlannedActivities] = useState<ScheduledActivity[]>([]);
+  const [plannedActivities, setPlannedActivities] = useState<PlannedActivityForLogDisplay[]>([]); 
+  const [userMissions, setUserMissions] = useState<UserMission[]>([]); // NEW: State for gamified user missions
 
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const refreshData = async () => {
-    const [p, z, h, logs, sess, ex, gt, r, plans] = await Promise.all([
+    const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([
       storage.getUserProfile(),
       storage.getZones(),
       storage.getHistory(),
@@ -44,7 +47,9 @@ export default function App() {
       storage.getAllExercises(),
       storage.getGoalTargets(),
       storage.getRoutines(),
-      storage.getScheduledActivities()
+      storage.getScheduledActivities(),
+      storage.getRecurringPlans(),
+      storage.getUserMissions() // NEW: Fetch user missions
     ]);
 
     if (z.length === 0 || p.name === "Atlet") {
@@ -61,14 +66,28 @@ export default function App() {
     setAllExercises(ex);
     setGoalTargets(gt);
     setRoutines(r);
-    setPlannedActivities(plans);
+    
+    const allPlansForDisplay: PlannedActivityForLogDisplay[] = [
+      ...scheduled,
+      ...recurring.map(rp => ({
+          id: rp.id,
+          date: rp.startDate,
+          type: rp.type,
+          title: rp.title,
+          isCompleted: false,
+          exercises: rp.exercises,
+          isTemplate: true,
+          daysOfWeek: rp.daysOfWeek
+      }))
+    ];
+    setPlannedActivities(allPlansForDisplay);
+    setUserMissions(missions); // NEW: Set user missions
   };
 
   useEffect(() => {
     const initApp = async () => {
       await storage.init();
       
-      // Tvinga in de nya övningarna varje gång appen startar (eller en gång per version)
       await db.syncExercises(); 
 
       await refreshData();
@@ -77,13 +96,60 @@ export default function App() {
     initApp();
   }, []);
 
+  // NEW: Function to check and update mission status after a workout
+  useEffect(() => {
+    const checkMissions = async () => {
+      if (!history.length || !userMissions.length || !user) return;
+
+      let missionsUpdated = false;
+      const latestSession = history[history.length - 1]; // Assuming history is ordered by date
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const recentWorkoutsCount = history.filter(s => new Date(s.date) > thirtyDaysAgo).length;
+      
+      const updatedMissions = await Promise.all(userMissions.map(async (mission) => {
+        if (mission.isCompleted) return mission; // Already completed
+
+        let currentProgress = 0;
+        if (mission.type === 'weight' && mission.exerciseId) {
+          const relevantSets = history.flatMap(s => 
+            s.exercises.filter(e => e.exerciseId === mission.exerciseId)
+            .flatMap(e => e.sets)
+          );
+          currentProgress = Math.max(...relevantSets.map(set => set.weight || 0), 0);
+        } else if (mission.type === 'frequency') {
+          currentProgress = recentWorkoutsCount; // Assuming target is for last 30 days
+        } else if (mission.type === 'measurement' && mission.measurementKey && user.measurements) {
+          currentProgress = user.measurements[mission.measurementKey] || 0;
+        }
+
+        if (currentProgress >= mission.targetValue) {
+          missionsUpdated = true;
+          return { ...mission, isCompleted: true, completedAt: new Date().toISOString() };
+        }
+        return mission;
+      }));
+
+      if (missionsUpdated) {
+        // Only update if changes occurred to avoid unnecessary re-renders/DB writes
+        const missionsToUpdateInDb = updatedMissions.filter(m => m.isCompleted && !userMissions.find(oldM => oldM.id === m.id && oldM.isCompleted));
+        for (const mission of missionsToUpdateInDb) {
+            await storage.updateUserMission(mission);
+        }
+        setUserMissions(updatedMissions);
+      }
+    };
+
+    checkMissions();
+  }, [history, userMissions, user]); // Re-run when history or userMissions change
+
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
   const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
     try {
-      await storage.saveToHistory({ ...session, isCompleted: true, date: new Date().toISOString(), duration });
+      await storage.saveToHistory({ ...session, isCompleted: true, date: new Date().toISOString(), duration, locationName: activeZone.name });
       await storage.setActiveSession(null);
-      await refreshData();
+      await refreshData(); // This will also trigger mission checks via useEffect
       setActiveTab('log');
     } catch (error) {
       console.error("Kunde inte spara passet:", error);
@@ -114,6 +180,10 @@ export default function App() {
     setActiveTab('workout');
   };
 
+  const handleStartEmptyWorkout = () => {
+    setShowStartMenu(true);
+  };
+
   const handleDeleteHistory = async (sessionId: string) => {
     try {
       await storage.deleteWorkoutFromHistory(sessionId);
@@ -142,20 +212,38 @@ export default function App() {
         exercises: activity.exercises
       };
       await storage.addRecurringPlan(plan);
+      await storage.generateRecurringActivities();
     } else {
       await storage.addScheduledActivity(activity);
     }
     await refreshData();
   };
 
-  const handleTogglePlan = async (id: string) => {
-    await storage.toggleScheduledActivity(id);
+  const handleDeletePlan = async (id: string, isTemplate: boolean) => {
+    if (confirm("Är du säker på att du vill ta bort denna planering?")) {
+      try {
+        if (isTemplate) {
+          await storage.deleteRecurringPlan(id);
+        } else {
+          await storage.deleteScheduledActivity(id);
+        }
+        await refreshData();
+      } catch (error) {
+        console.error("Kunde inte radera planeringen:", error);
+        alert("Ett fel uppstod när planeringen skulle raderas.");
+      }
+    }
+  };
+
+  // NEW: Mission related handlers
+  const handleAddMission = async (mission: UserMission) => {
+    await storage.addUserMission(mission);
     await refreshData();
   };
 
-  const handleDeletePlan = async (id: string) => {
-    if (confirm("Ta bort planering?")) {
-      await storage.deleteScheduledActivity(id);
+  const handleDeleteMission = async (id: string) => {
+    if (confirm("Är du säker på att du vill ta bort detta uppdrag?")) {
+      await storage.deleteUserMission(id);
       await refreshData();
     }
   };
@@ -169,20 +257,13 @@ export default function App() {
     );
   }
 
-  const isWorkoutActive = activeTab === 'workout' && currentSession;
+  const isWorkoutActive = currentSession !== null;
 
   const renderContent = () => {
     switch (activeTab) {
       case 'workout':
-        if (!currentSession) return (
-          <div className="flex flex-col items-center justify-center h-[80vh] gap-8 px-8 text-center">
-            <div className="w-32 h-32 bg-accent-pink/5 rounded-full flex items-center justify-center text-accent-pink"><Dumbbell size={64} className="animate-bounce" /></div>
-            <div className="space-y-2"><h2 className="text-3xl font-black italic uppercase">Klar för kamp?</h2><p className="text-text-dim font-bold">Välj din miljö för att optimera passet.</p></div>
-            <button onClick={() => setShowStartMenu(true)} className="bg-accent-pink w-full py-6 rounded-3xl font-black italic tracking-widest uppercase shadow-2xl text-xl">Starta Pass</button>
-          </div>
-        );
         return <WorkoutView 
-                  key={currentSession.id}
+                  key={currentSession?.id || 'no-session'}
                   session={currentSession}
                   allExercises={allExercises}
                   userProfile={user}
@@ -198,6 +279,9 @@ export default function App() {
                   }} 
                   onComplete={handleFinishWorkout} 
                   onCancel={handleCancelWorkout} 
+                  plannedActivities={plannedActivities}
+                  onStartActivity={handleStartPlannedActivity}
+                  onStartEmptyWorkout={handleStartEmptyWorkout}
                />;
       case 'body':
         return (
@@ -244,16 +328,24 @@ export default function App() {
         );
       case 'log': return <WorkoutLog 
                           history={history} 
-                          plannedActivities={plannedActivities} 
+                          plannedActivities={plannedActivities}
                           routines={routines} 
                           allExercises={allExercises} 
                           onAddPlan={handleAddPlan} 
-                          onTogglePlan={handleTogglePlan} 
+                          onTogglePlan={async (id) => { /* No direct toggle for plans anymore in this model */ }}
                           onDeletePlan={handleDeletePlan}
                           onDeleteHistory={handleDeleteHistory}
                           onStartActivity={handleStartPlannedActivity}
                         />;
-      case 'targets': return <TargetsView history={history} goalTargets={goalTargets} allExercises={allExercises} />;
+      case 'targets': return <TargetsView 
+                                userMissions={userMissions} // Pass user missions
+                                history={history} 
+                                exercises={allExercises} 
+                                userProfile={user} // Pass user profile for measurements (if needed)
+                                biometricLogs={biometricLogs} // Pass biometric logs for historical measurements
+                                onAddMission={handleAddMission} 
+                                onDeleteMission={handleDeleteMission} 
+                              />;
       case 'library': return <ExerciseLibrary allExercises={allExercises} onUpdate={refreshData} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
       default: return null;
@@ -290,7 +382,7 @@ export default function App() {
             <NavButton active={activeTab === 'workout'} onClick={() => setActiveTab('workout')} icon={<Dumbbell size={24} />} label="Träning" />
             <NavButton active={activeTab === 'gyms'} onClick={() => setActiveTab('gyms')} icon={<MapPin size={24} />} label="Platser" />
             <NavButton active={activeTab === 'body'} onClick={() => setActiveTab('body')} icon={<User2 size={24} />} label="Kropp" />
-            <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Target size={24} />} label="Mål" />
+            <NavButton active={activeTab === 'targets'} onClick={() => setActiveTab('targets')} icon={<Trophy size={24} />} label="Mål" /> {/* Updated icon to Trophy */}
             <NavButton active={activeTab === 'library'} onClick={() => setActiveTab('library')} icon={<BookOpen size={24} />} label="Övningar" />
             <NavButton active={activeTab === 'log'} onClick={() => setActiveTab('log')} icon={<Calendar size={24} />} label="Logg" />
           </div>

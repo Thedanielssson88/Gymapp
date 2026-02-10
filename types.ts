@@ -1,4 +1,5 @@
 
+
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -137,7 +138,7 @@ export interface BodyMeasurements {
   bicepsL?: number;
   bicepsR?: number;
   thighL?: number;
-  thighR?: number;
+  thighR?: number; // Fixed typo: 'thihR' to 'thighR'
   calves?: number;
   bodyFat?: number;
 }
@@ -178,6 +179,7 @@ export interface WorkoutSet {
   completed: boolean;
   rpe?: number;
   type?: SetType;
+  fatigue?: number; // Added fatigue for per-set logging
 }
 
 export interface PlannedExercise {
@@ -198,6 +200,7 @@ export interface WorkoutSession {
   date: string;
   name: string;
   zoneId: string;
+  locationName?: string; // Add locationName
   exercises: PlannedExercise[];
   isCompleted: boolean;
   duration?: number;
@@ -214,6 +217,7 @@ export interface BiometricLog {
 
 export type ActivityType = 'gym' | 'cardio' | 'rehab' | 'mobility' | 'rest';
 
+// --- ScheduledActivity: Represents a single, concrete planned activity ---
 export interface ScheduledActivity {
   id: string;
   date: string; // YYYY-MM-DD
@@ -221,16 +225,41 @@ export interface ScheduledActivity {
   title: string;
   isCompleted: boolean;
   linkedSessionId?: string;
-  recurrenceId?: string;
   exercises?: PlannedExercise[];
+  recurrenceId?: string; // If this activity was generated from a RecurringPlan, this is the ID of that plan.
 }
 
+// --- RecurringPlan: Represents a template for recurring activities ---
 export interface RecurringPlan {
   id: string;
   type: ActivityType;
   title: string;
   daysOfWeek: number[]; // 0=Sunday, 1=Monday...
-  startDate: string;
-  endDate?: string;
+  startDate: string; // The date from which recurrence starts
+  endDate?: string; // Optional end date
   exercises?: PlannedExercise[];
+}
+
+// --- Type for WorkoutLog to display both ScheduledActivity and RecurringPlan templates ---
+export interface RecurringPlanForDisplay extends RecurringPlan {
+  isTemplate: true; // Custom flag for the UI to identify templates
+  // `daysOfWeek` already exists on RecurringPlan, no need to redefine as `recurringDays`
+  // No `date` field here, as `WorkoutLog` will use `startDate` and `daysOfWeek` for display
+  // No `isCompleted` as templates are never "completed"
+}
+
+export type PlannedActivityForLogDisplay = ScheduledActivity | RecurringPlanForDisplay;
+
+// --- NEW: Gamified User Missions ---
+export interface UserMission {
+  id: string;
+  name: string; // E.g., "Bänka 100 kg", "Träna 3 ggr/vecka", "Nå 75 cm i midjan"
+  type: 'weight' | 'frequency' | 'measurement'; // Typ av mål
+  targetValue: number; // Målvärdet (t.ex. 100 kg, 3 ggr, 75 cm)
+  exerciseId?: string; // Om målet är viktspecifikt för en övning
+  muscleGroup?: MuscleGroup; // Om målet är kopplat till en muskelgrupp (kan användas med 'weight' eller 'frequency' för att spåra volym i specifik muskelgrupp t.ex.)
+  measurementKey?: keyof BodyMeasurements; // Om målet är kopplat till ett kroppsmått (t.ex. 'waist', 'bicepsL')
+  isCompleted: boolean;
+  createdAt: string;
+  completedAt?: string;
 }

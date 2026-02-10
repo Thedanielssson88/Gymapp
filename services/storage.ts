@@ -1,5 +1,7 @@
+
+
 import { db, migrateFromLocalStorage } from './db';
-import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan } from '../types';
+import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
 
 export const storage = {
@@ -184,5 +186,13 @@ export const storage = {
         loopDate.setDate(loopDate.getDate() + 1);
       }
     }
-  }
+  },
+
+  // --- NEW: USER MISSIONS (Gamified Goals) ---
+  getUserMissions: async (): Promise<UserMission[]> => await db.userMissions.toArray(),
+  addUserMission: async (mission: UserMission) => await db.userMissions.put(mission),
+  updateUserMission: async (mission: UserMission) => {
+    await db.userMissions.update(mission.id, mission);
+  },
+  deleteUserMission: async (id: string) => await db.userMissions.delete(id),
 };

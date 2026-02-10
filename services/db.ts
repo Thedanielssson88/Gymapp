@@ -1,8 +1,9 @@
 
+
 import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
-  GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan 
+  GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, UserMission
 } from '../types';
 import { INITIAL_EXERCISES } from '../data/initialExercises';
 import { INITIAL_ZONES, INITIAL_GOAL_TARGETS, DEFAULT_PROFILE } from '../constants';
@@ -26,6 +27,7 @@ export class GymDatabase extends Dexie {
   images!: Table<StoredImage, string>;
   scheduledActivities!: Table<ScheduledActivity, string>;
   recurringPlans!: Table<RecurringPlan, string>;
+  userMissions!: Table<UserMission, string>; // NEW: Table for gamified missions
 
   constructor() {
     super('MorphFitDB');
@@ -43,7 +45,8 @@ export class GymDatabase extends Dexie {
       workoutRoutines: 'id',
       images: 'id',
       scheduledActivities: 'id, date, type, recurrenceId',
-      recurringPlans: 'id'
+      recurringPlans: 'id',
+      userMissions: 'id, type, isCompleted' // NEW: Store for user missions
     });
 
     // Fix: Cast 'this' to Dexie to resolve type error. The type system is failing to infer the inherited 'on' method.
