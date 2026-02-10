@@ -237,38 +237,60 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
   );
 };
 
-const ProgressionTab = ({ stats }: { stats: { history: any[], best1RM: number } }) => (
-    <div className="space-y-6 animate-in fade-in">
-        <div className="bg-accent-blue/10 border border-accent-blue/20 rounded-3xl p-6 flex justify-between items-center">
-            <div>
-                <p className="text-[10px] font-black uppercase text-accent-blue tracking-widest mb-1">Ditt All-Time Best 1RM</p>
-                <h4 className="text-3xl font-black italic uppercase text-white">{stats.best1RM} <span className="text-sm">kg</span></h4>
-            </div>
-            <Trophy className="text-accent-blue" size={32} />
-        </div>
-        <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Volymutveckling (Total kg)</label>
-            <div className="bg-white/5 rounded-3xl p-4 h-48 flex items-end justify-between gap-1 border border-white/5">
-                {(stats.history || []).length > 0 ? (
-                    (stats.history || []).slice(-15).map((h, i) => {
-                        const maxVol = Math.max(1, ...stats.history.map(x => x.volume));
-                        const height = (h.volume / maxVol) * 100;
-                        return (
-                            <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
-                                <div className="absolute bottom-full mb-2 bg-white text-black text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                    {h.volume} kg ({new Date(h.date).toLocaleDateString('sv-SE')})
-                                </div>
-                                <div className="w-full bg-accent-pink rounded-t-lg transition-all duration-500 hover:bg-white" style={{ height: `${height}%`, opacity: 0.3 + (height/100) }} />
-                            </div>
-                        );
-                    })
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center opacity-20 italic text-[10px] uppercase font-black">Ingen data ännu</div>
-                )}
-            </div>
-        </div>
-    </div>
-);
+const ProgressionTab = ({ stats }: { stats: { history: any[], best1RM: number } }) => {
+  const progressionHistory = [...stats.history].reverse(); // Show most recent first
+
+  return (
+      <div className="space-y-6 animate-in fade-in">
+          <div className="bg-accent-blue/10 border border-accent-blue/20 rounded-3xl p-6 flex justify-between items-center">
+              <div>
+                  <p className="text-[10px] font-black uppercase text-accent-blue tracking-widest mb-1">Ditt All-Time Best 1RM</p>
+                  <h4 className="text-3xl font-black italic uppercase text-white">{stats.best1RM.toString().replace('.', ',')} <span className="text-sm">kg</span></h4>
+              </div>
+              <Trophy className="text-accent-blue" size={32} />
+          </div>
+          
+          <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Styrkeprogression (Est. 1RM)</label>
+              <div className="bg-black/20 rounded-2xl border border-white/5 p-2 space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
+                  {progressionHistory.length > 0 ? (
+                      progressionHistory.map((item, idx) => (
+                          <div key={idx} className="bg-white/5 p-3 rounded-xl flex justify-between items-center text-xs">
+                              <span className="font-bold text-text-dim">{new Date(item.date).toLocaleDateString('sv-SE')}</span>
+                              <span className="font-black text-white italic">{item.max1RM.toString().replace('.', ',')} kg</span>
+                          </div>
+                      ))
+                  ) : (
+                      <div className="text-center p-4 text-text-dim text-[9px] uppercase font-bold">Ingen 1RM-historik</div>
+                  )}
+              </div>
+          </div>
+
+          <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Volymutveckling (Total kg)</label>
+              <div className="bg-white/5 rounded-3xl p-4 h-48 flex items-end justify-between gap-1 border border-white/5">
+                  {stats.history.length > 0 ? (
+                      stats.history.slice(-15).map((h, i) => {
+                          const maxVol = Math.max(1, ...stats.history.map(x => x.volume));
+                          const height = (h.volume / maxVol) * 100;
+                          return (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
+                                  <div className="absolute bottom-full mb-2 bg-white text-black text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                      {h.volume} kg ({new Date(h.date).toLocaleDateString('sv-SE')})
+                                  </div>
+                                  <div className="w-full bg-accent-pink rounded-t-lg transition-all duration-500 hover:bg-white" style={{ height: `${height}%`, opacity: 0.3 + (height/100) }} />
+                              </div>
+                          );
+                      })
+                  ) : (
+                      <div className="w-full h-full flex items-center justify-center opacity-20 italic text-[10px] uppercase font-black">Ingen data ännu</div>
+                  )}
+              </div>
+          </div>
+      </div>
+  );
+};
+
 
 const InfoTab = ({ formData, setFormData }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>> }) => {
   const [imageUrlInput, setImageUrlInput] = useState(formData.imageUrl || '');
@@ -307,7 +329,7 @@ const MusclesTab = ({ formData, setFormData, toggleList }: any) => (
   <div className="space-y-8">
     <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Rörelsemönster</label><div className="grid grid-cols-2 gap-2">{Object.values(MovementPattern).map(p => (<button key={p} onClick={() => setFormData({ ...formData, pattern: p })} className={`py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.pattern === p ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10 text-text-dim'}`}>{p}</button>))}</div></div>
     <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-accent-pink"/> Primära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, primaryMuscles: toggleList(formData.primaryMuscles, m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.primaryMuscles || []).includes(m) ? 'bg-accent-pink text-white border-accent-pink' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
-    <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"/> Sekundära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, secondaryMuscles: toggleList(formData.secondaryMuscles || [], m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.secondaryMuscles || []).includes(m) ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
+    <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"/> Sekundära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, secondaryMuscles: toggleList(formData.secondaryMuscles, m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.secondaryMuscles || []).includes(m) ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
     <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Utrustning</label><div className="flex flex-wrap gap-2">{Object.values(Equipment).map(eq => (<button key={eq} onClick={() => setFormData({...formData, equipment: toggleList(formData.equipment, eq)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.equipment || []).includes(eq) ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-text-dim'}`}>{eq}</button>))}</div></div>
   </div>
 );

@@ -10,7 +10,7 @@ interface NumberPickerModalProps {
   step?: number;
   min?: number;
   max?: number;
-  precision?: number; // 0 för heltal (reps/meter), 1-2 för vikt
+  precision?: number;
   barWeight?: number;
   onSave: (value: number) => void;
   onClose: () => void;
@@ -20,7 +20,6 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   title, unit, value, step = 1, min = 0, max = 99999, precision = 2, barWeight = 0, onSave, onClose
 }) => {
   const [localVal, setLocalVal] = useState<string>(value.toString());
-  const [modalBarWeight, setModalBarWeight] = useState(barWeight);
   const inputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
@@ -35,20 +34,11 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     const newValue = direction === 'up' ? currentNum + step : currentNum - step;
     const clampedValue = Math.max(min, Math.min(max, newValue));
     
-    if (unit === 'reps' || precision === 0) {
+    if (precision === 0) {
         setLocalVal(Math.round(clampedValue).toString());
     } else {
         setLocalVal(parseFloat(clampedValue.toFixed(precision)).toString());
     }
-  };
-  
-  const handleBarPresetClick = (newBarWeight: number) => {
-    const currentNum = parseFloat(localVal) || 0;
-    const plateWeight = currentNum - modalBarWeight;
-    const newTotal = newBarWeight + Math.max(0, plateWeight);
-
-    setLocalVal(parseFloat(newTotal.toFixed(precision)).toString());
-    setModalBarWeight(newBarWeight);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,7 +52,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   };
 
   const handleQuickSelect = (val: number) => {
-    if (unit === 'reps' || precision === 0) {
+    if (precision === 0) {
         setLocalVal(Math.round(val).toString());
     } else {
         setLocalVal(parseFloat(val.toFixed(precision)).toString());
@@ -94,7 +84,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     }
     
     return [...new Set(values)]
-      .map(v => (unit === 'reps' || precision === 0) ? Math.round(v) : parseFloat(v.toFixed(precision)))
+      .map(v => (precision === 0) ? Math.round(v) : parseFloat(v.toFixed(precision)))
       .filter(v => v >= min && v <= max && v !== numValue)
       .sort((a, b) => a - b);
       
@@ -102,7 +92,6 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
 
 
   const currentNumericWeight = parseFloat(localVal) || 0;
-  const barPresets = [20, 15, 10];
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center px-4 animate-in fade-in duration-200">
@@ -150,29 +139,9 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
               <ChevronUp size={32} strokeWidth={3} />
             </button>
           </div>
-
-          {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={currentNumericWeight} barWeight={modalBarWeight} />}
+          
+          {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={currentNumericWeight} barWeight={barWeight} />}
         </div>
-        
-        {unit === 'kg' && barWeight > 0 && (
-          <div className="mb-6 space-y-2 border-t border-white/5 pt-6">
-            <p className="text-[10px] font-black uppercase text-text-dim tracking-widest text-center">Välj Stång</p>
-            <div className="flex gap-2 justify-center">
-              {barPresets.map(preset => (
-                <button 
-                  key={preset}
-                  onClick={() => handleBarPresetClick(preset)}
-                  className={`flex-1 max-w-[90px] py-3 rounded-xl border flex items-center justify-center gap-2 transition-all ${
-                    modalBarWeight === preset ? 'bg-accent-blue border-accent-blue text-white shadow-lg' : 'bg-white/5 border-white/10 text-text-dim'
-                  }`}
-                >
-                  <Scale size={12} />
-                  <span className="text-[10px] font-black uppercase">{preset}kg</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
           <p className="text-center text-[10px] font-black uppercase tracking-widest text-text-dim">Smarta Förslag</p>

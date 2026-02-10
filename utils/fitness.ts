@@ -1,3 +1,4 @@
+
 import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal, UserProfile, ExerciseTier, MovementPattern } from '../types';
 import { calculateMuscleRecovery } from './recovery';
 
@@ -34,7 +35,9 @@ const SESSION_BLUEPRINTS: Record<string, { tier: ExerciseTier; sets: number; rep
 export const calculate1RM = (weight: number, reps: number): number => {
   if (reps === 1) return weight;
   if (reps === 0) return 0;
-  return weight * (1 + reps / 30);
+  // Beräkna 1RM och avrunda till närmaste 0.5
+  const raw1RM = weight * (1 + reps / 30);
+  return Math.round(raw1RM * 2) / 2;
 };
 
 export const findReplacement = (currentExercise: Exercise, targetZone: Zone, allExercises: Exercise[]): Exercise => {

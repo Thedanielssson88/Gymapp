@@ -62,7 +62,7 @@ const LogSetRow: React.FC<LogSetRowProps> = ({ set, type, isPR }) => {
 
       <div className="flex items-center gap-4">
         {oneRM > 0 && (
-          <span className="text-accent-blue/60 uppercase text-[9px] font-black">est. 1RM: {oneRM}kg</span>
+          <span className="text-accent-blue/60 uppercase text-[9px] font-black">est. 1RM: {oneRM.toString().replace('.',',')}kg</span>
         )}
         
         <div className="text-right">
@@ -223,7 +223,55 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
 
                   {expandedId === session.id && (
                     <div className="px-5 pb-5 border-t border-white/5 animate-in slide-in-from-top-2 duration-300">
-                      <div className="py-4 space-y-6">{session.exercises.map((ex, idx) => {const exData = allExercises.find(e => e.id === ex.exerciseId); return (<div key={idx} className="space-y-3"><span className="text-xs font-black uppercase italic text-accent-pink tracking-tight">{exData?.name || 'Övning'}</span><div className="space-y-1.5">{ex.sets.filter(s=>s.completed).map((set, sIdx) => (<LogSetRow key={sIdx} set={set} type={exData?.trackingType} isPR={checkIsPR(ex.exerciseId, set.weight, set.reps, session.date)} />))}</div></div>);})}</div>
+                      {/* SESSION INFO: KÄNSLA & RPE */}
+                      {(session.feeling || session.rpe) && (
+                        <div className="flex flex-wrap gap-4 my-4 p-4 bg-black/20 rounded-2xl border border-white/5">
+                          {session.feeling && (
+                            <div className="flex items-center gap-2">
+                              <Activity size={14} className="text-accent-pink" />
+                              <span className="text-[10px] font-black uppercase text-white tracking-widest">{session.feeling}</span>
+                            </div>
+                          )}
+                          {session.rpe && (
+                            <div className="flex items-center gap-2">
+                              <Zap size={14} className="text-accent-blue" />
+                              <span className="text-[10px] font-black uppercase text-white tracking-widest">Ansträngning: {session.rpe}/10</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                  
+                      <div className="py-4 space-y-6">
+                        {session.exercises.map((ex, idx) => {
+                          const exData = allExercises.find(e => e.id === ex.exerciseId);
+                          return (
+                            <div key={idx} className="space-y-3">
+                              <div className="flex justify-between items-baseline gap-4">
+                                <span className="text-xs font-black uppercase italic text-accent-pink tracking-tight shrink-0">
+                                  {exData?.name || 'Övning'}
+                                </span>
+                                {ex.notes && (
+                                  <div className="flex items-center gap-1.5 opacity-60 min-w-0 text-right">
+                                    <MessageSquare size={10} className="text-text-dim shrink-0" />
+                                    <span className="text-[9px] font-bold text-text-dim italic truncate">{ex.notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              <div className="space-y-1.5">
+                                {ex.sets.filter(s => s.completed).map((set, sIdx) => (
+                                  <LogSetRow 
+                                    key={sIdx} 
+                                    set={set} 
+                                    type={exData?.trackingType} 
+                                    isPR={checkIsPR(ex.exerciseId, set.weight, set.reps, session.date)} 
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                       <div className="pt-2 border-t border-white/5"><button onClick={(e) => { e.stopPropagation(); if(confirm("Radera från historik?")) onDeleteHistory(session.id); }} className="w-full py-3 text-red-500/50 hover:text-red-500 text-[9px] font-black uppercase tracking-[0.2em] transition-colors">Radera Pass Permanent</button></div>
                     </div>
                   )}
