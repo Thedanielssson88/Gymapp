@@ -39,7 +39,6 @@ export type MuscleGroup =
   | 'Höftböjare'
   | 'Tibialis'
   | 'Rotatorcuff'
-  // FIX: Add missing muscle group literals that were causing type errors in initialExercises.ts
   | 'Hela kroppen'
   | 'Rörlighet'
   | 'Balans'
@@ -89,7 +88,6 @@ export enum Equipment {
   JUMP_ROPE = 'Hopprep',
   LANDMINE = 'Landmine / Skivstångshörna',
   MACHINES = 'Maskiner (Övriga)',
-  // FIX: Add missing equipment types that were causing type errors in initialExercises.ts
   HARNESS = 'Sele',
   AB_WHEEL = 'Maghjul',
   WALL = 'Vägg',

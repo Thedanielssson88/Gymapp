@@ -9,6 +9,7 @@ import { StatsView } from './components/StatsView';
 import { MeasurementsView } from './components/MeasurementsView';
 import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
+import { db } from './services/db'; // Importera db
 import { calculateMuscleRecovery } from './utils/recovery';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
@@ -66,6 +67,10 @@ export default function App() {
   useEffect(() => {
     const initApp = async () => {
       await storage.init();
+      
+      // Tvinga in de nya övningarna varje gång appen startar (eller en gång per version)
+      await db.syncExercises(); 
+
       await refreshData();
       setIsReady(true);
     };
@@ -107,6 +112,23 @@ export default function App() {
     setShowStartMenu(false);
     setSelectedZoneForStart(null);
     setActiveTab('workout');
+  };
+
+  const handleDeleteHistory = async (sessionId: string) => {
+    try {
+      await storage.deleteWorkoutFromHistory(sessionId);
+      setHistory(prev => prev.filter(s => s.id !== sessionId));
+    } catch (error) {
+      console.error("Kunde inte radera passet:", error);
+    }
+  };
+
+  const handleStartPlannedActivity = (activity: ScheduledActivity) => {
+    const cleanExercises = (activity.exercises || []).map(pe => ({
+      ...pe,
+      sets: pe.sets.map(s => ({...s, completed: false}))
+    }));
+    handleStartWorkout(cleanExercises, activity.title);
   };
 
   const handleAddPlan = async (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => {
@@ -155,7 +177,7 @@ export default function App() {
         if (!currentSession) return (
           <div className="flex flex-col items-center justify-center h-[80vh] gap-8 px-8 text-center">
             <div className="w-32 h-32 bg-accent-pink/5 rounded-full flex items-center justify-center text-accent-pink"><Dumbbell size={64} className="animate-bounce" /></div>
-            <div className="space-y-2"><h2 className="text-3xl font-black uppercase italic">Klar för kamp?</h2><p className="text-text-dim font-bold">Välj din miljö för att optimera passet.</p></div>
+            <div className="space-y-2"><h2 className="text-3xl font-black italic uppercase">Klar för kamp?</h2><p className="text-text-dim font-bold">Välj din miljö för att optimera passet.</p></div>
             <button onClick={() => setShowStartMenu(true)} className="bg-accent-pink w-full py-6 rounded-3xl font-black italic tracking-widest uppercase shadow-2xl text-xl">Starta Pass</button>
           </div>
         );
@@ -220,7 +242,17 @@ export default function App() {
             {bodySubTab === 'settings' && user && ( <SettingsView userProfile={user} onUpdate={refreshData} /> )}
           </div>
         );
-      case 'log': return <WorkoutLog history={history} plannedActivities={plannedActivities} routines={routines} allExercises={allExercises} onAddPlan={handleAddPlan} onTogglePlan={handleTogglePlan} onDeletePlan={handleDeletePlan} />;
+      case 'log': return <WorkoutLog 
+                          history={history} 
+                          plannedActivities={plannedActivities} 
+                          routines={routines} 
+                          allExercises={allExercises} 
+                          onAddPlan={handleAddPlan} 
+                          onTogglePlan={handleTogglePlan} 
+                          onDeletePlan={handleDeletePlan}
+                          onDeleteHistory={handleDeleteHistory}
+                          onStartActivity={handleStartPlannedActivity}
+                        />;
       case 'targets': return <TargetsView history={history} goalTargets={goalTargets} allExercises={allExercises} />;
       case 'library': return <ExerciseLibrary allExercises={allExercises} onUpdate={refreshData} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
@@ -241,7 +273,7 @@ export default function App() {
       
       {showStartMenu && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 flex flex-col overflow-y-auto scrollbar-hide">
-          <header className="flex justify-between items-center mb-10"><h3 className="text-3xl font-black uppercase italic tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3><button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim p-2"><X size={32}/></button></header>
+          <header className="flex justify-between items-center mb-10"><h3 className="text-3xl font-black italic uppercase tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3><button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); }} className="text-text-dim p-2"><X size={32}/></button></header>
           {!selectedZoneForStart ? (
             <div className="grid grid-cols-1 w-full gap-4">
               {zones.map(z => (<button key={z.id} onClick={() => setSelectedZoneForStart(z)} className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex items-center justify-between group active:scale-95 transition-all"><div className="flex items-center gap-6"><div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center">{z.name.toLowerCase().includes('hem') ? <Home size={32} /> : z.name.toLowerCase().includes('ute') ? <Trees size={32} /> : <MapPin size={32} />}</div><span className="text-2xl font-black uppercase italic tracking-tight">{z.name}</span></div><ChevronRight size={32} className="text-text-dim" /></button>))}

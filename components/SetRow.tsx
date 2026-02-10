@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { WorkoutSet, SetType, TrackingType } from '../types';
-import { calculatePlates } from '../utils/plates';
-import { Check, Plus, Calculator, Thermometer, Zap, AlertCircle } from 'lucide-react';
+import { Check, Plus, Thermometer, Zap, AlertCircle, Scale, BarChart3 as RepsIcon, Map as DistanceIcon, Timer as TimerIcon } from 'lucide-react';
+import { TimePickerModal } from './TimePickerModal';
+import { NumberPickerModal } from './NumberPickerModal';
 
 interface SetRowProps {
   setIdx: number;
@@ -13,61 +14,24 @@ interface SetRowProps {
   trackingType?: TrackingType;
 }
 
-export const SetRow: React.FC<SetRowProps> = ({ 
-  setIdx, 
-  set, 
-  isCompleted, 
+export const SetRow: React.FC<SetRowProps> = ({
+  setIdx,
+  set,
+  isCompleted,
   onUpdate,
   onAddSet,
   isLast,
   trackingType = 'reps_weight'
 }) => {
-  const [showPlates, setShowPlates] = useState(false);
-  const popupRef = useRef<HTMLDivElement>(null);
-  
+  const [activeModal, setActiveModal] = useState<'reps' | 'weight' | 'dist' | 'time' | null>(null);
+
   const formatTime = (seconds: number | undefined) => {
-    if (seconds === undefined || seconds === null) return '';
+    if (seconds === undefined || seconds === null) return '0:00';
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
-
-  const parseTime = (val: string): number => {
-    if (val.includes(':')) {
-      const parts = val.split(':');
-      const m = parseInt(parts[0], 10) || 0;
-      const s = parseInt(parts[1], 10) || 0;
-      return (m * 60) + s;
-    }
-    const num = parseInt(val, 10);
-    return isNaN(num) ? 0 : num;
-  };
-
-  const [timeInput, setTimeInput] = useState(formatTime(set.duration));
-
-  useEffect(() => {
-    setTimeInput(formatTime(set.duration));
-  }, [set.duration]);
-
-  const handleTimeBlur = () => {
-    const seconds = parseTime(timeInput);
-    onUpdate({ duration: seconds });
-    setTimeInput(formatTime(seconds));
-  };
-
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
-        setShowPlates(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const plates = calculatePlates(set.weight || 0);
-
+  
   const toggleSetType = () => {
     const types: SetType[] = ['normal', 'warmup', 'drop', 'failure'];
     const currentType = set.type || 'normal';
@@ -85,81 +49,122 @@ export const SetRow: React.FC<SetRowProps> = ({
   };
   const style = getStyle();
 
-  const renderInputs = () => {
-    const commonInputClass = `w-full bg-transparent text-2xl font-black outline-none placeholder-white/10 transition-colors ${isCompleted ? 'text-green-500/50' : 'text-white'}`;
-    const commonLabelClass = `text-[8px] font-black uppercase tracking-wider block mb-0.5 ${style.subText}`;
+  const renderValueButtons = () => {
+    const commonButtonClass = `flex-1 bg-black/30 p-3 rounded-xl border border-white/5 text-center active:scale-95 transition-transform ${isCompleted ? 'opacity-50' : ''}`;
+    const commonLabelClass = `text-[8px] block uppercase font-black tracking-widest ${style.subText}`;
+    const commonValueClass = `text-lg font-black italic ${style.text}`;
 
     switch (trackingType) {
       case 'time_distance':
         return <>
-          <div className="flex-1 relative">
-            <label className={commonLabelClass}>METER</label>
-            <input type="number" value={set.distance || ''} onChange={(e) => onUpdate({ distance: Number(e.target.value) })} className={commonInputClass} placeholder="0"/>
-          </div>
-          <div className="flex-1 border-l border-white/5 pl-3">
-            <label className={commonLabelClass}>TID</label>
-            <input type="text" value={timeInput} onChange={(e) => setTimeInput(e.target.value)} onBlur={handleTimeBlur} className={commonInputClass} placeholder="0:00"/>
-          </div>
+          <button onClick={() => !isCompleted && setActiveModal('dist')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Meter</span>
+            <span className={commonValueClass}>{set.distance || 0}</span>
+          </button>
+          <button onClick={() => !isCompleted && setActiveModal('time')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Tid</span>
+            <span className={commonValueClass}>{formatTime(set.duration)}</span>
+          </button>
         </>;
       case 'time_only':
-        return <>
-          <div className="flex-[2] border-l border-white/5 pl-3">
-            <label className={commonLabelClass}>TID</label>
-            <input type="text" value={timeInput} onChange={(e) => setTimeInput(e.target.value)} onBlur={handleTimeBlur} className={commonInputClass} placeholder="0:00"/>
-          </div>
-        </>;
+        return <button onClick={() => !isCompleted && setActiveModal('time')} className={`${commonButtonClass} flex-auto`}>
+          <span className={commonLabelClass}>Tid</span>
+          <span className={commonValueClass}>{formatTime(set.duration)}</span>
+        </button>;
       case 'reps_only':
-        return <>
-          <div className="flex-[2] border-l border-white/5 pl-3">
-            <label className={commonLabelClass}>REPS</label>
-            <input type="number" value={set.reps || ''} onChange={(e) => onUpdate({ reps: Number(e.target.value) })} className={commonInputClass} placeholder="0"/>
-          </div>
-        </>;
+        return <button onClick={() => !isCompleted && setActiveModal('reps')} className={`${commonButtonClass} flex-auto`}>
+          <span className={commonLabelClass}>Reps</span>
+          <span className={commonValueClass}>{set.reps || 0}</span>
+        </button>;
       case 'reps_weight':
       default:
         return <>
-          <div className="flex-1 relative">
-            <label className={commonLabelClass}>KG</label>
-            <div className="relative flex items-center">
-              <input type="number" value={set.weight || ''} onChange={(e) => onUpdate({ weight: Number(e.target.value) })} className={commonInputClass} placeholder="0" />
-              {!isCompleted && set.weight > 20 && ( <button onClick={() => setShowPlates(!showPlates)} className="absolute right-0 p-2 text-accent-blue opacity-50 hover:opacity-100 active:scale-95"><Calculator size={16} /></button> )}
-            </div>
-             {showPlates && (
-                <div ref={popupRef} className="absolute bottom-full left-0 mb-3 bg-[#1a1721] border border-white/10 p-4 rounded-2xl shadow-2xl z-50 w-48 animate-in slide-in-from-bottom-2 fade-in">
-                    <div className="text-[10px] font-bold text-text-dim mb-2 text-center uppercase tracking-wider">Per sida (Stång 20kg)</div>
-                    <div className="space-y-1.5">{plates.map((p, i) => (<div key={i} className="flex justify-between text-xs font-bold"><div className="flex items-center gap-2"><div className="w-2 h-4 rounded-sm" style={{backgroundColor: p.color, border: '1px solid rgba(255,255,255,0.2)'}}></div><span className="text-white">{p.weight}kg</span></div><span className="text-text-dim">x{p.count}</span></div>))}{plates.length === 0 && <span className="text-xs text-text-dim text-center block">Inga skivor</span>}</div>
-                </div>
-             )}
-          </div>
-          <div className="flex-1 border-l border-white/5 pl-3">
-            <label className={commonLabelClass}>REPS</label>
-            <input type="number" value={set.reps || ''} onChange={(e) => onUpdate({ reps: Number(e.target.value) })} className={commonInputClass} placeholder="0" />
-          </div>
+          <button onClick={() => !isCompleted && setActiveModal('weight')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Vikt (kg)</span>
+            <span className={commonValueClass}>{set.weight || 0}</span>
+          </button>
+          <button onClick={() => !isCompleted && setActiveModal('reps')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Reps</span>
+            <span className={commonValueClass}>{set.reps || 0}</span>
+          </button>
         </>;
     }
   };
 
   return (
-    <div className={`relative flex items-center gap-3 p-3 mb-2 rounded-2xl transition-all duration-300 border ${
-      isCompleted 
-        ? 'bg-green-500/5 border-green-500/10 opacity-60 grayscale-[0.3]' 
-        : `${style.container} shadow-lg scale-[1.01]`
-    }`}>
-      
-      <button onClick={toggleSetType} className="w-10 flex flex-col items-center justify-center border-r border-white/5 pr-2 active:scale-90 transition-transform cursor-pointer group">
-        <div className="flex items-center gap-1 mb-0.5">{style.icon}<span className={`text-[9px] font-black uppercase tracking-wider ${style.subText}`}>{style.label}</span></div>
-        <span className={`text-xl font-black italic ${isCompleted ? 'text-green-500' : style.text}`}>{setIdx + 1}</span>
-      </button>
+    <>
+      <div className={`relative flex items-center gap-3 p-3 mb-2 rounded-2xl transition-all duration-300 border ${
+        isCompleted 
+          ? 'bg-green-500/5 border-green-500/10 opacity-60 grayscale-[0.3]' 
+          : `${style.container} shadow-lg scale-[1.01]`
+      }`}>
+        
+        <button onClick={toggleSetType} className="w-10 flex flex-col items-center justify-center border-r border-white/5 pr-2 active:scale-90 transition-transform cursor-pointer group">
+          <div className="flex items-center gap-1 mb-0.5">{style.icon}<span className={`text-[9px] font-black uppercase tracking-wider ${style.subText}`}>{style.label}</span></div>
+          <span className={`text-xl font-black italic ${isCompleted ? 'text-green-500' : style.text}`}>{setIdx + 1}</span>
+        </button>
 
-      {renderInputs()}
+        <div className="flex-1 flex gap-2">
+          {renderValueButtons()}
+        </div>
 
-      <div className="pl-2">
-        {isLast && !isCompleted ? (
-           <button onClick={onAddSet} className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-white transition-all active:scale-90"><Plus size={20} /></button>
-        ) : (
-           <button onClick={() => onUpdate({ completed: !isCompleted })} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${ isCompleted ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-[#25222e] text-white/20 border border-white/5 hover:border-accent-pink/50 hover:text-accent-pink' }`}><Check size={24} strokeWidth={4} /></button>
-        )}
+        <div className="pl-2">
+          {isLast && !isCompleted ? (
+            <button onClick={onAddSet} className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-white transition-all active:scale-90"><Plus size={20} /></button>
+          ) : (
+            <button onClick={() => onUpdate({ completed: !isCompleted })} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${ isCompleted ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-[#25222e] text-white/20 border border-white/5 hover:border-accent-pink/50 hover:text-accent-pink' }`}><Check size={24} strokeWidth={4} /></button>
+          )}
+        </div>
       </div>
-    </div>
+      
+      {/* MODALS */}
+      {activeModal === 'time' && (
+        <TimePickerModal 
+          title="Ange Tid"
+          totalSeconds={set.duration || 0}
+          onSave={(s) => { onUpdate({ duration: s }); setActiveModal(null); }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {activeModal === 'dist' && (
+        <NumberPickerModal 
+          title="Ange Distans"
+          unit="m"
+          value={set.distance || 0}
+          step={50}
+          min={0}
+          max={99999}
+          onSave={(v) => { onUpdate({ distance: v }); setActiveModal(null); }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {activeModal === 'reps' && (
+        <NumberPickerModal 
+          title="Ange Reps"
+          unit="reps"
+          value={set.reps || 0}
+          step={1}
+          min={0}
+          max={999}
+          onSave={(v) => { onUpdate({ reps: v }); setActiveModal(null); }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+      
+      {activeModal === 'weight' && (
+        <NumberPickerModal 
+          title="Ange Vikt"
+          unit="kg"
+          value={set.weight || 0}
+          step={1.25}
+          min={0}
+          max={999}
+          onSave={(v) => { onUpdate({ weight: v }); setActiveModal(null); }}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+    </>
   );
 };

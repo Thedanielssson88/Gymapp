@@ -48,6 +48,10 @@ export const storage = {
     }
   },
 
+  deleteWorkoutFromHistory: async (sessionId: string) => {
+    await db.workoutHistory.delete(sessionId);
+  },
+
   getActiveSession: async (): Promise<WorkoutSession | undefined> => {
     const sess = await db.activeSession.get('current');
     if (sess) {

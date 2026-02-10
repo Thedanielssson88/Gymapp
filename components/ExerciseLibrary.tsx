@@ -5,7 +5,8 @@ import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { ExerciseImporter } from './ExerciseImporter';
 import { ImageUpload } from './ImageUpload';
 import { useExerciseImage } from '../hooks/useExerciseImage';
-import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown } from 'lucide-react';
+import { generateExerciseDetailsFromGemini } from '../services/geminiService';
+import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2 } from 'lucide-react';
 
 interface ExerciseLibraryProps {
   allExercises: Exercise[];
@@ -251,7 +252,18 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, allExercises: Exercise[], o
   const [activeTab, setActiveTab] = useState<'info' | 'muscles' | 'settings'>('info');
 
   useEffect(() => { 
-    // This effect ensures that if a new exercise is passed in while the editor is open, the form data updates.
+      setFormData({ 
+        ...exercise,
+        englishName: exercise.englishName || '',
+        primaryMuscles: exercise.primaryMuscles || [],
+        secondaryMuscles: exercise.secondaryMuscles || [],
+        equipment: exercise.equipment || [],
+        difficultyMultiplier: exercise.difficultyMultiplier ?? 1,
+        bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0,
+        trackingType: exercise.trackingType || 'reps_weight',
+        tier: exercise.tier || 'tier_3',
+        alternativeExIds: exercise.alternativeExIds || []
+    });
   }, [exercise]);
 
   const toggleList = (list: string[], item: string) => list.includes(item) ? list.filter(i => i !== item) : [...list, item];
@@ -271,13 +283,97 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, allExercises: Exercise[], o
   );
 };
 
-// --- SUB-COMPONENTS FOR EDITOR TABS (Unchanged for brevity, but they are here as in the prompt) ---
-const InfoTab = ({ formData, setFormData }: { formData: Exercise, setFormData: (d: Exercise) => void }) => {
+const InfoTab = ({ formData, setFormData }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>> }) => {
   const [imageUrlInput, setImageUrlInput] = useState(formData.imageUrl || '');
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleAiGenerate = async () => {
+    if (!formData.name) {
+      alert("Skriv namnet på övningen först!");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const aiData = await generateExerciseDetailsFromGemini(formData.name);
+      
+      setFormData(prev => {
+        const primary = aiData.primaryMuscles ?? prev.primaryMuscles;
+        const secondary = aiData.secondaryMuscles ?? prev.secondaryMuscles;
+        return {
+            ...prev,
+            englishName: aiData.englishName ?? prev.englishName,
+            description: aiData.description ?? prev.description,
+            pattern: aiData.pattern ?? prev.pattern,
+            tier: aiData.tier ?? prev.tier,
+            trackingType: aiData.trackingType ?? prev.trackingType,
+            difficultyMultiplier: aiData.difficultyMultiplier ?? prev.difficultyMultiplier,
+            bodyweightCoefficient: aiData.bodyweightCoefficient ?? prev.bodyweightCoefficient,
+            primaryMuscles: primary,
+            secondaryMuscles: secondary,
+            muscleGroups: Array.from(new Set([
+                ...(primary ?? []),
+                ...(secondary ?? [])
+            ])) as MuscleGroup[],
+        };
+      });
+
+    } catch (err: any) {
+        alert(err.message || "Något gick fel med AI-genereringen.");
+    } finally {
+        setIsGenerating(false);
+    }
+  };
+  
   useEffect(() => { setImageUrlInput(formData.imageUrl || '') }, [formData.imageUrl]);
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => { setImageUrlInput(e.target.value); setFormData({ ...formData, imageUrl: e.target.value, imageId: undefined }); };
-  const handleImageUpload = (id: string) => { setFormData({...formData, imageId: id, imageUrl: ''}); setImageUrlInput(''); };
-  return (<div className="space-y-6"><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Svenska)</label><input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xl font-black outline-none focus:border-accent-pink" placeholder="T.ex. Bänkpress" /></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Engelska)</label><input type="text" value={formData.englishName || ''} onChange={e => setFormData({ ...formData, englishName: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-lg font-bold italic outline-none focus:border-accent-pink" placeholder="T.ex. Bench Press" /></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Beskrivning</label><textarea value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-sm font-medium outline-none min-h-[100px]" placeholder="Hur utförs övningen?" /></div><div className="space-y-4"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Bild</label><div className="bg-white/5 rounded-2xl p-4 border border-white/10"><ImageUpload currentImageId={formData.imageId} onImageSaved={handleImageUpload}/></div><div className="relative group"><LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} /><input type="text" value={imageUrlInput} onChange={handleUrlChange} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 pl-12 text-sm font-medium outline-none focus:border-accent-blue placeholder:text-text-dim/50" placeholder="Eller klistra in bild-URL..." /></div></div></div>);
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImageUrlInput(e.target.value);
+    setFormData(prev => ({ ...prev, imageUrl: e.target.value, imageId: undefined }));
+  };
+
+  const handleImageUpload = (id: string) => {
+    setFormData(prev => ({ ...prev, imageId: id, imageUrl: '' }));
+    setImageUrlInput('');
+  };
+
+  const handleChange = (field: keyof Exercise, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+  
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <div className="flex justify-between items-end">
+          <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Svenska)</label>
+          <button 
+            onClick={handleAiGenerate}
+            disabled={isGenerating || !formData.name}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${
+              isGenerating ? 'bg-white/5 text-text-dim cursor-not-allowed' : 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20 hover:bg-accent-blue/20'
+            }`}
+          >
+            {isGenerating ? <Loader2 className="animate-spin" size={12} /> : <Zap size={12} />}
+            {isGenerating ? 'Analyserar...' : 'Generera med AI'}
+          </button>
+        </div>
+        <input type="text" value={formData.name} onChange={e => handleChange('name', e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xl font-black outline-none focus:border-accent-pink" placeholder="T.ex. Bänkpress" />
+      </div>
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Engelska)</label>
+        <input type="text" value={formData.englishName || ''} onChange={e => handleChange('englishName', e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-lg font-bold italic outline-none focus:border-accent-pink" placeholder="T.ex. Bench Press" />
+      </div>
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Beskrivning</label>
+        <textarea value={formData.description || ''} onChange={e => handleChange('description', e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-sm font-medium outline-none min-h-[100px]" placeholder="Hur utförs övningen?" />
+      </div>
+      <div className="space-y-4">
+        <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Bild</label>
+        <div className="bg-white/5 rounded-2xl p-4 border border-white/10"><ImageUpload currentImageId={formData.imageId} onImageSaved={handleImageUpload}/></div>
+        <div className="relative group"><LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} /><input type="text" value={imageUrlInput} onChange={handleUrlChange} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 pl-12 text-sm font-medium outline-none focus:border-accent-blue placeholder:text-text-dim/50" placeholder="Eller klistra in bild-URL..." /></div>
+      </div>
+    </div>
+  );
 };
 
 const MusclesTab = ({ formData, setFormData, toggleList }: any) => (

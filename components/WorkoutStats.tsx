@@ -49,8 +49,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({
 
       {isLoadMapOpen && (
         <div className="mt-8 pt-8 border-t border-white/5 animate-in fade-in slide-in-from-top-2">
-          {/* Use recoveryScores instead of loadMap and provide the required mode prop */}
-          <RecoveryMap mode="recovery" recoveryScores={loadMap} />
+          <RecoveryMap mode="load" loadScores={loadMap} />
         </div>
       )}
     </div>

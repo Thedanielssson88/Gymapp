@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MuscleGroup } from '../types';
 
-export type MapMode = 'recovery' | 'injuries';
+export type MapMode = 'recovery' | 'injuries' | 'load';
 
 interface RecoveryMapProps {
   mode: MapMode;
   recoveryScores?: Record<MuscleGroup, number>;
+  loadScores?: Record<MuscleGroup, number>;
   injuries?: MuscleGroup[];
   onToggle?: (muscle: MuscleGroup) => void;
 }
@@ -13,9 +14,19 @@ interface RecoveryMapProps {
 export const RecoveryMap: React.FC<RecoveryMapProps> = ({ 
   mode,
   recoveryScores, 
+  loadScores,
   injuries = [], 
   onToggle
 }) => {
+
+  const maxLoad = useMemo(() => {
+    if (mode !== 'load' || !loadScores) return 1;
+    const values = Object.values(loadScores);
+    if (values.length === 0) return 1;
+    // FIX: The type of `values` can be inferred as `unknown[]`, which is not compatible with `Math.max`.
+    // Casting to `number[]` resolves the type mismatch.
+    return Math.max(...(values as number[]), 1);
+  }, [mode, loadScores]);
 
   const getColor = (muscle: MuscleGroup) => {
     const isInjured = injuries.includes(muscle);
@@ -25,6 +36,16 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
 
     // REDIGERING AV SKADOR (Ej valda är grå)
     if (mode === 'injuries') return 'rgba(255, 255, 255, 0.1)';
+
+    // BELASTNINGSLÄGE (för pågående pass)
+    if (mode === 'load') {
+      const load = loadScores?.[muscle] ?? 0;
+      const percentage = (load / maxLoad) * 100;
+      if (percentage > 75) return '#ff2d55'; // High load - accent-pink
+      if (percentage > 40) return '#3b82f6'; // Medium load - accent-blue
+      if (percentage > 0) return 'rgba(59, 130, 246, 0.4)'; // Low load - transparent blue
+      return 'rgba(255, 255, 255, 0.1)'; // No load
+    }
 
     // RECOVERYLÄGE
     const score = recoveryScores?.[muscle] ?? 100;

@@ -1,341 +1,343 @@
 import React, { useState, useMemo } from 'react';
-import { WorkoutSession, ScheduledActivity, ActivityType, WorkoutRoutine, Exercise, SetType } from '../types';
+import { 
+  WorkoutSession, ScheduledActivity, ActivityType, 
+  WorkoutRoutine, Exercise, TrackingType 
+} from '../types';
 import { 
   Calendar as CalIcon, ChevronLeft, ChevronRight, CheckCircle2, 
-  Circle, Plus, Dumbbell, History, Repeat, Trash2, X, Play, Clock, TrendingUp,
-  MessageSquare, Flame, AlertTriangle
+  Circle, Plus, Dumbbell, History, Repeat, Trash2, X, 
+  Clock, ChevronDown, ChevronUp, MapPin, TrendingUp, Timer
 } from 'lucide-react';
 
+// --- HJÄLPFUNKTIONER FÖR ANALYS ---
+const formatSeconds = (totalSeconds: number) => {
+  if (isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const calculatePace = (timeInSeconds: number, distanceInMeters: number) => {
+  if (!distanceInMeters || !timeInSeconds) return null;
+  const paceInSecondsPerKm = (timeInSeconds / distanceInMeters) * 1000;
+  const mins = Math.floor(paceInSecondsPerKm / 60);
+  const secs = Math.round(paceInSecondsPerKm % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')} min/km`;
+};
+
+const calculateSetVolume = (set: any) => (set.weight || 0) * (set.reps || 0);
+
+function getWeekNumber(d: Date) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay()||7));
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+    return Math.ceil(( ( (date.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
+}
+
+// --- DELKOMPONENT: SET-RADER ---
+const SetValueDisplay = ({ set, type }: { set: any, type: TrackingType | undefined }) => {
+  switch (type) {
+    case 'time_distance':
+      const pace = calculatePace(set.duration || 0, set.distance || 0);
+      return (
+        <div className="flex flex-col items-end">
+          <div className="flex items-center gap-2 text-white">
+            <span>{(set.distance || 0)}m</span>
+            <span className="text-text-dim">@</span>
+            <span>{formatSeconds(set.duration || 0)}</span>
+          </div>
+          {pace && <span className="text-[9px] text-accent-blue font-black uppercase">{pace}</span>}
+        </div>
+      );
+    case 'time_only':
+      return <span className="text-white">{formatSeconds(set.duration || 0)}</span>;
+    case 'reps_only':
+      return <span className="text-white">{set.reps || 0} reps</span>;
+    default:
+      const vol = calculateSetVolume(set);
+      return (
+        <div className="flex flex-col items-end">
+          <div className="flex items-center gap-2 text-white">
+            <span>{set.reps || 0}</span><span className="text-text-dim">×</span><span>{set.weight || 0}kg</span>
+          </div>
+          {vol > 0 && <span className="text-[9px] text-text-dim uppercase tracking-tighter">Volym: {vol}kg</span>}
+        </div>
+      );
+  }
+};
+
+// --- HUVUDKOMPONENT ---
 interface WorkoutLogProps {
   history: WorkoutSession[];
   plannedActivities: ScheduledActivity[];
   routines: WorkoutRoutine[];
+  allExercises: Exercise[];
   onAddPlan: (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => void;
   onTogglePlan: (id: string) => void;
   onDeletePlan: (id: string) => void;
+  onDeleteHistory: (id: string) => void;
   onStartActivity: (activity: ScheduledActivity) => void;
-  allExercises: Exercise[];
 }
 
 export const WorkoutLog: React.FC<WorkoutLogProps> = ({ 
-  history, plannedActivities, routines, onAddPlan, onTogglePlan, onDeletePlan, onStartActivity, allExercises 
+  history, plannedActivities, routines, allExercises,
+  onAddPlan, onTogglePlan, onDeletePlan, onDeleteHistory, onStartActivity
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showPlanModal, setShowPlanModal] = useState(false);
-  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   
-  // State för modalen
   const [planTitle, setPlanTitle] = useState('');
-  const [planDate, setPlanDate] = useState('');
-  const [planType, setPlanType] = useState<ActivityType>('gym');
-  const [selectedRoutineId, setSelectedRoutineId] = useState<string>('');
+  const [planDate, setPlanDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedRoutineId, setSelectedRoutineId] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
-  // --- KALENDER LOGIK (Veckovy) ---
-  const startOfWeek = useMemo(() => {
+  // Generera alla 7 dagar för den valda veckan
+  const weekDays = useMemo(() => {
     const d = new Date(currentDate);
     const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff));
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Måndag som start
+    const start = new Date(d.setDate(diff));
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(start);
+      day.setDate(day.getDate() + i);
+      return day;
+    });
   }, [currentDate]);
 
-  const weekDays = useMemo(() => {
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(startOfWeek);
-      d.setDate(d.getDate() + i);
-      days.push(new Date(d));
-    }
-    return days;
-  }, [startOfWeek]);
-
-  const dateKey = (d: Date) => d.toISOString().split('T')[0];
-
-  const handleSave = () => {
-    if (!planTitle && !selectedRoutineId) return;
-
+  const handleSavePlan = () => {
     const routine = routines.find(r => r.id === selectedRoutineId);
-    const exercises = routine ? routine.exercises : [];
-    const finalTitle = planTitle || routine?.name || 'Träning';
-
+    const finalTitle = planTitle || routine?.name || 'Ny Plan';
+    
     const activity: ScheduledActivity = {
-      id: `manual-${Date.now()}`,
-      date: planDate || dateKey(new Date()),
-      type: planType,
+      id: `plan-${Date.now()}`,
+      date: planDate,
+      type: 'gym',
       title: finalTitle,
       isCompleted: false,
-      exercises: exercises
+      exercises: routine?.exercises || []
     };
-
     onAddPlan(activity, isRecurring, selectedDays);
-    
     setShowPlanModal(false);
     setPlanTitle('');
     setSelectedRoutineId('');
-    setIsRecurring(false);
-    setSelectedDays([]);
-  };
-
-  const toggleDay = (d: number) => {
-    if(selectedDays.includes(d)) setSelectedDays(selectedDays.filter(x => x !== d));
-    else setSelectedDays([...selectedDays, d]);
-  };
-
-  const getTypeColor = (type?: SetType) => {
-    switch (type) {
-      case 'warmup': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
-      case 'drop': return 'text-red-500 bg-red-500/10 border-red-500/20';
-      case 'failure': return 'text-purple-500 bg-purple-500/10 border-purple-500/20';
-      default: return 'text-white bg-white/5 border-white/5';
-    }
   };
 
   return (
-    <div className="pb-32 space-y-4 animate-in fade-in">
-      <div className="px-4 flex justify-between items-end pt-8">
-         <h2 className="text-3xl font-black italic uppercase text-white">Kalender</h2>
-         <button 
-           onClick={() => { setPlanDate(dateKey(new Date())); setShowPlanModal(true); }}
-           className="bg-white text-black p-3 rounded-xl shadow-lg active:scale-95 transition-all"
-         >
-           <Plus size={24} />
-         </button>
+    <div className="pb-32 space-y-6 animate-in fade-in">
+      
+      {/* HEADER */}
+      <div className="px-4 pt-8 flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">Logg & Plan</h2>
+          <p className="text-[10px] text-text-dim font-bold uppercase tracking-[0.2em]">Vecka {getWeekNumber(currentDate)}</p>
+        </div>
+        <button onClick={() => { setPlanDate(new Date().toISOString().split('T')[0]); setShowPlanModal(true); }} className="bg-white text-black p-3 rounded-2xl shadow-xl active:scale-90 transition-transform">
+          <Plus size={24} strokeWidth={3} />
+        </button>
       </div>
 
-      {/* NAVIGERING */}
-      <div className="flex items-center justify-between px-6 bg-[#1a1721] py-3 mx-4 rounded-2xl border border-white/5">
-         <button onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() - 7)))}><ChevronLeft className="text-text-dim"/></button>
-         <span className="text-xs font-black uppercase tracking-widest text-white">Vecka {getWeekNumber(currentDate)}</span>
-         <button onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() + 7)))}><ChevronRight className="text-text-dim"/></button>
+      {/* KALENDER NAVIGERING */}
+      <div className="flex items-center justify-between mx-4 bg-[#1a1721] p-2 rounded-2xl border border-white/5 shadow-lg">
+        {/* Vänsterpil */}
+        <button 
+          onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() - 7)))} 
+          className="p-3 text-text-dim hover:text-white transition-colors shrink-0"
+        >
+          <ChevronLeft size={20} />
+        </button>
+
+        {/* Dagar - Här är fixen: flex-1, min-w-0 och justify-between/around */}
+        <div className="flex flex-1 justify-around items-center px-1 min-w-0 overflow-hidden">
+          {weekDays.map(d => {
+            const isToday = d.toDateString() === new Date().toDateString();
+            return (
+              <div 
+                key={d.toString()} 
+                className={`flex flex-col items-center justify-center p-1.5 rounded-xl transition-all ${
+                  isToday 
+                    ? 'bg-accent-pink text-white shadow-md shadow-accent-pink/20 scale-110' 
+                    : 'text-text-dim'
+                }`}
+                style={{ width: 'calc(100% / 7)', maxWidth: '45px' }} // Tvingar dagarna att dela på utrymmet
+              >
+                <span className="text-[7px] font-black uppercase opacity-60 leading-none mb-1">
+                  {d.toLocaleDateString('sv-SE', { weekday: 'short' }).replace('.', '').slice(0, 3)}
+                </span>
+                <span className="text-xs font-black leading-none">
+                  {d.getDate()}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Högerpil - shrink-0 ser till att den inte trycks ihop eller utanför */}
+        <button 
+          onClick={() => setCurrentDate(new Date(currentDate.setDate(currentDate.getDate() + 7)))} 
+          className="p-3 text-text-dim hover:text-white transition-colors shrink-0"
+        >
+          <ChevronRight size={20} />
+        </button>
       </div>
 
-      {/* DAGAR */}
-      <div className="px-4 space-y-3">
+      {/* LISTA MED ALLA DAGAR I VECKAN */}
+      <div className="px-4 space-y-6">
         {weekDays.map(day => {
-           const dKey = dateKey(day);
-           const isToday = dKey === dateKey(new Date());
-           
-           const dayHistory = history.filter(h => dateKey(new Date(h.date)) === dKey);
-           const dayPlans = plannedActivities.filter(p => p.date === dKey);
+          const dKey = day.toISOString().split('T')[0];
+          const isToday = dKey === new Date().toISOString().split('T')[0];
+          const dayPlans = plannedActivities.filter(p => p.date === dKey);
+          const dayHistory = history.filter(h => h.date.startsWith(dKey));
 
-           return (
-             <div key={dKey} className={`min-h-[80px] rounded-2xl border p-3 flex gap-4 ${isToday ? 'bg-white/10 border-white/20' : 'bg-[#1a1721] border-white/5'}`}>
-                {/* Datum */}
-                <div className="flex flex-col items-center w-10 pt-1 flex-shrink-0">
-                   <span className="text-[9px] font-bold uppercase text-text-dim">{day.toLocaleDateString('sv-SE', {weekday:'short'}).replace('.','')}</span>
-                   <span className={`text-lg font-black ${isToday ? 'text-accent-pink' : 'text-white'}`}>{day.getDate()}</span>
+          return (
+            <div key={dKey} className="space-y-3">
+              <div className="flex items-center gap-3 px-2">
+                <div className={`h-[1px] flex-1 ${isToday ? 'bg-accent-pink/30' : 'bg-white/5'}`} />
+                <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] ${isToday ? 'text-accent-pink' : 'text-text-dim'}`}>
+                  {day.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' })}
+                </h4>
+                <div className={`h-[1px] flex-1 ${isToday ? 'bg-accent-pink/30' : 'bg-white/5'}`} />
+              </div>
+
+              {/* PLANERADE PASS */}
+              {dayPlans.map(p => (
+                <div key={p.id} className="bg-accent-blue/5 border border-accent-blue/20 rounded-[28px] p-4 flex justify-between items-center group animate-in zoom-in-95">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-accent-blue/10 rounded-xl flex items-center justify-center text-accent-blue">
+                      <Repeat size={18} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-white uppercase italic leading-none mb-1">{p.title}</p>
+                      <p className="text-[9px] font-bold text-accent-blue/60 uppercase tracking-widest">Planerat • {p.exercises?.length || 0} övningar</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => onStartActivity(p)} className="bg-accent-blue text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg shadow-accent-blue/20 active:scale-95 transition-transform">Starta</button>
+                    <button onClick={() => onDeletePlan(p.id)} className="p-2 text-text-dim hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                  </div>
                 </div>
+              ))}
 
-                {/* Innehåll */}
-                <div className="flex-1 space-y-2 min-w-0">
-                   {/* 1. Historik (Utförda pass) */}
-                   {dayHistory.map(h => (
-                      <div key={h.id} className="bg-[#0f0d15] border border-white/10 rounded-xl overflow-hidden">
-                         <div 
-                           onClick={() => setExpandedSessionId(expandedSessionId === h.id ? null : h.id)}
-                           className="p-3 flex items-center justify-between cursor-pointer active:bg-white/5 transition-colors"
-                         >
-                            <div className="flex items-center gap-3">
-                               <CheckCircle2 size={16} className="text-green-500" />
-                               <div className="min-w-0">
-                                  <p className="text-xs font-bold text-white line-through opacity-60 truncate">{h.name}</p>
-                                  <div className="flex items-center gap-x-2 gap-y-1 mt-0.5 flex-wrap">
-                                    <span className="text-[9px] text-green-400 font-bold uppercase">Slutfört</span>
-                                    <span className="text-[9px] text-text-dim flex items-center gap-1"><Clock size={10}/> {Math.round((h.duration || 0) / 60)} min</span>
-                                    {h.rpe && (
-                                        <span className="text-[9px] text-text-dim flex items-center gap-1">
-                                            <TrendingUp size={10}/> RPE {h.rpe}
-                                        </span>
-                                    )}
-                                    {h.feeling && (
-                                        <span className="text-[9px] bg-white/5 px-1.5 py-0.5 rounded capitalize text-white/70">
-                                            {h.feeling}
-                                        </span>
-                                    )}
-                                  </div>
-                               </div>
-                            </div>
-                            <History size={14} className="text-white/20" />
-                         </div>
-
-                         {/* EXPANDERAD VY FÖR HISTORIK */}
-                         {expandedSessionId === h.id && (
-                           <div className="bg-black/20 p-3 border-t border-white/5 space-y-3 animate-in slide-in-from-top-2">
-                              {h.exercises.map((ex, i) => {
-                                 const exDef = allExercises.find(e => e.id === ex.exerciseId);
-                                 return (
-                                   <div key={i} className="space-y-1">
-                                      <div className="flex justify-between items-baseline">
-                                        <p className="text-[10px] font-black uppercase text-accent-blue">{exDef?.name || 'Övning'}</p>
-                                        {ex.notes && <MessageSquare size={10} className="text-white/40" />}
-                                      </div>
-                                      
-                                      {/* Set Lista */}
-                                      <div className="space-y-1">
-                                        {ex.sets.filter(s => s.completed).map((s, si) => (
-                                          <div key={si} className="flex items-center gap-2 text-[10px] text-text-dim">
-                                             <span className={`w-4 text-center font-mono opacity-50`}>{si + 1}</span>
-                                             <span className="text-white font-bold">{s.weight}kg x {s.reps}</span>
-                                             
-                                             {/* Taggar */}
-                                             {s.type === 'warmup' && <span className="px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-[8px] uppercase font-bold flex items-center gap-1"><Flame size={8}/> Uppv.</span>}
-                                             {s.type === 'failure' && <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[8px] uppercase font-bold flex items-center gap-1"><AlertTriangle size={8}/> Fail</span>}
-                                             {s.type === 'drop' && <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 border border-red-500/20 text-[8px] uppercase font-bold">DROP</span>}
-                                          </div>
-                                        ))}
-                                      </div>
-                                      
-                                      {/* Anteckningar */}
-                                      {ex.notes && (
-                                        <p className="text-[9px] italic text-white/40 bg-white/5 p-2 rounded-lg mt-1">
-                                          "{ex.notes}"
-                                        </p>
-                                      )}
-                                   </div>
-                                 );
-                              })}
-                           </div>
-                         )}
+              {/* HISTORIK (UTFÖRDA PASS) */}
+              {dayHistory.map(session => (
+                <div key={session.id} className="bg-[#1a1721] rounded-[32px] border border-white/5 overflow-hidden transition-all shadow-xl">
+                  <div 
+                    onClick={() => setExpandedId(expandedId === session.id ? null : session.id)}
+                    className="p-5 flex justify-between items-center cursor-pointer active:bg-white/5"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-green-500/10 rounded-xl flex items-center justify-center text-green-500">
+                        <CheckCircle2 size={18} />
                       </div>
-                   ))}
-
-                   {/* 2. Planerade pass */}
-                   {dayPlans.map(p => {
-                      const isDone = p.isCompleted; 
-                      return (
-                        <div key={p.id} className="relative group">
-                           <div className={`p-3 rounded-xl border flex flex-col gap-2 transition-all ${isDone ? 'bg-white/5 border-white/5 opacity-50' : 'bg-accent-blue/10 border-accent-blue/30'}`}>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                   {isDone ? <CheckCircle2 size={16} className="text-text-dim"/> : <Circle size={16} className="text-accent-blue"/>}
-                                   <div>
-                                      <p className={`text-xs font-bold ${isDone ? 'text-text-dim line-through' : 'text-white'}`}>{p.title}</p>
-                                      <p className="text-[9px] text-text-dim font-bold uppercase flex items-center gap-1">
-                                         {p.type} 
-                                         {p.recurrenceId && <Repeat size={8} />}
-                                      </p>
-                                   </div>
-                                </div>
-                                {!isDone && (
-                                  <button onClick={() => onStartActivity(p)} className="bg-accent-blue text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-1 active:scale-95 transition-all shadow-lg shadow-accent-blue/20">
-                                    <Play size={10} fill="currentColor" /> Starta
-                                  </button>
-                                )}
-                              </div>
-                              
-                              {/* Visa övningar i planeringen om de finns */}
-                              {p.exercises && p.exercises.length > 0 && (
-                                <div className="pl-7 pt-1 border-t border-white/5 mt-1">
-                                  <p className="text-[9px] font-bold text-white/40 uppercase mb-1">{p.exercises.length} övningar:</p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {p.exercises.slice(0, 3).map((pe, i) => {
-                                      const exName = allExercises.find(e => e.id === pe.exerciseId)?.name;
-                                      return exName ? <span key={i} className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded text-white/60">{exName}</span> : null;
-                                    })}
-                                    {p.exercises.length > 3 && <span className="text-[9px] text-white/40">...</span>}
-                                  </div>
-                                </div>
-                              )}
-                           </div>
-                           <button onClick={(e) => {e.stopPropagation(); onDeletePlan(p.id)}} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={12}/></button>
+                      <div>
+                        <h3 className="text-sm font-black italic uppercase text-white leading-tight mb-1">{session.name}</h3>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-green-500/70 font-black uppercase tracking-widest">Slutfört</span>
+                            <span className="text-[9px] text-text-dim font-bold uppercase tracking-widest">• {Math.round((session.duration || 0)/60)} min</span>
                         </div>
-                      );
-                   })}
+                      </div>
+                    </div>
+                    <div className="text-text-dim">{expandedId === session.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}</div>
+                  </div>
 
-                   {/* Tom dag? */}
-                   {dayHistory.length === 0 && dayPlans.length === 0 && (
-                      <button 
-                        onClick={() => { setPlanDate(dKey); setShowPlanModal(true); }}
-                        className="w-full h-full flex items-center justify-center gap-2 px-3 py-4 border-2 border-dashed border-white/5 rounded-xl text-text-dim/30 hover:text-text-dim hover:border-white/10 text-[10px] font-bold uppercase tracking-widest transition-all"
-                      >
-                         <Plus size={14}/> Planera
-                      </button>
-                   )}
+                  {expandedId === session.id && (
+                    <div className="px-5 pb-5 border-t border-white/5 animate-in slide-in-from-top-2 duration-300">
+                      <div className="py-4 space-y-5">
+                        {session.exercises.map((ex, idx) => {
+                          const exData = allExercises.find(e => e.id === ex.exerciseId);
+                          return (
+                            <div key={idx} className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black uppercase italic text-accent-pink tracking-tight">{exData?.name || 'Övning'}</span>
+                                <span className="text-[9px] text-text-dim font-bold uppercase">{ex.sets.filter(s=>s.completed).length} set</span>
+                              </div>
+                              <div className="space-y-1">
+                                {ex.sets.filter(s=>s.completed).map((set, sIdx) => (
+                                  <div key={sIdx} className="bg-black/20 p-2.5 rounded-xl flex justify-between items-center text-[10px] font-bold">
+                                    <span className="text-text-dim opacity-50 font-mono">SET {sIdx + 1}</span>
+                                    <SetValueDisplay set={set} type={exData?.trackingType} />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="pt-2 border-t border-white/5">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); if(confirm("Radera från historik?")) onDeleteHistory(session.id); }}
+                          className="w-full py-3 text-red-500/50 hover:text-red-500 text-[9px] font-black uppercase tracking-[0.2em] transition-colors"
+                        >
+                          Radera Pass Permanent
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-             </div>
-           );
+              ))}
+
+              {/* SNABBKNAPP OM DAGEN ÄR TOM */}
+              {dayPlans.length === 0 && dayHistory.length === 0 && (
+                <button 
+                  onClick={() => { setPlanDate(dKey); setShowPlanModal(true); }}
+                  className="w-full py-4 border-2 border-dashed border-white/5 rounded-[28px] flex items-center justify-center gap-2 text-text-dim/20 hover:text-text-dim/50 hover:border-white/10 transition-all group"
+                >
+                  <Plus size={16} className="group-hover:scale-125 transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Planera pass</span>
+                </button>
+              )}
+            </div>
+          );
         })}
       </div>
 
-      {/* --- MODAL --- */}
+      {/* MODAL: PLANERING */}
       {showPlanModal && (
-         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-            <div className="bg-[#1a1721] w-full max-w-sm rounded-[32px] border border-white/10 p-6 animate-in slide-in-from-bottom-10">
-               <h3 className="text-xl font-black italic uppercase text-white mb-6">Planera Pass</h3>
-               
-               <div className="space-y-4">
-                  {/* Val av datum */}
-                  <div>
-                     <div className="flex justify-between items-center mb-2">
-                        <label className="text-[10px] font-bold uppercase text-text-dim">Datum / Rutin</label>
-                        <button onClick={() => setIsRecurring(!isRecurring)} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase ${isRecurring ? 'bg-accent-blue text-white' : 'bg-white/5 text-text-dim'}`}>
-                           <Repeat size={10} /> {isRecurring ? 'Återkommande' : 'Enstaka'}
-                        </button>
-                     </div>
-                     
-                     {isRecurring ? (
-                        <div className="flex justify-between gap-1">
-                           {['S','M','T','O','T','F','L'].map((d, i) => (
-                              <button key={i} onClick={() => toggleDay(i)} className={`w-8 h-8 rounded-full text-[10px] font-black ${selectedDays.includes(i) ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}>{d}</button>
-                           ))}
-                        </div>
-                     ) : (
-                        <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold outline-none" />
-                     )}
-                  </div>
-
-                  {/* Val av innehåll */}
-                  <div>
-                     <label className="text-[10px] font-bold uppercase text-text-dim mb-2 block">Vad ska du köra?</label>
-                     
-                     {/* Alternativ 1: Välj Rutin */}
-                     {routines.length > 0 && (
-                        <div className="mb-3">
-                           <select 
-                             value={selectedRoutineId} 
-                             onChange={(e) => setSelectedRoutineId(e.target.value)}
-                             className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-sm font-bold outline-none mb-2"
-                           >
-                              <option value="">-- Välj en sparad rutin --</option>
-                              {routines.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                           </select>
-                        </div>
-                     )}
-
-                     {/* Alternativ 2: Fritext (om ingen rutin vald) */}
-                     {!selectedRoutineId && (
-                        <input 
-                          type="text" 
-                          placeholder="Eller skriv titel (t.ex. Rehab Axel)" 
-                          value={planTitle} 
-                          onChange={e => setPlanTitle(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold outline-none placeholder:text-white/20"
-                        />
-                     )}
-                  </div>
-                  
-                  {/* Typ */}
-                  <div className="flex gap-2">
-                     {(['gym', 'rehab', 'cardio'] as ActivityType[]).map(t => (
-                        <button key={t} onClick={() => setPlanType(t)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border ${planType === t ? 'bg-white text-black border-white' : 'bg-transparent border-white/10 text-text-dim'}`}>{t}</button>
-                     ))}
-                  </div>
-
-                  <button onClick={handleSave} className="w-full py-4 bg-accent-blue text-white rounded-2xl font-black italic uppercase tracking-widest shadow-lg mt-2">Spara Planering</button>
-                  <button onClick={() => setShowPlanModal(false)} className="w-full py-2 text-xs font-bold text-text-dim uppercase">Avbryt</button>
-               </div>
+        <div className="fixed inset-0 z-[100] bg-[#0f0d15]/95 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
+          <div className="bg-[#1a1721] w-full max-w-sm rounded-[40px] border border-white/10 p-8 animate-in slide-in-from-bottom-10 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black italic uppercase text-white tracking-tighter">Planera</h3>
+                <button onClick={() => setShowPlanModal(false)} className="p-2 text-text-dim"><X /></button>
             </div>
-         </div>
+            
+            <div className="space-y-5">
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Välj Rutin</label>
+                  <select 
+                    value={selectedRoutineId} 
+                    onChange={e => setSelectedRoutineId(e.target.value)}
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-accent-blue/50"
+                  >
+                    <option value="">-- Eget pass --</option>
+                    {routines.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+               </div>
+               
+               {!selectedRoutineId && (
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Namn på passet</label>
+                    <input 
+                      placeholder="t.ex. Morgonlöpning..." 
+                      value={planTitle} 
+                      onChange={e => setPlanTitle(e.target.value)}
+                      className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-accent-blue/50"
+                    />
+                 </div>
+               )}
+               
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Datum</label>
+                  <input type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white font-bold outline-none" />
+               </div>
+
+               <button onClick={handleSavePlan} className="w-full py-5 bg-white text-black rounded-3xl font-black italic uppercase tracking-widest shadow-xl active:scale-95 transition-transform mt-2">
+                 Lägg till i kalender
+               </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 };
-
-function getWeekNumber(d: Date) {
-    d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-    var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-    var weekNo = Math.ceil(( ( (d.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
-    return weekNo;
-}

@@ -30,10 +30,9 @@ export class GymDatabase extends Dexie {
   constructor() {
     super('MorphFitDB');
     
-    // Schema definition for the Dexie database. The version number must be incremented for migrations.
-    // The explicit cast to Dexie is often unnecessary as 'this' in a class extending Dexie
-    // is already correctly typed. Removing it can resolve type inference issues.
-    this.version(4).stores({
+    // FIX: The schema definition and populate hook must be inside the constructor for Dexie 3+ to ensure correct subclassing and type inference.
+    // Fix: Cast 'this' to Dexie to resolve type error. The type system is failing to infer the inherited 'version' method.
+    (this as Dexie).version(4).stores({
       userProfile: 'id',
       zones: 'id',
       exercises: 'id, name, muscleGroups',
@@ -47,13 +46,24 @@ export class GymDatabase extends Dexie {
       recurringPlans: 'id'
     });
 
-    // Populate the database with initial data only when it's first created.
-    this.on('populate', async () => {
+    // Fix: Cast 'this' to Dexie to resolve type error. The type system is failing to infer the inherited 'on' method.
+    (this as Dexie).on('populate', async () => {
       await this.exercises.bulkAdd(INITIAL_EXERCISES);
       await this.zones.bulkAdd(INITIAL_ZONES);
       await this.goalTargets.bulkAdd(INITIAL_GOAL_TARGETS);
       await this.userProfile.put({ id: 'current', ...DEFAULT_PROFILE });
     });
+  }
+
+  // LÄGG TILL DENNA METOD: Synkroniserar övningsbiblioteket.
+  async syncExercises() {
+    try {
+      // bulkPut är nyckeln - den uppdaterar befintliga och lägger till nya.
+      await this.exercises.bulkPut(INITIAL_EXERCISES as readonly Exercise[]);
+      console.log("Övningsbiblioteket har synkroniserats!");
+    } catch (error) {
+      console.error("Fel vid synkronisering av övningar:", error);
+    }
   }
 }
 
@@ -79,9 +89,8 @@ export const migrateFromLocalStorage = async () => {
 
   try {
     // Perform migration within a transaction for data integrity.
-    // Casting 'db' to Dexie is redundant here as 'db' is already an instance of GymDatabase,
-    // which extends Dexie. Removing it ensures correct type inference.
-    await db.transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.activeSession, db.goalTargets, db.workoutRoutines], async () => {
+    // Fix: Cast 'db' to Dexie to resolve type error. The type system is failing to infer the inherited 'transaction' method.
+    await (db as Dexie).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.activeSession, db.goalTargets, db.workoutRoutines], async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);
         if (raw) {
