@@ -1,9 +1,9 @@
 
 import React, { useState, useRef } from 'react';
-import { UserProfile, Goal } from '../types';
+import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -12,24 +12,23 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdate }) => {
   const [localProfile, setLocalProfile] = useState<UserProfile>(userProfile);
-  const [bodyViewMode, setBodyViewMode] = useState<'list' | 'map'>(userProfile.settings?.bodyViewMode || 'list');
-  const [includeWarmup, setIncludeWarmup] = useState(userProfile.settings?.includeWarmupInStats ?? false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleSettingChange = (key: keyof UserSettings, value: any) => {
+    setLocalProfile(prev => ({
+        ...prev,
+        settings: {
+            // Provide default values for existing settings if they are missing.
+            includeWarmupInStats: prev.settings?.includeWarmupInStats ?? false,
+            bodyViewMode: prev.settings?.bodyViewMode ?? 'list',
+            ...prev.settings,
+            [key]: value
+        }
+    }));
+  };
+
   const handleSave = async () => {
-    // Prevent settings loss by merging current state
-    const currentSettings = localProfile.settings || { includeWarmupInStats: false };
-    
-    const updatedProfile: UserProfile = {
-      ...localProfile,
-      settings: {
-        ...currentSettings,
-        includeWarmupInStats: includeWarmup,
-        bodyViewMode: bodyViewMode
-      }
-    };
-    
-    await storage.setUserProfile(updatedProfile);
+    await storage.setUserProfile(localProfile);
     onUpdate();
     alert("Inställningar sparade!");
   };
@@ -122,7 +121,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
          {/* VISNINGSLÄGE FÖR KROPP */}
          <div className="flex items-center justify-between py-2 border-b border-white/5">
             <div className="flex items-center gap-3">
-               {bodyViewMode === 'list' ? <LayoutList size={18} className="text-white"/> : <Map size={18} className="text-white"/>}
+               {(localProfile.settings?.bodyViewMode || 'list') === 'list' ? <LayoutList size={18} className="text-white"/> : <Map size={18} className="text-white"/>}
                <div>
                   <p className="text-sm font-bold text-white">Kroppsvy</p>
                   <p className="text-[10px] text-text-dim">Hur vill du se din status?</p>
@@ -131,9 +130,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             
             <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
                <button 
-                 onClick={() => setBodyViewMode('list')}
+                 onClick={() => handleSettingChange('bodyViewMode', 'list')}
                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider ${
-                   bodyViewMode === 'list' 
+                   (localProfile.settings?.bodyViewMode || 'list') === 'list' 
                      ? 'bg-white text-black shadow-sm' 
                      : 'text-text-dim hover:text-white'
                  }`}
@@ -141,9 +140,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                  <LayoutList size={14} /> Lista
                </button>
                <button 
-                 onClick={() => setBodyViewMode('map')}
+                 onClick={() => handleSettingChange('bodyViewMode', 'map')}
                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider ${
-                   bodyViewMode === 'map' 
+                   (localProfile.settings?.bodyViewMode || 'list') === 'map' 
                      ? 'bg-white text-black shadow-sm' 
                      : 'text-text-dim hover:text-white'
                  }`}
@@ -163,12 +162,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               </div>
             </div>
             <button 
-              onClick={() => setIncludeWarmup(!includeWarmup)}
-              className={`w-12 h-6 rounded-full relative transition-colors ${includeWarmup ? 'bg-accent-green' : 'bg-white/10'}`}
+              onClick={() => handleSettingChange('includeWarmupInStats', !(localProfile.settings?.includeWarmupInStats ?? false))}
+              className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.includeWarmupInStats ?? false) ? 'bg-accent-green' : 'bg-white/10'}`}
             >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${includeWarmup ? 'left-7' : 'left-1'}`} />
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.includeWarmupInStats ?? false) ? 'left-7' : 'left-1'}`} />
             </button>
          </div>
+      </section>
+
+      {/* EQUIPMENT SECTION */}
+      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/10 space-y-6">
+        <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
+          <Dumbbell className="text-accent-blue" /> Utrustning
+        </h3>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-accent-blue/10 rounded-xl flex items-center justify-center text-accent-blue">
+                <Scale size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-black uppercase italic text-white">Skivstång</p>
+                <p className="text-[10px] text-text-dim font-bold uppercase">Standardvikt (kg)</p>
+              </div>
+            </div>
+            <input 
+              type="number"
+              value={localProfile.settings?.barbellWeight || 20}
+              onChange={(e) => handleSettingChange('barbellWeight', Number(e.target.value))}
+              className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right font-black text-accent-blue outline-none focus:border-accent-blue"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-accent-pink/10 rounded-xl flex items-center justify-center text-accent-pink">
+                <Dumbbell size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-black uppercase italic text-white">Justerbar Hantel</p>
+                <p className="text-[10px] text-text-dim font-bold uppercase">Greppvikt per st (kg)</p>
+              </div>
+            </div>
+            <input 
+              type="number"
+              value={localProfile.settings?.dumbbellBaseWeight || 2}
+              onChange={(e) => handleSettingChange('dumbbellBaseWeight', Number(e.target.value))}
+              className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right font-black text-accent-pink outline-none focus:border-accent-pink"
+            />
+          </div>
+        </div>
       </section>
 
       {/* LIBRARY DATA ACTIONS */}

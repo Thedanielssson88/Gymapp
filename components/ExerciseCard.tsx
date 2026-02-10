@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { PlannedExercise, Exercise, WorkoutSet } from '../types';
+import { PlannedExercise, Exercise, WorkoutSet, UserProfile } from '../types';
 import { SetRow } from './SetRow';
 import { MoreVertical, MessageSquare, Info, X, Trash2 } from 'lucide-react';
 import { useExerciseImage } from '../hooks/useExerciseImage';
@@ -8,7 +9,7 @@ interface ExerciseCardProps {
   item: PlannedExercise;
   exData: Exercise;
   exIdx: number;
-  userWeight: number;
+  userProfile: UserProfile;
   onUpdateSet: (setIdx: number, updates: Partial<WorkoutSet>) => void;
   onAddSet: () => void;
   onRemove: () => void;
@@ -19,7 +20,7 @@ interface ExerciseCardProps {
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({ 
-  item, exData, exIdx,
+  item, exData, exIdx, userProfile,
   onUpdateSet, onAddSet, onRemove, 
   onToggleNotes, isNotesOpen, onUpdateNotes, onShowInfo 
 }) => {
@@ -113,6 +114,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             onAddSet={onAddSet}
             isLast={i === item.sets.length - 1}
             trackingType={exData.trackingType}
+            exData={exData}
+            userProfile={userProfile}
           />
         ))}
       </div>

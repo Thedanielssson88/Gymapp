@@ -1,3 +1,4 @@
+
 import { Zone, GoalTarget, Equipment, UserProfile, Goal } from './types';
 
 export const INITIAL_GOAL_TARGETS: GoalTarget[] = [
@@ -19,5 +20,11 @@ export const DEFAULT_PROFILE: UserProfile = {
   level: "Medel",
   goal: Goal.HYPERTROPHY,
   injuries: [],
-  measurements: {}
+  measurements: {},
+  settings: {
+    includeWarmupInStats: false,
+    barbellWeight: 20,
+    dumbbellBaseWeight: 2,
+    bodyViewMode: 'list'
+  }
 };

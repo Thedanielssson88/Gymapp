@@ -1,5 +1,4 @@
 
-
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -148,6 +147,8 @@ export interface UserSettings {
   restTimer?: number;
   keepAwake?: boolean;
   bodyViewMode?: 'list' | 'map';
+  barbellWeight?: number; // t.ex. 20
+  dumbbellBaseWeight?: number; // t.ex. 2 (vikten på själva hantelgreppet)
 }
 
 export interface UserProfile {

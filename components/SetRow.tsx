@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { WorkoutSet, SetType, TrackingType } from '../types';
+
+import React, { useState, useMemo } from 'react';
+import { WorkoutSet, SetType, TrackingType, Exercise, UserProfile, Equipment } from '../types';
 import { Check, Plus, Thermometer, Zap, AlertCircle, Scale, BarChart3 as RepsIcon, Map as DistanceIcon, Timer as TimerIcon } from 'lucide-react';
 import { TimePickerModal } from './TimePickerModal';
 import { NumberPickerModal } from './NumberPickerModal';
@@ -12,6 +13,8 @@ interface SetRowProps {
   onAddSet?: () => void;
   isLast?: boolean;
   trackingType?: TrackingType;
+  exData: Exercise;
+  userProfile: UserProfile;
 }
 
 export const SetRow: React.FC<SetRowProps> = ({
@@ -21,9 +24,17 @@ export const SetRow: React.FC<SetRowProps> = ({
   onUpdate,
   onAddSet,
   isLast,
-  trackingType = 'reps_weight'
+  trackingType = 'reps_weight',
+  exData,
+  userProfile
 }) => {
   const [activeModal, setActiveModal] = useState<'reps' | 'weight' | 'dist' | 'time' | null>(null);
+
+  const isBarbellExercise = useMemo(() => 
+    exData.equipment.includes(Equipment.BARBELL) || 
+    exData.equipment.includes(Equipment.EZ_BAR) ||
+    exData.equipment.includes(Equipment.TRAP_BAR), 
+  [exData.equipment]);
 
   const formatTime = (seconds: number | undefined) => {
     if (seconds === undefined || seconds === null) return '0:00';
@@ -133,6 +144,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           unit="m"
           value={set.distance || 0}
           step={50}
+          precision={0}
           min={0}
           max={99999}
           onSave={(v) => { onUpdate({ distance: v }); setActiveModal(null); }}
@@ -146,6 +158,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           unit="reps"
           value={set.reps || 0}
           step={1}
+          precision={0}
           min={0}
           max={999}
           onSave={(v) => { onUpdate({ reps: v }); setActiveModal(null); }}
@@ -159,8 +172,10 @@ export const SetRow: React.FC<SetRowProps> = ({
           unit="kg"
           value={set.weight || 0}
           step={1.25}
+          precision={2}
           min={0}
           max={999}
+          barWeight={isBarbellExercise ? (userProfile.settings?.barbellWeight ?? 20) : 0}
           onSave={(v) => { onUpdate({ weight: v }); setActiveModal(null); }}
           onClose={() => setActiveModal(null)}
         />

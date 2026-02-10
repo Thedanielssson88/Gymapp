@@ -20,7 +20,8 @@ import { calculate1RM, getLastPerformance } from './utils/fitness';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms'>('body');
+  const [loadingStatus, setLoadingStatus] = useState<string>('Initierar...');
+  const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms'>('workout');
   const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'analytics' | 'settings'>('recovery');
   
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -37,10 +38,6 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
-
-  // NEW: State for animated nav bar
-  const [isNavbarVisible, setIsNavbarVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([
@@ -91,12 +88,27 @@ export default function App() {
 
   useEffect(() => {
     const initApp = async () => {
-      await storage.init();
-      
-      await db.syncExercises(); 
+      try {
+        setLoadingStatus('Ansluter till databas...');
+        await storage.init();
+        
+        setLoadingStatus('Synkroniserar övningsbibliotek...');
+        try {
+          await db.syncExercises(); 
+        } catch (e) {
+          console.warn("Kunde inte synka övningar vid start:", e);
+          setLoadingStatus('Synk misslyckades, laddar lokalt...');
+        }
 
-      await refreshData();
-      setIsReady(true);
+        setLoadingStatus('Läser in användardata...');
+        await refreshData();
+        setLoadingStatus('Slutför...');
+      } catch (error) {
+        console.error("Kritisk fel vid start:", error);
+        setLoadingStatus(`Ett fel uppstod: ${error instanceof Error ? error.message : 'Okänt fel'}`);
+      } finally {
+        setIsReady(true);
+      }
     };
     initApp();
   }, []);
@@ -157,23 +169,6 @@ export default function App() {
       checkMissions();
     }
   }, [history, userMissions, user, biometricLogs, isReady]); // Re-run when history or userMissions or user/biometricLogs changes
-
-  // NEW: Navbar scroll control logic
-  useEffect(() => {
-    const controlNavbar = () => {
-      if (window.scrollY > lastScrollY && window.scrollY > 100) { 
-        // Scrolling down - hide menu
-        setIsNavbarVisible(false);
-      } else { 
-        // Scrolling up - show menu
-        setIsNavbarVisible(true);
-      }
-      setLastScrollY(window.scrollY);
-    };
-
-    window.addEventListener('scroll', controlNavbar);
-    return () => window.removeEventListener('scroll', controlNavbar);
-  }, [lastScrollY]);
 
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
@@ -282,9 +277,18 @@ export default function App() {
 
   if (!isReady || !user) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-[#0f0d15] text-white">
-        <div className="relative"><div className="w-24 h-24 border-4 border-accent-pink/20 border-t-accent-pink rounded-full animate-spin"></div><Activity className="absolute inset-0 m-auto text-accent-pink animate-pulse" size={32} /></div>
+      <div className="flex flex-col items-center justify-center h-screen bg-[#0f0d15] text-white p-6">
+        <div className="relative">
+          <div className="w-24 h-24 border-4 border-accent-pink/20 border-t-accent-pink rounded-full animate-spin"></div>
+          <Activity className="absolute inset-0 m-auto text-accent-pink animate-pulse" size={32} />
+        </div>
         <h1 className="mt-8 text-2xl font-black uppercase italic tracking-[0.3em] animate-pulse">MorphFit</h1>
+        
+        <div className="mt-4 px-4 py-2 bg-white/5 rounded-xl border border-white/10">
+          <p className="text-[10px] font-mono text-text-dim uppercase tracking-widest animate-pulse">
+            {loadingStatus}
+          </p>
+        </div>
       </div>
     );
   }
@@ -409,7 +413,7 @@ export default function App() {
       )}
 
       {!isWorkoutActive && (
-        <nav className={`fixed bottom-0 left-0 right-0 z-50 px-6 pb-8 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent transition-transform duration-500 ${isNavbarVisible ? 'translate-y-0' : 'translate-y-full'}`}>
+        <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pb-8 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent">
           <div className="max-w-md mx-auto flex justify-between items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl pb-safe">
             <button 
               onClick={() => setActiveTab('workout')}
