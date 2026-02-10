@@ -15,6 +15,8 @@ import { calculateMuscleRecovery } from './utils/recovery';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
 import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy } from 'lucide-react'; // Import Trophy
+import { calculate1RM, getLastPerformance } from './utils/fitness';
+
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -105,28 +107,37 @@ export default function App() {
       if (!history.length || !userMissions.length || !user) return;
 
       let missionsUpdated = false;
-      // const latestSession = history[history.length - 1]; // Assuming history is ordered by date - not used directly
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const recentWorkoutsCount = history.filter(s => new Date(s.date) > thirtyDaysAgo).length;
       
       const updatedMissions = await Promise.all(userMissions.map(async (mission) => {
         if (mission.isCompleted) return mission; // Already completed
 
         let currentProgress = 0;
         if (mission.type === 'weight' && mission.exerciseId) {
-          const relevantSets = history.flatMap(s => 
-            s.exercises.filter(e => e.exerciseId === mission.exerciseId)
-            .flatMap(e => e.sets)
-          );
-          currentProgress = Math.max(...relevantSets.map(set => set.weight || 0), 0);
+          const lastPerf = getLastPerformance(mission.exerciseId, history);
+          currentProgress = lastPerf ? Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0)), 0) : mission.startValue;
         } else if (mission.type === 'frequency') {
-          currentProgress = recentWorkoutsCount; // Assuming target is for last 30 days
-        } else if (mission.type === 'measurement' && mission.measurementKey && user.measurements) {
-          currentProgress = user.measurements[mission.measurementKey] || 0;
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const uniqueWorkoutDays = new Set(history.filter(s => new Date(s.date) > thirtyDaysAgo).map(s => s.date.split('T')[0])).size;
+          currentProgress = uniqueWorkoutDays;
+        } else if (mission.type === 'measurement' && mission.measurementKey) {
+          if (mission.measurementKey === 'weight') {
+            const sortedBiometricLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const latestWeightLog = sortedBiometricLogs.find(log => log.weight !== undefined);
+            currentProgress = latestWeightLog?.weight || user.weight || 0;
+          } else {
+            const sortedBiometricLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const latestMeasurementLog = sortedBiometricLogs.find(log => log.measurements[mission.measurementKey!]);
+            currentProgress = latestMeasurementLog?.measurements[mission.measurementKey!] || user.measurements[mission.measurementKey!] || 0;
+          }
         }
+        
+        // Check completion based on goal direction
+        const isGoalMet = mission.targetValue > mission.startValue
+          ? currentProgress >= mission.targetValue // Increasing goal
+          : currentProgress <= mission.targetValue; // Decreasing goal
 
-        if (currentProgress >= mission.targetValue) {
+        if (isGoalMet) {
           missionsUpdated = true;
           return { ...mission, isCompleted: true, completedAt: new Date().toISOString() };
         }
@@ -134,7 +145,6 @@ export default function App() {
       }));
 
       if (missionsUpdated) {
-        // Only update if changes occurred to avoid unnecessary re-renders/DB writes
         const missionsToUpdateInDb = updatedMissions.filter(m => m.isCompleted && !userMissions.find(oldM => oldM.id === m.id && oldM.isCompleted));
         for (const mission of missionsToUpdateInDb) {
             await storage.updateUserMission(mission);
@@ -143,8 +153,10 @@ export default function App() {
       }
     };
 
-    checkMissions();
-  }, [history, userMissions, user]); // Re-run when history or userMissions change
+    if (isReady && user) {
+      checkMissions();
+    }
+  }, [history, userMissions, user, biometricLogs, isReady]); // Re-run when history or userMissions or user/biometricLogs changes
 
   // NEW: Navbar scroll control logic
   useEffect(() => {
@@ -358,15 +370,15 @@ export default function App() {
                           onStartActivity={handleStartPlannedActivity}
                         />;
       case 'targets': return <TargetsView 
-                                userMissions={userMissions} // Pass user missions
+                                userMissions={userMissions} 
                                 history={history} 
                                 exercises={allExercises} 
-                                userProfile={user} // Pass user profile for measurements (if needed)
-                                biometricLogs={biometricLogs} // Pass biometric logs for historical measurements
+                                userProfile={user} 
+                                biometricLogs={biometricLogs} 
                                 onAddMission={handleAddMission} 
                                 onDeleteMission={handleDeleteMission} 
                               />;
-      case 'library': return <ExerciseLibrary allExercises={allExercises} onUpdate={refreshData} />;
+      case 'library': return <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
       default: return null;
     }

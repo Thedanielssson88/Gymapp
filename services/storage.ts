@@ -1,5 +1,4 @@
 
-
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
@@ -195,4 +194,57 @@ export const storage = {
     await db.userMissions.update(mission.id, mission);
   },
   deleteUserMission: async (id: string) => await db.userMissions.delete(id),
+};
+
+export const exportExerciseLibrary = async () => {
+  try {
+    const allExercises = await db.exercises.toArray();
+    
+    const libraryData = {
+      type: 'GYM_APP_EXERCISE_LIBRARY',
+      version: 1,
+      exportDate: new Date().toISOString(),
+      count: allExercises.length,
+      exercises: allExercises
+    };
+
+    const blob = new Blob([JSON.stringify(libraryData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `exercise-library-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    return true;
+  } catch (error) {
+    console.error("Export of library failed:", error);
+    return false;
+  }
+};
+
+export const importExerciseLibrary = async (file: File): Promise<number> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = JSON.parse(e.target?.result as string);
+        
+        if (content.type !== 'GYM_APP_EXERCISE_LIBRARY' || !Array.isArray(content.exercises)) {
+          throw new Error("Felaktigt filformat. Detta är inte en giltig biblioteksfil.");
+        }
+
+        // Vi använder bulkPut för att uppdatera existerande övningar (matchar på ID)
+        // och lägga till nya.
+        await db.exercises.bulkPut(content.exercises);
+        resolve(content.exercises.length);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.readAsText(file);
+  });
 };

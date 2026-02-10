@@ -255,6 +255,7 @@ export interface UserMission {
   id: string;
   name: string; // E.g., "Bänka 100 kg", "Träna 3 ggr/vecka", "Nå 75 cm i midjan"
   type: 'weight' | 'frequency' | 'measurement'; // Typ av mål
+  startValue: number; // NEW: The value of the metric when the mission was created
   targetValue: number; // Målvärdet (t.ex. 100 kg, 3 ggr, 75 cm)
   exerciseId?: string; // Om målet är viktspecifikt för en övning
   muscleGroup?: MuscleGroup; // Om målet är kopplat till en muskelgrupp (kan användas med 'weight' eller 'frequency' för att spåra volym i specifik muskelgrupp t.ex.)

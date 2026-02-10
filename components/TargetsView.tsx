@@ -13,9 +13,9 @@ import {
 import { 
   Trophy, Target as TargetIcon, TrendingUp, Plus, Zap, Star, Flame, Award, X, Check, Dumbbell,
   Sunrise, Moon, CalendarDays, Link, CalendarCheck, Crown, Weight, Globe, Gem, Timer, Wind,
-  RotateCcw, Hourglass, Layers, Compass, MapPin, ArrowUp, ArrowDown, Anchor, Shield, Swords
+  RotateCcw, Hourglass, Layers, Compass, MapPin, ArrowUp, ArrowDown, Anchor, Shield, Swords, MessageSquare
 } from 'lucide-react';
-import { calculate1RM } from '../utils/fitness';
+import { calculate1RM, getLastPerformance } from '../utils/fitness';
 import { AddMissionModal } from './AddMissionModal';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery'; // Import ALL_MUSCLE_GROUPS
 
@@ -53,53 +53,71 @@ const getMuscleGroupsTrainedInPeriod = (
   return trainedMuscles;
 };
 
-// Helper function to calculate progress for a user mission
+// Helper function to calculate progress for a user mission (UPDATED)
 const getTargetProgress = (
   mission: UserMission,
   history: WorkoutSession[],
   exercises: Exercise[],
   userProfile: UserProfile,
   biometricLogs: BiometricLog[]
-): { current: number; total: number; unit: string; percentage: number } => {
-  let currentProgress = 0;
-  let totalTarget = mission.targetValue;
+): { current: number; start: number; target: number; unit: string; percentage: number; isIncrease: boolean; colorClass: string; } => {
+  let currentVal = mission.startValue;
+  const start = mission.startValue;
+  const target = mission.targetValue;
   let unit = '';
 
   if (mission.type === 'weight' && mission.exerciseId) {
-    unit = 'kg';
-    const relevantSets = history.flatMap(s =>
-      s.exercises.filter(e => e.exerciseId === mission.exerciseId)
-        .flatMap(e => e.sets)
-    ).filter(set => set.completed);
-    
-    // Find max weight lifted for any single set of this exercise
-    currentProgress = Math.max(...relevantSets.map(set => set.weight || 0), 0);
+    const exData = exercises.find(e => e.id === mission.exerciseId);
+    const lastPerf = getLastPerformance(mission.exerciseId, history);
+    let calculatedVal = start;
+
+    if (lastPerf) {
+      switch (exData?.trackingType) {
+        case 'time_distance':
+          unit = 'm';
+          calculatedVal = Math.max(...lastPerf.map(s => s.distance || 0));
+          break;
+        case 'reps_only':
+          unit = 'reps';
+          calculatedVal = Math.max(...lastPerf.map(s => s.reps || 0));
+          break;
+        case 'time_only':
+          unit = 'sek';
+          calculatedVal = Math.max(...lastPerf.map(s => s.duration || 0));
+          break;
+        case 'reps_weight':
+        default:
+          unit = 'kg';
+          calculatedVal = Math.round(Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0)), 0));
+          break;
+      }
+    } else {
+        // If no history, set unit based on type for display purposes
+        switch (exData?.trackingType) {
+            case 'time_distance': unit = 'm'; break;
+            case 'reps_only': unit = 'reps'; break;
+            case 'time_only': unit = 'sek'; break;
+            default: unit = 'kg'; break;
+        }
+    }
+    currentVal = calculatedVal;
   } else if (mission.type === 'frequency') {
     unit = 'pass';
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentWorkoutsCount = new Set(history.filter(s => new Date(s.date) > thirtyDaysAgo).map(s => s.date.split('T')[0])).size; // Count unique days with workouts
-    currentProgress = recentWorkoutsCount;
+    const uniqueWorkoutDays = new Set(history.filter(s => new Date(s.date) > thirtyDaysAgo).map(s => s.date.split('T')[0])).size;
+    currentVal = uniqueWorkoutDays;
   } else if (mission.type === 'measurement' && mission.measurementKey) {
     const measurementKey = mission.measurementKey;
-
     if (measurementKey === 'weight') {
-      // If mission is for 'weight', check userProfile.weight or latest BiometricLog
       const sortedBiometricLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const latestWeightLog = sortedBiometricLogs.find(log => log.weight !== undefined);
-      currentProgress = latestWeightLog?.weight || userProfile.weight || 0;
+      currentVal = latestWeightLog?.weight || userProfile.weight || 0;
     } else {
-      // Look at latest biometric log first for other body measurements
       const sortedBiometricLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const latestMeasurementLog = sortedBiometricLogs.find(log => log.measurements[measurementKey!]);
-
-      if (latestMeasurementLog) {
-        currentProgress = latestMeasurementLog.measurements[measurementKey!] || 0;
-      } else if (userProfile.measurements && userProfile.measurements[measurementKey!]) {
-        currentProgress = userProfile.measurements[measurementKey!] || 0;
-      }
+      currentVal = latestMeasurementLog?.measurements[measurementKey!] || userProfile.measurements[measurementKey!] || 0;
     }
-
     // Determine unit based on key (simple heuristic)
     if (['neck', 'shoulders', 'chest', 'waist', 'hips', 'bicepsL', 'bicepsR', 'thighL', 'thighR', 'calves'].includes(measurementKey as string)) {
       unit = 'cm';
@@ -110,13 +128,33 @@ const getTargetProgress = (
     }
   }
 
-  const percentage = totalTarget > 0 ? Math.min(100, Math.round((currentProgress / totalTarget) * 100)) : (currentProgress > 0 ? 100 : 0);
+  // Calculate percentage based on direction of goal
+  let percentage = 0;
+  let isIncrease = target > start;
+  if (start === target) { // Edge case: start and target are the same
+    percentage = (currentVal >= target) ? 100 : 0;
+  } else if (isIncrease) { // Goal is to increase (e.g., lift more weight)
+    percentage = ((currentVal - start) / (target - start)) * 100;
+  } else { // Goal is to decrease (e.g., lower waist measurement)
+    percentage = ((start - currentVal) / (start - target)) * 100;
+  }
+
+  const finalPercentage = Math.max(0, Math.min(100, Math.round(percentage)));
+
+  // Dynamic color for progress bar
+  let colorClass = "bg-accent-blue"; // Default
+  if (finalPercentage >= 90) colorClass = "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
+  else if (finalPercentage >= 50) colorClass = "bg-orange-500";
+  else if (finalPercentage > 0) colorClass = "bg-accent-pink";
 
   return { 
-    current: currentProgress, 
-    total: totalTarget, 
+    current: currentVal, 
+    start, 
+    target, 
     unit, 
-    percentage 
+    percentage: finalPercentage, 
+    isIncrease,
+    colorClass
   };
 };
 
@@ -126,59 +164,88 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMission, setEditingMission] = useState<UserMission | null>(null);
 
-  // --- BERÄKNA XP OCH GRUNDSTATISTIK ---
+  // --- BERÄKNA XP OCH GRUNDSTATISTIK (UPPDATERAD LOGIK) ---
   const stats = useMemo(() => {
-    const totalWorkouts = history.length;
-    const allExercisesLogged = history.flatMap(s => s.exercises);
-    const totalSets = allExercisesLogged.reduce((acc, e) => acc + e.sets.filter(s => s.completed).length, 0);
-    
-    const totalXP = totalWorkouts * 50 + totalSets * 10;
-    const level = Math.floor(totalXP / 500) + 1;
-    const xpProgress = (totalXP % 500) / 500 * 100;
+      const totalWorkouts = history.length;
+      let totalSets = 0;
+      let totalImpactXP = 0;
 
-    // Calculate streak (consecutive days with a workout)
-    const sortedHistory = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    let currentStreak = 0;
-    if (sortedHistory.length > 0) {
-      let lastWorkoutDate = new Date(sortedHistory[0].date);
-      lastWorkoutDate.setHours(0,0,0,0);
-      
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      
-      let currentStreakCount = 0;
-      let lastConsideredDate: Date | null = null;
+      history.forEach(session => {
+        session.exercises.forEach(plannedEx => {
+          const exData = exercises.find(e => e.id === plannedEx.exerciseId);
+          if (!exData) return;
 
-      // Iterate backwards to find the most recent streak
-      for (let i = sortedHistory.length - 1; i >= 0; i--) {
-        const workoutDate = new Date(sortedHistory[i].date);
-        workoutDate.setHours(0, 0, 0, 0);
+          const completedSets = plannedEx.sets.filter(s => s.completed);
+          totalSets += completedSets.length;
 
-        if (lastConsideredDate === null) {
-          // If the latest workout was today or yesterday, start a streak
-          const daysAgo = (today.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24);
-          if (daysAgo === 0 || daysAgo === 1) { 
-            currentStreakCount = 1;
-            lastConsideredDate = workoutDate;
-          } else { 
-            break; // Workout was older, no current streak
-          }
-        } else {
-          const daysDiff = (lastConsideredDate.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24);
-          if (daysDiff === 1) { // Consecutive day
-            currentStreakCount++;
-            lastConsideredDate = workoutDate;
-          } else if (daysDiff > 1) { // Gap, streak broken
-            break;
-          }
-          // If daysDiff is 0, it's the same day, continue loop
+          completedSets.forEach(set => {
+            const reps = set.reps || 0;
+            const weight = set.weight || 0;
+            const baseImpact = (reps * weight * exData.difficultyMultiplier);
+            const bodyweightImpact = (exData.bodyweightCoefficient * userProfile.weight * reps);
+            totalImpactXP += (baseImpact + bodyweightImpact) / 100;
+          });
+        });
+      });
+
+      const totalXP = (totalWorkouts * 50) + (totalSets * 10) + totalImpactXP;
+
+      const calculateLevelData = (xp: number) => {
+        let currentLvl = 1;
+        let accumulatedXp = 0;
+
+        while (xp >= accumulatedXp + (500 * currentLvl * (1 + 0.1 * (currentLvl - 1)))) {
+          accumulatedXp += Math.round(500 * currentLvl * (1 + 0.1 * (currentLvl - 1)));
+          currentLvl++;
         }
-      }
-      currentStreak = currentStreakCount;
-    }
 
-    return { totalWorkouts, totalSets, totalXP, level, xpProgress, streak: currentStreak };
-  }, [history]);
+        const xpToNextLevel = Math.round(500 * currentLvl * (1 + 0.1 * (currentLvl - 1)));
+        const xpEarnedInLevel = Math.round(xp - accumulatedXp);
+        const progress = (xpToNextLevel > 0) ? (xpEarnedInLevel / xpToNextLevel) * 100 : 0;
+
+        return { 
+          level: currentLvl, 
+          xpProgress: progress, 
+          currentLevelXP: xpEarnedInLevel, 
+          xpToNextLevel 
+        };
+      };
+
+      const levelData = calculateLevelData(totalXP);
+
+      const sortedHistory = [...history].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      let currentStreak = 0;
+      if (sortedHistory.length > 0) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        let currentStreakCount = 0;
+        let lastConsideredDate: Date | null = null;
+        for (let i = sortedHistory.length - 1; i >= 0; i--) {
+          const workoutDate = new Date(sortedHistory[i].date); workoutDate.setHours(0, 0, 0, 0);
+          if (lastConsideredDate === null) {
+            const daysAgo = (today.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24);
+            if (daysAgo === 0 || daysAgo === 1) { 
+              currentStreakCount = 1;
+              lastConsideredDate = workoutDate;
+            } else { break; }
+          } else {
+            const daysDiff = (lastConsideredDate.getTime() - workoutDate.getTime()) / (1000 * 60 * 60 * 24);
+            if (daysDiff === 1) { currentStreakCount++; lastConsideredDate = workoutDate; } 
+            else if (daysDiff > 1) { break; }
+          }
+        }
+        currentStreak = currentStreakCount;
+      }
+      
+      return { 
+        totalWorkouts, 
+        totalSets, 
+        totalXP: Math.round(totalXP), 
+        ...levelData,
+        impactBonus: Math.round(totalImpactXP),
+        streak: currentStreak
+      };
+    }, [history, exercises, userProfile]);
+
 
   // --- LOGIK FÖR DE 30 MILSTOLPARNA ---
   const achievedMilestones = useMemo(() => {
@@ -192,28 +259,25 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
     const uniqueExercises = new Set(allSets.map(s => s.exerciseId));
     const uniqueZones = new Set(history.map(s => s.zoneId));
 
-    // Helper: Hämta pattern för en övning
     const getPattern = (id: string) => exercises.find(e => e.id === id)?.pattern;
 
-    // Milestone 21: Allätaren
     const musclesTrainedLast7Days = getMuscleGroupsTrainedInPeriod(history, exercises, 7, now);
-    const allEatableMuscles = new Set<MuscleGroup>(ALL_MUSCLE_GROUPS.filter(m => 
-      m !== 'Hela kroppen' && m !== 'Rörlighet' && m !== 'Balans' && m !== 'Greppstyrka' && m !== 'Rotatorcuff' && m !== 'Tibialis'
+    const importantMuscles = new Set<MuscleGroup>(ALL_MUSCLE_GROUPS.filter(m => 
+      !['Hela kroppen', 'Rörlighet', 'Balans', 'Greppstyrka', 'Rotatorcuff', 'Tibialis', 'Nacke', 'Bröstrygg', 'Underarmar'].includes(m)
     )); 
-    const achievedAllEater = (musclesTrainedLast7Days.size >= allEatableMuscles.size) && (musclesTrainedLast7Days.size > 0);
-
+    const achievedAllEater = importantMuscles.size > 0 && Array.from(importantMuscles).every(m => musclesTrainedLast7Days.has(m));
 
     const milestones = [
       { id: 1, name: 'Gryningskrigare', desc: '5 pass före kl 07:00', icon: <Sunrise size={24}/>, achieved: history.filter(s => new Date(s.date).getHours() < 7).length >= 5 },
       { id: 2, name: 'Nattugglan', desc: '5 pass efter kl 21:00', icon: <Moon size={24}/>, achieved: history.filter(s => new Date(s.date).getHours() >= 21).length >= 5 },
       { id: 3, name: 'Helgkrigaren', desc: 'Pass både lördag och söndag', icon: <CalendarDays size={24}/>, achieved: history.some(s => {
           const d = new Date(s.date);
-          if (d.getDay() !== 0) return false; // Söndag (0)
+          if (d.getDay() !== 0) return false;
           const prevDay = new Date(d); prevDay.setDate(d.getDate() - 1);
-          return history.some(hs => new Date(hs.date).toDateString() === prevDay.toDateString() && prevDay.getDay() === 6); // Lördag (6)
+          return history.some(hs => new Date(hs.date).toDateString() === prevDay.toDateString() && prevDay.getDay() === 6);
         })
       },
-      { id: 4, name: 'Obruten Kedja', desc: 'Tränat 4 veckor i rad', icon: <Link size={24}/>, achieved: stats.streak >= 4 }, // Uses the updated streak logic
+      { id: 4, name: 'Obruten Kedja', desc: 'Tränat 4 veckor i rad', icon: <Link size={24}/>, achieved: stats.streak >= 4 }, 
       { id: 5, name: 'Månadens Maskin', desc: '15 pass på en kalendermånad', icon: <CalendarCheck size={24}/>, achieved: history.filter(s => new Date(s.date).getMonth() === now.getMonth() && new Date(s.date).getFullYear() === now.getFullYear()).length >= 15 },
       { id: 6, name: 'Veteranen', desc: '100 träningspass loggade', icon: <Award size={24}/>, achieved: history.length >= 100 },
       { id: 7, name: 'Legenden', desc: '500 träningspass loggade', icon: <Crown size={24}/>, achieved: history.length >= 500 },
@@ -243,11 +307,11 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
     ];
 
     return milestones.filter(m => m.achieved);
-  }, [history, exercises, stats.streak, userProfile]);
+  }, [history, exercises, stats, userProfile, biometricLogs]);
 
   return (
     <div className="pb-32 space-y-8 animate-in fade-in px-4 pt-8">
-      {/* --- LEVEL CARD --- */}
+      {/* --- LEVEL CARD (UPPDATERAD) --- */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#1a1721] to-[#25212d] rounded-[32px] p-6 border border-white/10 shadow-2xl">
         <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy size={120} /></div>
         
@@ -265,7 +329,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
             <div className="flex justify-between items-end">
               <h3 className="text-xl font-black italic uppercase text-white leading-none">Warrior Status</h3>
               <span className="text-[10px] font-black text-text-dim uppercase tracking-widest">
-                {Math.round(stats.totalXP % 500)} / 500 XP
+                {stats.currentLevelXP} / {stats.xpToNextLevel} XP
               </span>
             </div>
             <div className="h-3 bg-white/5 rounded-full overflow-hidden border border-white/5 p-[2px]">
@@ -283,8 +347,8 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
             <p className="text-xl font-black text-white italic">{stats.totalWorkouts}</p>
           </div>
           <div className="text-center border-x border-white/5">
-            <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Total Set</p>
-            <p className="text-xl font-black text-white italic">{stats.totalSets}</p>
+            <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Power XP</p>
+            <p className="text-xl font-black text-accent-blue italic">+{stats.impactBonus}</p>
           </div>
           <div className="text-center">
             <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Streak</p>
@@ -317,32 +381,31 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
             </div>
           ) : (
             userMissions.map(mission => {
-              const { current, total, unit, percentage } = getTargetProgress(mission, history, exercises, userProfile, biometricLogs);
+              const { current, start, target, unit, percentage, isIncrease, colorClass } = getTargetProgress(mission, history, exercises, userProfile, biometricLogs);
               const exercise = exercises.find(e => e.id === mission.exerciseId);
 
               return (
                 <div 
                   key={mission.id} 
-                  onClick={() => setEditingMission(mission)} // Make card clickable for editing
-                  className={`group bg-[#1a1721] border rounded-[32px] p-5 active:scale-[0.98] transition-all cursor-pointer ${mission.isCompleted ? 'border-green-500/30' : 'border-white/5 hover:border-accent-blue/30'}`}
+                  onClick={() => setEditingMission(mission)}
+                  className={`group bg-[#1a1721] border rounded-[32px] p-5 active:scale-[0.98] transition-all cursor-pointer ${percentage === 100 ? 'border-green-500/30' : 'border-white/5 hover:border-accent-blue/30'}`}
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex gap-4">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${mission.isCompleted ? 'bg-green-500/20 text-green-500 border-green-500/30' : 'bg-white/5 border-white/5'}`}>
-                        {mission.isCompleted ? <Check size={24} className="text-green-500" /> : <TargetIcon size={24} className="text-text-dim" />}
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${percentage === 100 ? 'bg-green-500/20 text-green-500 border-green-500/30' : 'bg-white/5 border-white/5'}`}>
+                        {percentage === 100 ? <Check size={24} className="text-green-500" /> : <TargetIcon size={24} className="text-text-dim" />}
                       </div>
                       <div>
                         <h4 className="text-base font-black italic uppercase text-white leading-tight">
                           {mission.name}
                         </h4>
-                        <p className="text-[10px] font-bold uppercase tracking-widest mt-1 ${mission.isCompleted ? 'text-green-500/70' : 'text-accent-blue'}">
-                          Mål: {mission.targetValue} {unit}
-                          {exercise && ` • ${exercise.name}`}
+                        <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${percentage === 100 ? 'text-green-500/70' : 'text-accent-blue'}`}>
+                          {isIncrease ? 'Öka' : 'Minska'} mot {mission.targetValue} {unit}
                         </p>
                       </div>
                     </div>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); onDeleteMission(mission.id); }} // Prevent modal from opening
+                      onClick={(e) => { e.stopPropagation(); onDeleteMission(mission.id); }}
                       className="p-2 text-text-dim opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
                     >
                       <X size={16} />
@@ -351,14 +414,14 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
                   <div className="space-y-2">
                     <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
                       <span className="text-text-dim">
-                        {current} {unit} / {total} {unit}
+                        Start: {start} {unit} • Nu: {current} {unit}
                       </span>
-                      <span className="${mission.isCompleted ? 'text-green-500' : 'text-accent-blue'}">
+                      <span className={`${percentage === 100 ? 'text-green-500' : 'text-accent-blue'}`}>
                         {percentage}% Slutfört
                       </span>
                     </div>
                     <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
-                      <div className={`h-full ${mission.isCompleted ? 'bg-green-500' : 'bg-accent-blue'} transition-all duration-1000`} style={{ width: `${percentage}%` }} />
+                      <div className={`h-full ${colorClass} transition-all duration-1000`} style={{ width: `${percentage}%` }} />
                     </div>
                   </div>
                 </div>
@@ -405,9 +468,11 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
         <AddMissionModal
           allExercises={exercises}
           userProfile={userProfile}
-          initialMission={editingMission || undefined} // Pass initialMission if editing
+          history={history}
+          biometricLogs={biometricLogs}
+          initialMission={editingMission || undefined} 
           onSave={(mission) => {
-            onAddMission(mission); // This handles both add and update as we replace by ID
+            onAddMission(mission); 
             setShowAddModal(false);
             setEditingMission(null);
           }}

@@ -1,9 +1,9 @@
 
 import React, { useState, useRef } from 'react';
 import { UserProfile, Goal } from '../types';
-import { storage } from '../services/storage';
+import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -49,6 +49,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     a.download = `morphfit_backup.json`;
     a.click();
   };
+  
+  const handleExportLibrary = async () => {
+    const success = await exportExerciseLibrary();
+    if (success) {
+      alert("Ditt övningsbibliotek (inkl. bilder) har exporterats!");
+    }
+  };
+
+  const handleImportLibrary = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const count = await importExerciseLibrary(file);
+      alert(`Import lyckades! ${count} övningar har lagts till eller uppdaterats.`);
+      onUpdate(); // Anropa onUpdate för att ladda om datan i appen
+    } catch (err: any) {
+      alert("Ett fel uppstod vid importen: " + err.message);
+    }
+  };
+
 
   return (
     <div className="space-y-8 pb-32 px-2 animate-in fade-in">
@@ -150,15 +171,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
          </div>
       </section>
 
-      {/* DATA ACTIONS */}
+      {/* LIBRARY DATA ACTIONS */}
+      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-4">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-accent-blue/20 rounded-xl flex items-center justify-center text-accent-blue">
+            <Dumbbell size={20} />
+          </div>
+          <div>
+            <h3 className="text-sm font-black uppercase italic text-white">Övningsbibliotek</h3>
+            <p className="text-[9px] text-text-dim uppercase font-bold tracking-widest">Exportera/Importera enbart övningar</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={handleExportLibrary}
+            className="flex items-center justify-center gap-2 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors"
+          >
+            <Download size={16} /> Exportera
+          </button>
+          
+          <label className="flex items-center justify-center gap-2 py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors cursor-pointer">
+            <Upload size={16} /> Importera
+            <input type="file" className="hidden" accept=".json" onChange={handleImportLibrary} />
+          </label>
+        </div>
+      </section>
+
+      {/* ALL DATA ACTIONS */}
       <div className="grid grid-cols-2 gap-3">
         <button onClick={handleExport} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
           <Download size={20} className="text-accent-blue" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Backup</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Full Backup</span>
         </button>
         <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
           <Upload size={20} className="text-accent-green" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Återställ</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Återställ Allt</span>
         </button>
       </div>
       <input type="file" ref={fileInputRef} className="hidden" />
