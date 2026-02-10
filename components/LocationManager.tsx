@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Zone, Equipment } from '../types';
 import { storage } from '../services/storage';
-import { Plus, Edit2, X, Check, Save, Dumbbell, Home, Trees, Briefcase, Building2 } from 'lucide-react';
+import { Plus, Edit2, X, Check, Save, Dumbbell, Home, Trees, Briefcase, Building2, Scale } from 'lucide-react';
 
 // --- DEFINIERA KATEGORIERNA HÄR ---
 const EQUIPMENT_CATEGORIES = [
@@ -93,7 +93,8 @@ export const LocationManager: React.FC<LocationManagerProps> = ({ zones, onUpdat
       id: `zone-${Date.now()}`,
       name: '',
       icon: 'building',
-      inventory: [Equipment.BODYWEIGHT] // Alltid kroppsvikt som default
+      inventory: [Equipment.BODYWEIGHT], // Alltid kroppsvikt som default
+      availablePlates: [25, 20, 15, 10, 5, 2.5, 1.25] // Standarduppsättning
     });
   };
 
@@ -171,6 +172,8 @@ interface LocationEditorProps {
   onDelete: (id: string) => void;
 }
 
+const PLATE_OPTIONS = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5, 0.25];
+
 const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, onDelete }) => {
   const [localZone, setLocalZone] = useState<Zone>(zone);
 
@@ -232,6 +235,39 @@ const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, 
           </div>
         </div>
 
+        {/* PLATES SELECTOR */}
+        <div className="space-y-3">
+          <label className="text-sm font-black uppercase italic text-white flex items-center gap-2">
+            <Scale size={18} className="text-accent-blue" /> Tillgängliga viktplattor (kg)
+          </label>
+          <p className="text-[10px] text-text-dim uppercase font-bold">Välj de vikter som finns på denna plats</p>
+          
+          <div className="flex flex-wrap gap-2 mt-2">
+            {PLATE_OPTIONS.map(plate => {
+              const isSelected = localZone.availablePlates?.includes(plate);
+              return (
+                <button
+                  key={plate}
+                  onClick={() => {
+                    const current = localZone.availablePlates || [];
+                    const next = isSelected 
+                      ? current.filter(p => p !== plate)
+                      : [...current, plate].sort((a, b) => b - a);
+                    setLocalZone({ ...localZone, availablePlates: next });
+                  }}
+                  className={`px-4 py-2 rounded-xl border font-black transition-all ${
+                    isSelected 
+                      ? 'bg-accent-blue border-accent-blue text-white shadow-lg' 
+                      : 'bg-white/5 border-white/10 text-text-dim hover:border-white/20'
+                  }`}
+                >
+                  {plate}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        
         {/* SNABBVAL */}
         <div className="space-y-2">
            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-text-dim">Snabbval</label>

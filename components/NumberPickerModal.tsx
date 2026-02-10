@@ -12,12 +12,13 @@ interface NumberPickerModalProps {
   max?: number;
   precision?: number;
   barWeight?: number;
+  availablePlates?: number[];
   onSave: (value: number) => void;
   onClose: () => void;
 }
 
 export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
-  title, unit, value, step = 1, min = 0, max = 99999, precision = 2, barWeight = 0, onSave, onClose
+  title, unit, value, step = 1, min = 0, max = 99999, precision = 2, barWeight = 0, onSave, onClose, availablePlates
 }) => {
   const [localVal, setLocalVal] = useState<string>(value.toString());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,8 +62,21 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
 
   const handleFinalSave = () => {
     const num = parseFloat(localVal) || 0;
-    const rounded = precision === 0 ? Math.round(num) : parseFloat(num.toFixed(precision));
-    onSave(Math.max(min, Math.min(max, rounded)));
+
+    if (unit === 'kg' && barWeight > 0 && step === 2.5) { // Bara avrunda om det är en skivstångsvikt
+        const plateWeight = num - barWeight;
+        if (plateWeight > 0) {
+            // Avrunda vikten FÖR plattorna till närmaste 2.5 kg
+            const roundedPlateWeight = Math.round(plateWeight / 2.5) * 2.5;
+            const finalWeight = barWeight + roundedPlateWeight;
+            onSave(Math.max(min, Math.min(max, finalWeight)));
+        } else {
+            onSave(Math.max(min, Math.min(max, barWeight)));
+        }
+    } else {
+        const rounded = precision === 0 ? Math.round(num) : parseFloat(num.toFixed(precision));
+        onSave(Math.max(min, Math.min(max, rounded)));
+    }
   };
 
   const quickValues = useMemo(() => {
@@ -140,7 +154,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
             </button>
           </div>
           
-          {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={currentNumericWeight} barWeight={barWeight} />}
+          {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={currentNumericWeight} barWeight={barWeight} availablePlates={availablePlates} />}
         </div>
 
         <div className="border-t border-white/5 pt-6 space-y-3 mb-6">

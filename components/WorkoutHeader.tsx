@@ -35,7 +35,10 @@ export const WorkoutHeader: React.FC<WorkoutHeaderProps> = ({
   };
 
   return (
-    <header className="px-4 pt-8 flex justify-between items-start">
+    <header 
+      className="bg-[#1a1721] p-6 border-b border-white/5 flex justify-between items-start" 
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
+    >
       <div className="flex items-center gap-4">
         <button 
           onClick={onToggleTimer}

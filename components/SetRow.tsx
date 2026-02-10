@@ -15,6 +15,7 @@ interface SetRowProps {
   trackingType?: TrackingType;
   exData: Exercise;
   userProfile: UserProfile;
+  availablePlates?: number[];
 }
 
 export const SetRow: React.FC<SetRowProps> = ({
@@ -26,7 +27,8 @@ export const SetRow: React.FC<SetRowProps> = ({
   isLast,
   trackingType = 'reps_weight',
   exData,
-  userProfile
+  userProfile,
+  availablePlates
 }) => {
   const [activeModal, setActiveModal] = useState<'reps' | 'weight' | 'dist' | 'time' | null>(null);
 
@@ -34,6 +36,10 @@ export const SetRow: React.FC<SetRowProps> = ({
     exData.equipment.includes(Equipment.BARBELL) || 
     exData.equipment.includes(Equipment.EZ_BAR) ||
     exData.equipment.includes(Equipment.TRAP_BAR), 
+  [exData.equipment]);
+
+  const isDumbbellExercise = useMemo(() =>
+    exData.equipment.includes(Equipment.DUMBBELL),
   [exData.equipment]);
 
   const formatTime = (seconds: number | undefined) => {
@@ -100,6 +106,16 @@ export const SetRow: React.FC<SetRowProps> = ({
           </button>
         </>;
     }
+  };
+
+  const getBaseWeight = () => {
+    if (isDumbbellExercise) {
+      return userProfile.settings?.dumbbellBaseWeight ?? 2;
+    }
+    if (isBarbellExercise) {
+      return userProfile.settings?.barbellWeight ?? 20;
+    }
+    return 0; // No base weight for other equipment
   };
 
   return (
@@ -171,11 +187,12 @@ export const SetRow: React.FC<SetRowProps> = ({
           title="Ange Vikt"
           unit="kg"
           value={set.weight || 0}
-          step={1.25}
+          step={2.5}
           precision={2}
           min={0}
           max={999}
-          barWeight={isBarbellExercise ? (userProfile.settings?.barbellWeight ?? 20) : 0}
+          barWeight={getBaseWeight()}
+          availablePlates={availablePlates}
           onSave={(v) => { onUpdate({ weight: v }); setActiveModal(null); }}
           onClose={() => setActiveModal(null)}
         />

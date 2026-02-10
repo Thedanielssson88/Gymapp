@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { PlannedExercise, Exercise, WorkoutSet, UserProfile } from '../types';
+import { PlannedExercise, Exercise, WorkoutSet, UserProfile, Zone } from '../types';
 import { SetRow } from './SetRow';
 import { MoreVertical, MessageSquare, Info, X, Trash2 } from 'lucide-react';
 import { useExerciseImage } from '../hooks/useExerciseImage';
@@ -10,6 +10,7 @@ interface ExerciseCardProps {
   exData: Exercise;
   exIdx: number;
   userProfile: UserProfile;
+  activeZone: Zone;
   onUpdateSet: (setIdx: number, updates: Partial<WorkoutSet>) => void;
   onAddSet: () => void;
   onRemove: () => void;
@@ -20,7 +21,7 @@ interface ExerciseCardProps {
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({ 
-  item, exData, exIdx, userProfile,
+  item, exData, exIdx, userProfile, activeZone,
   onUpdateSet, onAddSet, onRemove, 
   onToggleNotes, isNotesOpen, onUpdateNotes, onShowInfo 
 }) => {
@@ -116,6 +117,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             trackingType={exData.trackingType}
             exData={exData}
             userProfile={userProfile}
+            availablePlates={activeZone?.availablePlates}
           />
         ))}
       </div>

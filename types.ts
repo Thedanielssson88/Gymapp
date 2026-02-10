@@ -1,4 +1,5 @@
 
+
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -168,6 +169,7 @@ export interface Zone {
   name: string;
   inventory: Equipment[];
   icon: string;
+  availablePlates?: number[];
 }
 
 export type SetType = 'normal' | 'warmup' | 'drop' | 'failure';
@@ -264,4 +266,11 @@ export interface UserMission {
   isCompleted: boolean;
   createdAt: string;
   completedAt?: string;
+}
+
+// --- NEW: Type for Plate Display ---
+export interface Plate {
+  weight: number;
+  count: number;
+  color: string;
 }

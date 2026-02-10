@@ -16,7 +16,8 @@ import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
 import { Dumbbell, User2, Target, Calendar, X, BookOpen, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy } from 'lucide-react'; // Import Trophy
 import { calculate1RM, getLastPerformance } from './utils/fitness';
-
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -38,6 +39,45 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(false);
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const globalStyles = `
+    :root {
+      --safe-area-top: env(safe-area-inset-top);
+      --safe-area-bottom: env(safe-area-inset-bottom);
+    }
+
+    body {
+      padding-top: var(--safe-area-top);
+      padding-bottom: var(--safe-area-bottom);
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .fixed-bottom-nav {
+      padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
+    }
+  `;
+
+  useEffect(() => {
+    const initNativeHardware = async () => {
+      if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform()) {
+        try {
+          // 1. Hindra appen från att gå under statusbar (klockan/batteri)
+          await StatusBar.setOverlaysWebView({ overlay: false });
+          
+          // 2. Sätt färgen på statusbar till samma som din app-header
+          await StatusBar.setBackgroundColor({ color: '#1a1721' });
+          
+          // 3. Se till att texten (klockan etc) är vit
+          await StatusBar.setStyle({ style: Style.Dark });
+        } catch (e) {
+          console.warn('Statusbar kunde inte konfigureras:', e);
+        }
+      }
+    };
+
+    initNativeHardware();
+  }, []);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([
@@ -390,6 +430,7 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#0f0d15] selection:bg-accent-pink selection:text-white relative overflow-x-hidden">
+      <style>{globalStyles}</style>
       {showOnboarding && isReady && (
         <OnboardingWizard onComplete={() => {
            setShowOnboarding(false);
@@ -413,8 +454,8 @@ export default function App() {
       )}
 
       {!isWorkoutActive && (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pb-8 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent">
-          <div className="max-w-md mx-auto flex justify-between items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl pb-safe">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent fixed-bottom-nav">
+          <div className="max-w-md mx-auto flex justify-between items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl">
             <button 
               onClick={() => setActiveTab('workout')}
               className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}
