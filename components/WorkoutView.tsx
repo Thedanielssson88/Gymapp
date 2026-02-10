@@ -9,6 +9,7 @@ import { WorkoutHeader } from './WorkoutHeader';
 import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
 import { useExerciseImage } from '../hooks/useExerciseImage';
+import { ExerciseLibrary } from './ExerciseLibrary';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy } from 'lucide-react';
 
 interface WorkoutViewProps {
@@ -40,7 +41,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [restTimer, setRestTimer] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoadMapOpen, setIsLoadMapOpen] = useState(false);
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoModalData, setInfoModalData] = useState<{ exercise: Exercise; index: number } | null>(null);
@@ -227,8 +227,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return { results, loadMap: load };
   }, [localSession.exercises, allExercises, userProfile.weight]);
 
-  const filteredExercises = useMemo(() => allExercises.filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()) || ex.englishName?.toLowerCase().includes(searchQuery.toLowerCase())), [searchQuery, allExercises]);
-
   return (
     <div className="space-y-4 pb-64 animate-in fade-in duration-500">
       <WorkoutHeader 
@@ -310,12 +308,14 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling) => { onComplete({...localSession, rpe, feeling}, timer); setShowSummary(false); }} />}
       {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
       {showAddModal && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[200] p-6 flex flex-col animate-in slide-in-from-bottom-10 duration-500">
-            <header className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black italic uppercase text-white tracking-tighter">Lägg till övning</h3><button onClick={() => setShowAddModal(false)} className="p-3 bg-white/5 rounded-2xl"><X size={28} className="text-text-dim" /></button></header>
-            <div className="relative group mb-4"><Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim group-focus-within:text-accent-pink transition-colors" size={18} /><input type="text" placeholder="Sök (Svenska / Engelska)..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold transition-all text-sm placeholder:text-text-dim/40" /></div>
-            <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-4">{filteredExercises.map(ex => (
-                <button key={ex.id} onClick={() => addNewExercise(ex)} className="w-full flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-transparent hover:border-white/10 group"><div className="w-12 h-12 bg-black/30 rounded-lg overflow-hidden border border-white/5 flex-shrink-0 flex items-center justify-center"><Dumbbell className="text-white/10" size={16} /></div><div className="text-left min-w-0"><p className="font-black uppercase italic text-sm tracking-tight truncate">{ex.name}</p>{ex.englishName && <p className="text-[10px] text-white/30 italic truncate leading-none mb-1">{ex.englishName}</p>}<p className="text-[9px] font-black text-text-dim uppercase tracking-widest">{ex.pattern}</p></div></button>
-            ))}</div>
+        <div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500">
+           <ExerciseLibrary 
+              allExercises={allExercises}
+              onSelect={addNewExercise}
+              onClose={() => setShowAddModal(false)}
+              onUpdate={() => {}}
+              activeZone={activeZone} // Pass activeZone when in selector mode
+           />
         </div>
       )}
       {showZonePicker && (

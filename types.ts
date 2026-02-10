@@ -1,3 +1,4 @@
+
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -36,8 +37,15 @@ export type MuscleGroup =
   | 'Underarmar' 
   | 'Nacke'
   | 'Höftböjare'
-  | 'Tibialis' // Ny för löpar-prehab
-  | 'Rotatorcuff';
+  | 'Tibialis'
+  | 'Rotatorcuff'
+  // FIX: Add missing muscle group literals that were causing type errors in initialExercises.ts
+  | 'Hela kroppen'
+  | 'Rörlighet'
+  | 'Balans'
+  | 'Hamstrings'
+  | 'Bröstrygg'
+  | 'Greppstyrka';
 
 export enum Equipment {
   BARBELL = 'Skivstång',
@@ -80,7 +88,11 @@ export enum Equipment {
   ROPE = 'Klätterrep',
   JUMP_ROPE = 'Hopprep',
   LANDMINE = 'Landmine / Skivstångshörna',
-  MACHINES = 'Maskiner (Övriga)'
+  MACHINES = 'Maskiner (Övriga)',
+  // FIX: Add missing equipment types that were causing type errors in initialExercises.ts
+  HARNESS = 'Sele',
+  AB_WHEEL = 'Maghjul',
+  WALL = 'Vägg',
 }
 
 export enum Goal {
@@ -163,6 +175,8 @@ export type SetType = 'normal' | 'warmup' | 'drop' | 'failure';
 export interface WorkoutSet {
   reps: number;
   weight: number;
+  distance?: number;
+  duration?: number;
   completed: boolean;
   rpe?: number;
   type?: SetType;

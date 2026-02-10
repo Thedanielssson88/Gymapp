@@ -1,50 +1,13 @@
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan } from '../types';
-import { EXERCISE_DATABASE, INITIAL_GOAL_TARGETS, INITIAL_ZONES } from '../constants';
-
-const DEFAULT_PROFILE: UserProfile = {
-  name: "Atlet",
-  weight: 80,
-  height: 180,
-  level: "Medel",
-  goal: Goal.HYPERTROPHY,
-  injuries: [],
-  measurements: {}
-};
+import { DEFAULT_PROFILE } from '../constants';
 
 export const storage = {
   init: async () => {
     await migrateFromLocalStorage();
-
-    const existingExercises = await db.exercises.toArray();
-    const existingMap = new Map<string, Exercise>(existingExercises.map(e => [e.id, e]));
-
-    const updates: Exercise[] = [];
-    for (const coreEx of EXERCISE_DATABASE) {
-      const existing = existingMap.get(coreEx.id);
-      if (!existing || !existing.userModified) {
-        updates.push(coreEx);
-      }
-    }
-
-    if (updates.length > 0) {
-      await db.exercises.bulkPut(updates);
-    }
-    
-    const zoneCount = await db.zones.count();
-    if (zoneCount === 0) {
-      await db.zones.bulkAdd(INITIAL_ZONES);
-    }
-    
-    const targetCount = await db.goalTargets.count();
-    if (targetCount === 0) {
-      await db.goalTargets.bulkAdd(INITIAL_GOAL_TARGETS);
-    }
-    
-    const profileCount = await db.userProfile.count();
-    if (profileCount === 0) {
-      await db.userProfile.put({ id: 'current', ...DEFAULT_PROFILE });
-    }
+    // Database population is now handled by the on('populate') event in db.ts.
+    // This function's only responsibility is now migration from old storage.
+    // Any DB operation will automatically open and populate it if needed.
   },
 
   getUserProfile: async (): Promise<UserProfile> => {

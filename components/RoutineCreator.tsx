@@ -79,7 +79,8 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
         <ExerciseLibrary 
           allExercises={allExercises} 
           onSelect={handleAddExercise} 
-          onClose={() => setShowLibrary(false)} 
+          onClose={() => setShowLibrary(false)}
+          onUpdate={() => {}}
         />
       </div>
     );

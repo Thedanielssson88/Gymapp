@@ -1,10 +1,11 @@
 
-// FIX: When subclassing Dexie, the default import must be used. A named import `{ Dexie }` will not correctly extend the class prototype, leading to errors where methods like `.version()` are not found.
 import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
   GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan 
 } from '../types';
+import { INITIAL_EXERCISES } from '../data/initialExercises';
+import { INITIAL_ZONES, INITIAL_GOAL_TARGETS, DEFAULT_PROFILE } from '../constants';
 
 export interface StoredImage {
   id: string;
@@ -30,6 +31,8 @@ export class GymDatabase extends Dexie {
     super('MorphFitDB');
     
     // Schema definition for the Dexie database. The version number must be incremented for migrations.
+    // The explicit cast to Dexie is often unnecessary as 'this' in a class extending Dexie
+    // is already correctly typed. Removing it can resolve type inference issues.
     this.version(4).stores({
       userProfile: 'id',
       zones: 'id',
@@ -42,6 +45,14 @@ export class GymDatabase extends Dexie {
       images: 'id',
       scheduledActivities: 'id, date, type, recurrenceId',
       recurringPlans: 'id'
+    });
+
+    // Populate the database with initial data only when it's first created.
+    this.on('populate', async () => {
+      await this.exercises.bulkAdd(INITIAL_EXERCISES);
+      await this.zones.bulkAdd(INITIAL_ZONES);
+      await this.goalTargets.bulkAdd(INITIAL_GOAL_TARGETS);
+      await this.userProfile.put({ id: 'current', ...DEFAULT_PROFILE });
     });
   }
 }
@@ -68,6 +79,8 @@ export const migrateFromLocalStorage = async () => {
 
   try {
     // Perform migration within a transaction for data integrity.
+    // Casting 'db' to Dexie is redundant here as 'db' is already an instance of GymDatabase,
+    // which extends Dexie. Removing it ensures correct type inference.
     await db.transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.activeSession, db.goalTargets, db.workoutRoutines], async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);

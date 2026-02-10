@@ -1,19 +1,21 @@
-
-import React, { useState, useMemo, useEffect } from 'react';
-import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone } from '../types'; // Import Zone
 import { storage } from '../services/storage';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { ExerciseImporter } from './ExerciseImporter';
 import { ImageUpload } from './ImageUpload';
 import { useExerciseImage } from '../hooks/useExerciseImage';
-import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown } from 'lucide-react';
 
 interface ExerciseLibraryProps {
   allExercises: Exercise[];
-  onUpdate?: () => void;
+  onUpdate: () => void;
   onSelect?: (exercise: Exercise) => void;
   onClose?: () => void;
+  activeZone?: Zone; // Added activeZone prop
 }
+
+const ITEMS_PER_PAGE = 20; // Hur många som ska visas åt gången
 
 const ExerciseImage = ({ exercise }: { exercise: Exercise }) => {
     const imageSrc = useExerciseImage(exercise);
@@ -28,18 +30,56 @@ const ExerciseImage = ({ exercise }: { exercise: Exercise }) => {
     );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, onUpdate, onSelect, onClose }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, onUpdate, onSelect, onClose, activeZone }) => { // Destructure activeZone
   const [searchQuery, setSearchQuery] = useState('');
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [showImporter, setShowImporter] = useState(false);
   const isSelectorMode = !!onSelect;
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // --- FILTRERING ---
+  const [activeFilterTab, setActiveFilterTab] = useState<'all' | 'muscles' | 'equipment' | 'pattern'>('all');
+  const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(null);
+  
+  // --- PAGINERING (State för hur många vi visar) ---
+  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
 
   const filteredExercises = useMemo(() => {
     return allExercises.filter(ex => {
       const q = searchQuery.toLowerCase();
-      return ex.name.toLowerCase().includes(q) || ex.englishName?.toLowerCase().includes(q);
+      const matchesSearch = ex.name.toLowerCase().includes(q) || ex.englishName?.toLowerCase().includes(q);
+      
+      let matchesFilter = true;
+      if (selectedFilterValue) {
+          if (activeFilterTab === 'muscles') {
+              matchesFilter = ex.primaryMuscles.includes(selectedFilterValue as MuscleGroup) || ex.muscleGroups.includes(selectedFilterValue as MuscleGroup);
+          } else if (activeFilterTab === 'equipment') {
+              matchesFilter = ex.equipment.includes(selectedFilterValue as Equipment);
+          } else if (activeFilterTab === 'pattern') {
+              matchesFilter = ex.pattern === selectedFilterValue;
+          }
+      }
+
+      // NEW FILTER LOGIC: Filter by activeZone equipment if in selector mode
+      if (isSelectorMode && activeZone) {
+          const hasRequiredEquipment = ex.equipment.every(eq => activeZone.inventory.includes(eq));
+          if (!hasRequiredEquipment) {
+              return false; // Hide exercises that cannot be done with current zone's equipment
+          }
+      }
+
+      return matchesSearch && matchesFilter;
     }).sort((a, b) => a.name.localeCompare(b.name));
-  }, [allExercises, searchQuery]);
+  }, [allExercises, searchQuery, activeFilterTab, selectedFilterValue, isSelectorMode, activeZone]); // Add isSelectorMode and activeZone to dependencies
+
+  // Återställ listan till toppen och visa bara 20 när man söker/filtrerar
+  useEffect(() => {
+      setDisplayCount(ITEMS_PER_PAGE);
+      if (listRef.current) listRef.current.scrollTop = 0;
+  }, [searchQuery, activeFilterTab, selectedFilterValue]);
+
+  // De övningar som faktiskt ska renderas just nu
+  const visibleExercises = filteredExercises.slice(0, displayCount);
 
   const handleSave = async (exercise: Exercise) => {
     const updatedExercise = {
@@ -48,21 +88,44 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
     };
     await storage.saveExercise(updatedExercise);
     setEditingExercise(null);
-    onUpdate?.();
+    onUpdate();
   };
 
   const handleDelete = async (id: string) => {
       if(confirm("Är du säker på att du vill ta bort denna övning?")) {
           await storage.deleteExercise(id);
           setEditingExercise(null);
-          onUpdate?.();
+          onUpdate();
       }
   }
 
+  const FilterPills = ({ items }: { items: string[] }) => (
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {items.map(item => (
+              <button 
+                key={item} 
+                onClick={() => setSelectedFilterValue(selectedFilterValue === item ? null : item)}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all border ${selectedFilterValue === item ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-text-dim'}`}
+              >
+                  {item}
+              </button>
+          ))}
+      </div>
+  );
+
   return (
-    <div className="pb-32 animate-in fade-in space-y-6 px-4 pt-8 h-full flex flex-col">
-      <header className="flex justify-between items-center mb-6">
-        <div><h2 className="text-3xl font-black uppercase italic tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2></div>
+    <div className="pb-32 animate-in fade-in space-y-4 px-4 pt-8 h-full flex flex-col">
+      
+      {/* HEADER */}
+      <header className="flex justify-between items-center mb-2">
+        <div>
+          <h2 className="text-3xl font-black italic uppercase tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2>
+          {!isSelectorMode && (
+            <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">
+              {allExercises.length} ÖVNINGAR I DATABASEN
+            </p>
+          )}
+        </div>
         
         {isSelectorMode ? (
           <button onClick={onClose} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>
@@ -72,7 +135,6 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
             <button onClick={() => setEditingExercise({ 
               id: `custom-${Date.now()}`, 
               name: '', 
-              englishName: '',
               pattern: MovementPattern.ISOLATION, 
               tier: 'tier_3', 
               muscleGroups: [], 
@@ -89,20 +151,51 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
         )}
       </header>
 
-      <div className="relative group">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim" size={18} />
-        <input type="text" placeholder="Sök (Svenska / Engelska)..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold" />
+      {/* SÖK & FILTER */}
+      <div className="space-y-4">
+          <div className="relative group">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim" size={18} />
+            <input type="text" placeholder="Sök övning..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold" />
+          </div>
+
+          <div className="flex bg-[#1a1721] p-1 rounded-2xl border border-white/5 overflow-x-auto shrink-0">
+              {[
+                  { id: 'all', label: 'Alla' },
+                  { id: 'muscles', label: 'Muskler' },
+                  { id: 'equipment', label: 'Utrustning' },
+                  { id: 'pattern', label: 'Mönster' }
+              ].map(tab => (
+                  <button 
+                    key={tab.id} 
+                    onClick={() => { setActiveFilterTab(tab.id as any); setSelectedFilterValue(null); }}
+                    className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeFilterTab === tab.id ? 'bg-white/10 text-white shadow-sm' : 'text-text-dim hover:text-white'}`}
+                  >
+                      {tab.label}
+                  </button>
+              ))}
+          </div>
+
+          {activeFilterTab === 'muscles' && <FilterPills items={ALL_MUSCLE_GROUPS} />}
+          {activeFilterTab === 'equipment' && <FilterPills items={Object.values(Equipment)} />}
+          {activeFilterTab === 'pattern' && <FilterPills items={Object.values(MovementPattern)} />}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto scrollbar-hide">
-        {filteredExercises.map(ex => (
-          <div key={ex.id} className="bg-[#1a1721] p-5 rounded-[32px] border border-white/5 flex items-center justify-between group">
+      {/* LISTA MED PAGINERING */}
+      <div ref={listRef} className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto scrollbar-hide pt-2 pb-20">
+        
+        {/* Visa antal träffar */}
+        <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest text-center opacity-50 mb-2">
+            Visar {Math.min(displayCount, filteredExercises.length)} av {filteredExercises.length} övningar
+        </div>
+
+        {visibleExercises.map(ex => (
+          <div key={ex.id} className="bg-[#1a1721] p-5 rounded-[32px] border border-white/5 flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2">
             <div className="flex items-center gap-4 overflow-hidden">
               <ExerciseImage exercise={ex} />
               <div className="min-w-0">
-                  <h3 className="text-base font-black italic uppercase truncate">{ex.name}</h3>
+                  <h3 className="text-base font-black italic uppercase truncate text-white">{ex.name}</h3>
                   {ex.englishName && <p className="text-[10px] text-white/30 italic truncate leading-none mb-1">{ex.englishName}</p>}
-                  <p className="text-[10px] text-text-dim uppercase tracking-widest truncate">
+                  <p className="text-[10px] text-text-dim uppercase tracking-widest truncate mt-1">
                       {ex.tier?.replace('_', ' ') || 'TIER 3'} • {ex.primaryMuscles.join(', ')}
                   </p>
               </div>
@@ -115,6 +208,23 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
             )}
           </div>
         ))}
+
+        {/* VISA FLER KNAPP */}
+        {filteredExercises.length > displayCount && (
+            <button 
+                onClick={() => setDisplayCount(prev => prev + ITEMS_PER_PAGE)}
+                className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+            >
+                <ChevronDown size={16} /> Visa fler övningar
+            </button>
+        )}
+
+        {filteredExercises.length === 0 && (
+            <div className="text-center py-10 opacity-30">
+                <Filter size={48} className="mx-auto mb-2"/>
+                <p className="text-xs font-bold uppercase">Inga övningar matchar filtret</p>
+            </div>
+        )}
       </div>
 
       {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} allExercises={allExercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} />}
@@ -123,9 +233,11 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
   );
 };
 
+// --- EXERCISE EDITOR (Samma som innan) ---
 const ExerciseEditor: React.FC<{ exercise: Exercise, allExercises: Exercise[], onClose: () => void, onSave: (ex: Exercise) => void, onDelete?: (id: string) => void }> = ({ exercise, allExercises, onClose, onSave, onDelete }) => {
   const [formData, setFormData] = useState<Exercise>({ 
       ...exercise,
+      englishName: exercise.englishName || '',
       primaryMuscles: exercise.primaryMuscles || [],
       secondaryMuscles: exercise.secondaryMuscles || [],
       equipment: exercise.equipment || [],
@@ -136,7 +248,11 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, allExercises: Exercise[], o
       alternativeExIds: exercise.alternativeExIds || []
   });
 
-  const [activeTab, setActiveTab] = useState<'info' | 'muscles' | 'settings'>('muscles');
+  const [activeTab, setActiveTab] = useState<'info' | 'muscles' | 'settings'>('info');
+
+  useEffect(() => { 
+    // This effect ensures that if a new exercise is passed in while the editor is open, the form data updates.
+  }, [exercise]);
 
   const toggleList = (list: string[], item: string) => list.includes(item) ? list.filter(i => i !== item) : [...list, item];
 
@@ -144,6 +260,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, allExercises: Exercise[], o
     <div className="fixed inset-0 bg-[#0f0d15] z-[250] flex flex-col animate-in slide-in-from-bottom-10">
       <header className="flex justify-between items-center p-6 border-b border-white/5 bg-[#0f0d15]"><h3 className="text-2xl font-black italic uppercase">Redigera Övning</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
       <div className="flex p-4 gap-2 border-b border-white/5">{[{ id: 'info', label: 'Info & Bild', icon: Activity }, { id: 'muscles', label: 'Muskler & Utr.', icon: Layers }, { id: 'settings', label: 'Data & Nivå', icon: Scale }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}><tab.icon size={16} /> {tab.label}</button>))}</div>
+      
       <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
         {activeTab === 'info' && <InfoTab formData={formData} setFormData={setFormData} />}
         {activeTab === 'muscles' && <MusclesTab formData={formData} setFormData={setFormData} toggleList={toggleList} />}
@@ -154,7 +271,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, allExercises: Exercise[], o
   );
 };
 
-// --- SUB-COMPONENTS FOR EDITOR TABS ---
+// --- SUB-COMPONENTS FOR EDITOR TABS (Unchanged for brevity, but they are here as in the prompt) ---
 const InfoTab = ({ formData, setFormData }: { formData: Exercise, setFormData: (d: Exercise) => void }) => {
   const [imageUrlInput, setImageUrlInput] = useState(formData.imageUrl || '');
   useEffect(() => { setImageUrlInput(formData.imageUrl || '') }, [formData.imageUrl]);
