@@ -2,6 +2,22 @@ import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGrou
 import { calculateMuscleRecovery } from './recovery';
 
 /**
+ * Hjälpfunktion för att kolla kraven för en övning i en specifik zon.
+ * Stödjer AND/OR-logik.
+ */
+export const hasRequiredEquipment = (ex: Exercise, zoneInventory: Equipment[]): boolean => {
+  // Om inga specifika kravgrupper finns, använd den gamla "måste ha allt"-logiken
+  if (!ex.equipmentRequirements || ex.equipmentRequirements.length === 0) {
+    return ex.equipment.every(eq => zoneInventory.includes(eq));
+  }
+
+  // NY LOGIK: Kolla varje kravgrupp (AND mellan grupper, OR inom grupper)
+  return ex.equipmentRequirements.every(group => 
+    group.some(item => zoneInventory.includes(item))
+  );
+};
+
+/**
  * Beräknar 1RM baserat på Brzycki-formeln.
  */
 export const calculate1RM = (weight: number, reps: number): number => {
@@ -17,7 +33,7 @@ export const calculate1RM = (weight: number, reps: number): number => {
 export const findReplacement = (currentExercise: Exercise, targetZone: Zone, allExercises: Exercise[]): Exercise => {
   const candidates = allExercises.filter(ex => 
     ex.pattern === currentExercise.pattern &&
-    ex.equipment.every(eq => targetZone.inventory.includes(eq))
+    hasRequiredEquipment(ex, targetZone.inventory)
   );
   if (candidates.length === 0) return currentExercise;
   return candidates.sort((a, b) => 
@@ -140,7 +156,7 @@ export const generateWorkoutSession = (
 
   // 1. Filtrera fram möjliga övningar
   let candidates = allExercises.filter(ex => {
-    const hasEquipment = ex.equipment.every(eq => zone.inventory.includes(eq));
+    const hasEquipment = hasRequiredEquipment(ex, zone.inventory);
     if (!hasEquipment) return false;
 
     // Träffar valda muskelgrupper

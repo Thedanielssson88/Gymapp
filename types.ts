@@ -116,6 +116,13 @@ export interface Exercise {
   primaryMuscles: MuscleGroup[]; 
   secondaryMuscles?: MuscleGroup[];
   equipment: Equipment[];
+  /**
+   * Logical requirement groups for equipment.
+   * Inner arrays are OR (at least one must be present).
+   * Outer array is AND (all groups must be satisfied).
+   * Example: [[BENCH], [BARBELL, DUMBBELL]] means Bench AND (Barbell OR Dumbbell).
+   */
+  equipmentRequirements?: Equipment[][];
   difficultyMultiplier: number;
   bodyweightCoefficient: number;
   trackingType?: TrackingType;

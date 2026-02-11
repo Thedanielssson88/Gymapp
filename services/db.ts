@@ -1,5 +1,3 @@
-
-
 import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
@@ -27,14 +25,12 @@ export class GymDatabase extends Dexie {
   images!: Table<StoredImage, string>;
   scheduledActivities!: Table<ScheduledActivity, string>;
   recurringPlans!: Table<RecurringPlan, string>;
-  userMissions!: Table<UserMission, string>; // NEW: Table for gamified missions
+  userMissions!: Table<UserMission, string>;
 
   constructor() {
     super('MorphFitDB');
     
-    // FIX: The schema definition and populate hook must be inside the constructor for Dexie 3+ to ensure correct subclassing and type inference.
-    // Fix: Cast 'this' to Dexie to resolve type error. The type system is failing to infer the inherited 'version' method.
-    (this as Dexie).version(4).stores({
+    (this as Dexie).version(5).stores({
       userProfile: 'id',
       zones: 'id',
       exercises: 'id, name, muscleGroups',
@@ -46,10 +42,9 @@ export class GymDatabase extends Dexie {
       images: 'id',
       scheduledActivities: 'id, date, type, recurrenceId',
       recurringPlans: 'id',
-      userMissions: 'id, type, isCompleted' // NEW: Store for user missions
+      userMissions: 'id, type, isCompleted'
     });
 
-    // Fix: Cast 'this' to Dexie to resolve type error. The type system is failing to infer the inherited 'on' method.
     (this as Dexie).on('populate', async () => {
       await this.exercises.bulkAdd(INITIAL_EXERCISES);
       await this.zones.bulkAdd(INITIAL_ZONES);
@@ -58,10 +53,8 @@ export class GymDatabase extends Dexie {
     });
   }
 
-  // LÄGG TILL DENNA METOD: Synkroniserar övningsbiblioteket.
   async syncExercises() {
     try {
-      // bulkPut är nyckeln - den uppdaterar befintliga och lägger till nya.
       await this.exercises.bulkPut(INITIAL_EXERCISES as readonly Exercise[]);
       console.log("Övningsbiblioteket har synkroniserats!");
     } catch (error) {
@@ -72,7 +65,6 @@ export class GymDatabase extends Dexie {
 
 export const db = new GymDatabase();
 
-// --- MIGRERINGS-SKRIPT ---
 export const migrateFromLocalStorage = async () => {
   const ALREADY_MIGRATED_KEY = 'morphfit_db_migrated';
   if (localStorage.getItem(ALREADY_MIGRATED_KEY)) return;
@@ -91,8 +83,6 @@ export const migrateFromLocalStorage = async () => {
   ];
 
   try {
-    // Perform migration within a transaction for data integrity.
-    // Fix: Cast 'db' to Dexie to resolve type error. The type system is failing to infer the inherited 'transaction' method.
     await (db as Dexie).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.activeSession, db.goalTargets, db.workoutRoutines], async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);

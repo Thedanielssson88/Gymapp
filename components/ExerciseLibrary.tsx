@@ -7,6 +7,7 @@ import { ImageUpload } from './ImageUpload';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { generateExerciseDetailsFromGemini } from '../services/geminiService';
 import { calculate1RM } from '../utils/fitness';
+import { EquipmentBuilder } from './EquipmentBuilder';
 import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2, TrendingUp, Trophy, Clock, SortAsc, ChevronRight, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
 
 interface ExerciseLibraryProps {
@@ -82,7 +83,15 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
       }
 
       if (isSelectorMode && activeZone) {
-          if (!ex.equipment?.every(eq => activeZone.inventory?.includes(eq))) return false;
+          const hasRequiredEquipment = (ex: Exercise, zoneInventory: Equipment[]): boolean => {
+            if (!ex.equipmentRequirements || ex.equipmentRequirements.length === 0) {
+              return ex.equipment.every(eq => zoneInventory.includes(eq));
+            }
+            return ex.equipmentRequirements.every(group => 
+              group.some(item => zoneInventory.includes(item))
+            );
+          };
+          if (!hasRequiredEquipment(ex, activeZone.inventory)) return false;
       }
 
       return matchesSearch && matchesFilter;
@@ -135,7 +144,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
           <h2 className="text-3xl font-black italic uppercase tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2>
           {!isSelectorMode && (<p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{(allExercises || []).length} ÖVNINGAR I DATABASEN</p>)}
         </div>
-        {isSelectorMode ? (<button onClick={onClose} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (<div className="flex gap-2"><button onClick={() => setShowImporter(true)} className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl"><Plus size={24} /></button><button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button></div>)}
+        {isSelectorMode ? (<button onClick={onClose} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (<div className="flex gap-2"><button onClick={() => setShowImporter(true)} className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl"><Plus size={24} /></button><button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [], equipmentRequirements: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button></div>)}
       </header>
 
       <div className="space-y-4">
@@ -226,7 +235,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
 };
 
 const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], allExercises: Exercise[], onClose: () => void, onSave: (ex: Exercise) => void, onDelete?: (id: string) => void, userProfile?: UserProfile }> = ({ exercise, history, allExercises, onClose, onSave, onDelete, userProfile }) => {
-  const [formData, setFormData] = useState<Exercise>({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [] });
+  const [formData, setFormData] = useState<Exercise>({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [], equipmentRequirements: exercise.equipmentRequirements || [] });
   const [activeTab, setActiveTab] = useState<'info' | 'muscles' | 'settings' | 'progression'>('info');
 
   const stats = useMemo(() => {
@@ -247,7 +256,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
     return { history: exerciseHistory, best1RM: allTimeBest1RM };
   }, [formData.id, history]);
 
-  useEffect(() => { setFormData({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [] }); }, [exercise]);
+  useEffect(() => { setFormData({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [], equipmentRequirements: exercise.equipmentRequirements || [] }); }, [exercise]);
   const toggleList = (list: string[], item: string) => (list || []).includes(item) ? list.filter(i => i !== item) : [...(list || []), item];
 
   return (
@@ -329,7 +338,6 @@ const InfoTab = ({ formData, setFormData, userProfile }: { formData: Exercise, s
     if (!formData.name) { alert("Skriv namnet på övningen först!"); return; }
     setIsGenerating(true);
     try {
-      // Fix: generateExerciseDetailsFromGemini takes only 1 argument; removed non-existent geminiApiKey access and second argument
       const aiData = await generateExerciseDetailsFromGemini(formData.name);
       setFormData(prev => {
         const primary = aiData.primaryMuscles ?? prev.primaryMuscles;
@@ -385,11 +393,15 @@ const SettingsTab = ({ formData, setFormData, onDelete, allExercises }: { formDa
   const [showAltSelector, setShowAltSelector] = useState(false);
   const removeAlternative = (altId: string) => { setFormData({ ...formData, alternativeExIds: (formData.alternativeExIds || []).filter(id => id !== altId) }); };
   const handleSaveAlternatives = (newSelection: string[]) => { setFormData({ ...formData, alternativeExIds: newSelection }); };
+  const handleRequirementsChange = (newReqs: Equipment[][]) => { setFormData({ ...formData, equipmentRequirements: newReqs }); };
   return (
     <>
       <div className="space-y-6">
         <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Nivå / Prioritet</label><div className="flex gap-2">{([ 'tier_1', 'tier_2', 'tier_3' ] as ExerciseTier[]).map(t => (<button key={t} onClick={() => setFormData({ ...formData, tier: t })} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.tier === t ? 'bg-white text-black' : 'bg-white/5 border-white/10 text-text-dim'}`}>{t.replace('_', ' ')}</button>))}</div></div>
         <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Mättyp</label><div className="grid grid-cols-2 gap-2">{([ 'reps_weight', 'time_distance', 'reps_only', 'time_only' ] as TrackingType[]).map(tt => (<button key={tt} onClick={() => setFormData({...formData, trackingType: tt})} className={`p-3 rounded-xl border text-xs font-bold uppercase ${formData.trackingType === tt ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10'}`}>{tt.replace('_', ' & ')}</button>))}</div></div>
+        
+        <EquipmentBuilder value={formData.equipmentRequirements || []} onChange={handleRequirementsChange} />
+
         <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Svårighetsgrad</label><input type="number" step="0.1" value={formData.difficultyMultiplier} onChange={e => setFormData({...formData, difficultyMultiplier: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white font-bold" /></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Kroppsviktsfaktor</label><input type="number" step="0.1" max="1" min="0" value={formData.bodyweightCoefficient} onChange={e => setFormData({...formData, bodyweightCoefficient: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white font-bold" /></div></div>
         <div className="space-y-3 pt-4 border-t border-white/5"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><ArrowRightLeft size={12}/> Likvärdiga Alternativ</label><div className="flex flex-wrap gap-2 min-h-[40px] bg-white/5 p-3 rounded-xl border border-white/5">{(formData.alternativeExIds || []).length === 0 ? (<span className="text-text-dim text-xs italic opacity-50">Inga alternativ valda...</span>) : (formData.alternativeExIds || []).map(altId => { const altEx = (allExercises || []).find(e => e.id === altId); if (!altEx) return null; return (<div key={altId} className="bg-accent-blue/20 text-accent-blue border border-accent-blue/30 rounded-lg px-3 py-2 text-[10px] font-bold uppercase flex items-center gap-2 animate-in fade-in zoom-in-95"><span>{altEx.name}</span><button onClick={() => removeAlternative(altId)} className="text-accent-blue/50 hover:text-accent-blue"><X size={12}/></button></div>); })}</div><button onClick={() => setShowAltSelector(true)} className="w-full mt-2 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-text-dim uppercase tracking-widest flex items-center justify-center gap-2 transition-all"><Plus size={14} /> Välj alternativ...</button></div>
         {onDelete && formData.userModified && (<div className="pt-8 border-t border-white/5"><button onClick={() => onDelete(formData.id)} className="w-full py-4 border border-red-500/30 text-red-500 rounded-2xl font-bold uppercase text-xs hover:bg-red-500/10 flex items-center justify-center gap-2"><Trash2 size={16}/> Ta bort övning</button></div>)}
