@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -27,11 +27,13 @@ interface WorkoutViewProps {
   onStartActivity: (activity: ScheduledActivity) => void;
   onStartEmptyWorkout: () => void;
   onUpdate: () => void;
+  isManualMode?: boolean; // NEW: Prop to disable timer
 }
 
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session, allExercises, userProfile, allZones, history, activeZone, 
-  onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout, onUpdate
+  onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout, onUpdate,
+  isManualMode = false
 }) => {
   const [localSession, setLocalSession] = useState<WorkoutSession | null>(session);
   const [timer, setTimer] = useState(0);
@@ -49,18 +51,22 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   useEffect(() => {
     setLocalSession(session);
     if (session) {
-      setIsTimerActive(false); // Ändra från true till false
-      setTimer(0);
+      if (isManualMode) {
+        setIsTimerActive(false);
+        setTimer(0);
+      } else {
+        setIsTimerActive(true); 
+      }
     }
-  }, [session]);
+  }, [session, isManualMode]);
 
   useEffect(() => {
     let interval: any;
-    if (isTimerActive) {
+    if (isTimerActive && !isManualMode) {
       interval = setInterval(() => setTimer(t => t + 1), 1000);
     }
     return () => clearInterval(interval);
-  }, [isTimerActive]);
+  }, [isTimerActive, isManualMode]);
 
   const triggerRestEndHaptics = async () => {
     try {
@@ -75,17 +81,17 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     if (restTimer !== null && restTimer > 0) {
       interval = setInterval(() => setRestTimer(r => (r !== null ? r - 1 : 0)), 1000);
     } else if (restTimer === 0) {
-      if (userProfile.settings?.vibrateOnRestEnd ?? true) {
+      if (!isManualMode && (userProfile.settings?.vibrateOnRestEnd ?? true)) {
         triggerRestEndHaptics();
       }
       setRestTimer(null);
     }
     return () => clearInterval(interval);
-  }, [restTimer, userProfile.settings?.vibrateOnRestEnd]);
+  }, [restTimer, userProfile.settings?.vibrateOnRestEnd, isManualMode]);
 
   const canFinishWorkout = useMemo(() => {
     if (!localSession) return false;
-    return localSession.exercises.some(ex => 
+    return (localSession.exercises || []).some(ex => 
       ex.sets.some(set => set.completed)
     );
   }, [localSession]);
@@ -146,18 +152,14 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       const exercise = updatedExercises[exIdx];
       const updatedSets = [...(exercise.sets || [])];
       
-      // 1. Uppdatera det aktuella setet
       const oldSet = updatedSets[setIdx];
       updatedSets[setIdx] = { ...oldSet, ...updates };
   
-      // 2. Logik för att "pusha" värden till efterföljande tomma set
-      // Vi kollar om användaren ändrade vikt, reps, distans eller tid
       const hasValueChange = 'weight' in updates || 'reps' in updates || 'distance' in updates || 'duration' in updates;
       
       if (hasValueChange) {
         for (let i = setIdx + 1; i < updatedSets.length; i++) {
           const nextSet = updatedSets[i];
-          // Om nästa set är "tomt" (0 eller undefined), kopiera värdena
           const isNextSetEmpty = (nextSet.weight === 0 || nextSet.weight === undefined) && 
                                (nextSet.reps === 0 || nextSet.reps === undefined) &&
                                (nextSet.distance === 0 || nextSet.distance === undefined) &&
@@ -173,24 +175,21 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               type: updatedSets[setIdx].type === 'warmup' ? 'normal' : (updatedSets[setIdx].type ?? nextSet.type),
             };
           } else {
-            // Så fort vi stöter på ett set som INTE är tomt, slutar vi pusha värden
             break;
           }
         }
       }
   
-      // 3. Spara och returnera
       updatedExercises[exIdx] = { ...exercise, sets: updatedSets };
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
   
-    // Starta vilotimer om setet markerades som klart
-    if (updates.completed) {
+    if (updates.completed && !isManualMode) {
       setRestTimer(90);
     }
-  }, []);
+  }, [isManualMode]);
 
   const updateNotes = useCallback((exIdx: number, notes: string) => {
     setLocalSession(prev => {
@@ -265,9 +264,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     onUpdate();
   };
 
-  const handleGenerate = (muscles: MuscleGroup[]) => {
-     const generated = generateWorkoutSession(muscles, activeZone, allExercises || [], userProfile, history || []);
-     if (generated.length === 0) { alert("Hittade inga övningar i denna zon för valda muskler."); return; }
+  const handleGenerateResults = (generated: PlannedExercise[]) => {
      setLocalSession(prev => {
        if (!prev) return null;
        const updatedSession = { ...prev, exercises: [...(prev.exercises || []), ...generated] };
@@ -387,12 +384,21 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
 
   return (
     <div className="space-y-4 pb-64 animate-in fade-in duration-500">
-      <WorkoutHeader timer={timer} isTimerActive={isTimerActive} onToggleTimer={() => setIsTimerActive(!isTimerActive)} onCancel={() => { if (window.confirm("Avbryt passet?")) { onCancel(); } }} onSaveRoutine={async () => {
+      <WorkoutHeader 
+        timer={timer} 
+        isTimerActive={isTimerActive} 
+        onToggleTimer={() => !isManualMode && setIsTimerActive(!isTimerActive)} 
+        onCancel={() => { if (window.confirm("Avbryt passet?")) { onCancel(); } }} 
+        onSaveRoutine={async () => {
            const name = window.prompt("Vad ska rutinen heta?", localSession.name);
            if (!name) return;
            await storage.saveRoutine({ id: `routine-${Date.now()}`, name, exercises: (localSession.exercises || []).map(pe => ({ exerciseId: pe.exerciseId, notes: pe.notes, sets: (pe.sets || []).map(s => ({ reps: s.reps, weight: s.weight, type: s.type, completed: false })) })) });
            alert("Rutinen sparad!");
-        }} sessionName={localSession.name} onUpdateSessionName={handleUpdateSessionName} />
+        }} 
+        sessionName={localSession.name} 
+        onUpdateSessionName={handleUpdateSessionName} 
+        isManual={isManualMode}
+      />
 
       <div className="px-4 space-y-4"><WorkoutStats results={muscleStats.results} loadMap={muscleStats.loadMap} isLoadMapOpen={isLoadMapOpen} onToggleLoadMap={() => setIsLoadMapOpen(!isLoadMapOpen)} /></div>
       <div className="px-4">
@@ -423,56 +429,81 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15]/95 to-transparent pointer-events-none" />
         <div className="relative px-6 pb-10 pt-4 max-w-md mx-auto">
           <div className="bg-[#1a1721]/95 backdrop-blur-3xl border border-white/10 rounded-[36px] p-4 flex items-center gap-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
-             <div className="flex-1 h-16 relative">
-                {restTimer !== null ? (
-                  <button onClick={() => setRestTimer(null)} className="w-full h-full bg-accent-pink rounded-[24px] flex items-center gap-4 px-4 shadow-[0_0_20px_rgba(255,45,85,0.4)] animate-in zoom-in duration-300 active:scale-95 transition-transform"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0"><RefreshCw size={20} className="animate-spin text-white" /></div><div className="text-left"><span className="text-[8px] font-black uppercase tracking-widest text-white block mb-0.5 opacity-80">VILA</span><span className="text-2xl font-black italic tabular-nums text-white leading-none">{restTimer}s</span></div></button>
-                ) : (
-                  <button 
-                    onClick={() => setIsTimerActive(!isTimerActive)} 
-                    className={`w-full h-full rounded-[24px] flex items-center gap-4 px-4 transition-all active:scale-95 ${
-                      timer === 0 && !isTimerActive 
-                        ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.4)]' 
-                        : 'bg-white/5 border border-white/5'
-                    }`}
-                  >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      timer === 0 && !isTimerActive ? 'bg-black text-white' : isTimerActive ? 'bg-white text-[#0f0d15]' : 'bg-accent-blue text-white'
-                    }`}>
-                      {isTimerActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                    </div>
-                    <div className="text-left">
-                      <span className="text-[8px] font-black uppercase block tracking-[0.2em] mb-0.5">
-                        {timer === 0 && !isTimerActive ? 'REDO?' : 'TID'}
-                      </span>
-                      <span className="text-2xl font-black italic tabular-nums leading-none tracking-tighter">
-                        {timer === 0 && !isTimerActive ? 'STARTA PASS' : `${Math.floor(timer/60)}:${String(timer%60).padStart(2,'0')}`}
-                      </span>
-                    </div>
-                  </button>
-                )}
-             </div>
-             <button
-              onClick={() => {
-                if (canFinishWorkout) {
-                  setShowSummary(true);
-                } else {
-                  setShowNoSetsInfo(true);
-                }
-              }}
-              className={`flex-1 h-16 rounded-[24px] font-black italic text-lg tracking-wider uppercase shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
-                canFinishWorkout
-                  ? 'bg-[#2ed573] text-[#0f0d15] shadow-[0_0_25px_rgba(46,213,115,0.3)]'
-                  : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'
-              }`}
-            >
-              Slutför <Check size={20} strokeWidth={4} />
-            </button>
+             {isManualMode ? (
+               <button 
+                 onClick={() => {
+                   if (canFinishWorkout) setShowSummary(true);
+                   else setShowNoSetsInfo(true);
+                 }}
+                 className={`w-full h-16 rounded-[24px] font-black italic text-lg tracking-wider uppercase shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
+                   canFinishWorkout ? 'bg-[#2ed573] text-[#0f0d15]' : 'bg-white/5 text-white/20'
+                 }`}
+               >
+                 Spara Logg <Check size={20} strokeWidth={4} />
+               </button>
+             ) : (
+               <>
+                 <div className="flex-1 h-16 relative">
+                    {restTimer !== null ? (
+                      <button onClick={() => setRestTimer(null)} className="w-full h-full bg-accent-pink rounded-[24px] flex items-center gap-4 px-4 shadow-[0_0_20px_rgba(255,45,85,0.4)] animate-in zoom-in duration-300 active:scale-95 transition-transform"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0"><RefreshCw size={20} className="animate-spin text-white" /></div><div className="text-left"><span className="text-[8px] font-black uppercase tracking-widest text-white block mb-0.5 opacity-80">VILA</span><span className="text-2xl font-black italic tabular-nums text-white leading-none">{restTimer}s</span></div></button>
+                    ) : (
+                      <button 
+                        onClick={() => setIsTimerActive(!isTimerActive)} 
+                        className={`w-full h-full rounded-[24px] flex items-center gap-4 px-4 transition-all active:scale-95 ${
+                          timer === 0 && !isTimerActive 
+                            ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.4)]' 
+                            : 'bg-white/5 border border-white/5'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          timer === 0 && !isTimerActive ? 'bg-black text-white' : isTimerActive ? 'bg-white text-[#0f0d15]' : 'bg-accent-blue text-white'
+                        }`}>
+                          {isTimerActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                        </div>
+                        <div className="text-left">
+                          <span className="text-[8px] font-black uppercase block tracking-[0.2em] mb-0.5">
+                            {timer === 0 && !isTimerActive ? 'REDO?' : 'TID'}
+                          </span>
+                          <span className="text-2xl font-black italic tabular-nums leading-none tracking-tighter">
+                            {timer === 0 && !isTimerActive ? 'STARTA PASS' : `${Math.floor(timer/60)}:${String(timer%60).padStart(2,'0')}`}
+                          </span>
+                        </div>
+                      </button>
+                    )}
+                 </div>
+                 <button
+                  onClick={() => {
+                    if (canFinishWorkout) {
+                      setShowSummary(true);
+                    } else {
+                      setShowNoSetsInfo(true);
+                    }
+                  }}
+                  className={`flex-1 h-16 rounded-[24px] font-black italic text-lg tracking-wider uppercase shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
+                    canFinishWorkout
+                      ? 'bg-[#2ed573] text-[#0f0d15] shadow-[0_0_25px_rgba(46,213,115,0.3)]'
+                      : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'
+                  }`}
+                >
+                  Slutför <Check size={20} strokeWidth={4} />
+                </button>
+               </>
+             )}
           </div>
         </div>
       </div>
 
-      {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling) => { onComplete({...localSession!, rpe, feeling}, timer); setShowSummary(false); }} />}
-      {showGenerator && <WorkoutGenerator activeZone={activeZone} onGenerate={handleGenerate} onClose={() => setShowGenerator(false)} />}
+      {showSummary && (
+        <WorkoutSummaryModal 
+          duration={timer} 
+          onCancel={() => setShowSummary(false)} 
+          onConfirm={(rpe, feeling, finalDuration) => { 
+            onComplete({...localSession!, rpe, feeling}, finalDuration); 
+            setShowSummary(false); 
+          }} 
+        />
+      )}
+      {showGenerator && <WorkoutGenerator activeZone={activeZone} allExercises={allExercises} userProfile={userProfile} history={history} onGenerate={handleGenerateResults} onClose={() => setShowGenerator(false)} />}
       {showAddModal && (<div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500"><ExerciseLibrary allExercises={allExercises} history={history} onSelect={addNewExercise} onClose={() => setShowAddModal(false)} onUpdate={() => {}} activeZone={activeZone} /></div>)}
       {showZonePicker && (
         <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[200] flex flex-col p-6 animate-in fade-in duration-200">
@@ -566,7 +597,7 @@ const InfoModal: React.FC<{ exercise: Exercise; exIdx: number; onClose: () => vo
       </div>
       <div className="flex p-4 gap-2 border-b border-white/5 shrink-0">
         {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'history', label: 'Historik', icon: History }, { id: 'alternatives', label: 'Alternativ', icon: Shuffle }].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1.5 transition-all ${activeTab === tab.id ? 'bg-white text-black shadow-lg scale-[1.02]' : 'bg-white/5 text-text-dim hover:bg-white/10'}`}><tab.icon size={16} /> {tab.label}</button>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === tab.id ? 'bg-white text-black shadow-lg scale-[1.02]' : 'bg-white/5 text-text-dim hover:bg-white/10'}`}><tab.icon size={16} /> {tab.label}</button>
         ))}
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6">

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   WorkoutSession, 
@@ -13,8 +12,12 @@ import {
 import { 
   Trophy, Target as TargetIcon, TrendingUp, Plus, Zap, Star, Flame, Award, X, Check, Dumbbell,
   Sunrise, Moon, CalendarDays, Link, CalendarCheck, Crown, Weight, Globe, Gem, Timer, Wind,
-  RotateCcw, Hourglass, Layers, Compass, MapPin, ArrowUp, ArrowDown, Anchor, Shield, Swords, MessageSquare
+  RotateCcw, Hourglass, Layers, Compass, MapPin, ArrowUp, ArrowDown, Anchor, Shield, Swords, MessageSquare,
+  Medal, Lock
 } from 'lucide-react';
+import { 
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer 
+} from 'recharts';
 import { calculate1RM, getLastPerformance } from '../utils/fitness';
 import { AddMissionModal } from './AddMissionModal';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
@@ -28,6 +31,23 @@ interface TargetsViewProps {
   onAddMission: (mission: UserMission) => void;
   onDeleteMission: (id: string) => void;
 }
+
+// Referensvärden för 100 poäng (Elit-nivå)
+const REF_MAX = { PUSH: 120, PULL: 220, LEGS: 180 }; 
+
+// Hjälpfunktion för att sortera in övningar i PPL
+const getPPLCategory = (ex: Exercise): 'Push' | 'Pull' | 'Legs' | 'Other' => {
+  if (ex.pattern === MovementPattern.HORIZONTAL_PUSH || ex.pattern === MovementPattern.VERTICAL_PUSH) return 'Push';
+  if (ex.pattern === MovementPattern.HORIZONTAL_PULL || ex.pattern === MovementPattern.VERTICAL_PULL || ex.pattern === MovementPattern.HINGE) return 'Pull';
+  if (ex.pattern === MovementPattern.SQUAT || ex.pattern === MovementPattern.LUNGE) return 'Legs';
+  
+  const p = ex.primaryMuscles || [];
+  if (p.includes('Bröst') || p.includes('Triceps') || p.includes('Axlar')) return 'Push';
+  if (p.includes('Rygg') || p.includes('Biceps') || p.includes('Trapezius')) return 'Pull';
+  if (p.includes('Framsida lår') || p.includes('Baksida lår') || p.includes('Säte') || p.includes('Vader')) return 'Legs';
+  
+  return 'Other';
+};
 
 const getMuscleGroupsTrainedInPeriod = (
   sessions: WorkoutSession[],
@@ -225,7 +245,46 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
         }
         currentStreak = currentStreakCount;
       }
-      return { totalWorkouts, totalSets, totalXP: Math.round(totalXP), ...levelData, impactBonus: Math.round(totalImpactXP), streak: currentStreak };
+
+      // --- NEW: POWER STATS LOGIC (PUSH PULL LEGS) ---
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(new Date().getMonth() - 6);
+      const recentHistory = history.filter(s => new Date(s.date) >= sixMonthsAgo);
+
+      let maxPush = 0, maxPull = 0, maxLegs = 0;
+
+      recentHistory.forEach(sess => {
+         sess.exercises.forEach(pe => {
+            const ex = exercises.find(e => e.id === pe.exerciseId);
+            if (ex) {
+               const cat = getPPLCategory(ex);
+               const exerciseMax = Math.max(...pe.sets.filter(s => s.completed && s.weight > 0).map(s => calculate1RM(s.weight, s.reps)), 0);
+               
+               if (exerciseMax > 0) {
+                  if (cat === 'Push') maxPush = Math.max(maxPush, exerciseMax);
+                  if (cat === 'Pull') maxPull = Math.max(maxPull, exerciseMax);
+                  if (cat === 'Legs') maxLegs = Math.max(maxLegs, exerciseMax);
+               }
+            }
+         });
+      });
+
+      const pushScore = Math.min(100, Math.round((maxPush / REF_MAX.PUSH) * 100));
+      const pullScore = Math.min(100, Math.round((maxPull / REF_MAX.PULL) * 100));
+      const legsScore = Math.min(100, Math.round((maxLegs / REF_MAX.LEGS) * 100));
+      const totalPowerScore = Math.round((pushScore + pullScore + legsScore) / 3);
+
+      const radarData = [
+          { subject: 'Push', A: pushScore, fullMark: 100 },
+          { subject: 'Pull', A: pullScore, fullMark: 100 },
+          { subject: 'Legs', A: legsScore, fullMark: 100 },
+      ];
+
+      return { 
+        totalWorkouts, totalSets, totalXP: Math.round(totalXP), 
+        ...levelData, impactBonus: Math.round(totalImpactXP), streak: currentStreak,
+        pushScore, pullScore, legsScore, totalPowerScore, radarData
+      };
     }, [history, exercises, userProfile]);
 
   const achievedMilestones = useMemo(() => {
@@ -311,6 +370,57 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
           <div className="text-center border-x border-white/5"><p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Power XP</p><p className="text-xl font-black text-accent-blue italic">+{stats.impactBonus}</p></div>
           <div className="text-center"><p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Streak</p><div className="flex items-center justify-center gap-1"><Flame size={16} className="text-orange-500" /><p className="text-xl font-black text-white italic">{stats.streak}</p></div></div>
         </div>
+      </section>
+
+      {/* --- NEW MODUL: POWER STATS (PUSH PULL LEGS) --- */}
+      <section className="bg-[#1a1721] rounded-[32px] border border-white/5 p-6 relative overflow-hidden shadow-xl">
+         <div className="flex justify-between items-center mb-2 relative z-10">
+            <h3 className="text-lg font-black italic uppercase text-white flex items-center gap-2">
+              <Shield size={18} className="text-accent-blue" /> Power Stats
+            </h3>
+            <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest">0-100 Scale</span>
+         </div>
+
+         <div className="h-64 w-full -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+               <RadarChart cx="50%" cy="50%" outerRadius="70%" data={stats.radarData}>
+                 <PolarGrid stroke="#ffffff10" />
+                 <PolarAngleAxis dataKey="subject" tick={{ fill: '#fff', fontSize: 11, fontWeight: 900, dy: 3 }} />
+                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                 <Radar name="Score" dataKey="A" stroke="#3b82f6" strokeWidth={3} fill="#3b82f6" fillOpacity={0.3} />
+               </RadarChart>
+            </ResponsiveContainer>
+         </div>
+
+         <div className="grid grid-cols-3 gap-3 mt-2 mb-6">
+            {[
+              { label: 'PUSH', val: stats.pushScore, color: 'text-accent-blue', icon: Swords },
+              { label: 'PULL', val: stats.pullScore, color: 'text-accent-green', icon: TargetIcon },
+              { label: 'LEGS', val: stats.legsScore, color: 'text-accent-pink', icon: Zap }
+            ].map((s) => (
+              <div key={s.label} className="bg-white/5 rounded-2xl p-3 flex flex-col items-center border border-white/5">
+                 <s.icon size={14} className={`mb-2 ${s.color}`} />
+                 <span className="text-xl font-black text-white italic leading-none">{s.val}</span>
+                 <span className="text-[8px] font-black uppercase text-text-dim mt-1">{s.label}</span>
+              </div>
+            ))}
+         </div>
+
+         <div className="bg-white/5 rounded-2xl p-4 flex items-center justify-between border border-white/5">
+             <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-full bg-accent-blue/20 flex items-center justify-center text-accent-blue">
+                     <Crown size={20} />
+                 </div>
+                 <div>
+                     <h4 className="text-sm font-black uppercase text-white">Total Strength</h4>
+                     <p className="text-[10px] text-text-dim uppercase tracking-widest">Genomsnittlig poäng</p>
+                 </div>
+             </div>
+             <div className="text-right">
+                 <span className="text-3xl font-black italic text-white">{stats.totalPowerScore}</span>
+                 <span className="text-xs font-bold text-text-dim"> / 100</span>
+             </div>
+         </div>
       </section>
 
       <section className="space-y-4">

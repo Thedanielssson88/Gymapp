@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Zap } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -17,7 +17,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     setLocalProfile(prev => ({
         ...prev,
         settings: {
-            // Provide default values for existing settings if they are missing.
             includeWarmupInStats: prev.settings?.includeWarmupInStats ?? false,
             bodyViewMode: prev.settings?.bodyViewMode ?? 'list',
             vibrateOnRestEnd: prev.settings?.vibrateOnRestEnd ?? true,
@@ -63,7 +62,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     try {
       const count = await importExerciseLibrary(file);
       alert(`Import lyckades! ${count} övningar har lagts till eller uppdaterats.`);
-      onUpdate(); // Anropa onUpdate för att ladda om datan i appen
+      onUpdate();
     } catch (err: any) {
       alert("Ett fel uppstod vid importen: " + err.message);
     }
@@ -73,7 +72,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   return (
     <div className="space-y-8 pb-32 px-2 animate-in fade-in">
       
-      {/* BASIC INFO SECTION */}
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-4">
          <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
             Profil
@@ -112,13 +110,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
          </div>
       </section>
 
-      {/* PREFERENCES SECTION */}
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-6">
          <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
             <Smartphone className="text-accent-blue" /> Appupplevelse
          </h3>
 
-         {/* VISNINGSLÄGE FÖR KROPP */}
          <div className="flex items-center justify-between py-2 border-b border-white/5">
             <div className="flex items-center gap-3">
                {(localProfile.settings?.bodyViewMode || 'list') === 'list' ? <LayoutList size={18} className="text-white"/> : <Map size={18} className="text-white"/>}
@@ -134,7 +130,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider ${
                    (localProfile.settings?.bodyViewMode || 'list') === 'list' 
                      ? 'bg-white text-black shadow-sm' 
-                     : 'text-text-dim hover:text-white'
+                     : 'text-text-dim hover:bg-white/5'
                  }`}
                >
                  <LayoutList size={14} /> Lista
@@ -144,7 +140,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider ${
                    (localProfile.settings?.bodyViewMode || 'list') === 'map' 
                      ? 'bg-white text-black shadow-sm' 
-                     : 'text-text-dim hover:text-white'
+                     : 'text-text-dim hover:bg-white/5'
                  }`}
                >
                  <Map size={14} /> Karta
@@ -152,7 +148,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             </div>
          </div>
 
-         {/* UPPVÄRMNING */}
          <div className="flex items-center justify-between py-2 border-b border-white/5">
             <div className="flex items-center gap-3">
               <Thermometer size={18} className="text-text-dim" />
@@ -169,7 +164,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             </button>
          </div>
          
-         {/* VIBRATION */}
          <div className="flex items-center justify-between py-2 border-b border-white/5">
             <div className="flex items-center gap-3">
               <Smartphone size={18} className={localProfile.settings?.vibrateOnRestEnd ?? true ? "text-accent-blue" : "text-text-dim"} />
@@ -185,30 +179,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateOnRestEnd ?? true) ? 'left-7' : 'left-1'}`} />
             </button>
          </div>
-
-         <div className="space-y-4 pt-4 border-t border-white/5">
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black uppercase text-text-dim tracking-widest ml-1">
-                Gemini API Nyckel (AI)
-              </label>
-              <div className="relative">
-                <input 
-                  type="password"
-                  placeholder="Klistra in din API-nyckel här..."
-                  value={localProfile.settings?.geminiApiKey || ''}
-                  onChange={(e) => handleSettingChange('geminiApiKey', e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white text-xs font-bold outline-none focus:border-accent-pink/50"
-                />
-                <Zap size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-accent-pink opacity-50" />
-              </div>
-              <p className="text-[9px] text-text-dim italic ml-1">
-                Nyckeln används lokalt för att generera smarta tips och analyser.
-              </p>
-            </div>
-          </div>
       </section>
 
-      {/* EQUIPMENT SECTION */}
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/10 space-y-6">
         <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
           <Dumbbell className="text-accent-blue" /> Utrustning
@@ -251,7 +223,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
         </div>
       </section>
 
-      {/* LIBRARY DATA ACTIONS */}
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-4">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-accent-blue/20 rounded-xl flex items-center justify-center text-accent-blue">
@@ -278,7 +249,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
         </div>
       </section>
 
-      {/* ALL DATA ACTIONS */}
       <div className="grid grid-cols-2 gap-3">
         <button onClick={handleExport} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
           <Download size={20} className="text-accent-blue" />
@@ -291,7 +261,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
       </div>
       <input type="file" ref={fileInputRef} className="hidden" />
 
-      {/* SAVE BUTTON */}
       <button 
         onClick={handleSave} 
         className="w-full py-5 bg-white text-black rounded-[24px] font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all"

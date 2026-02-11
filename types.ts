@@ -1,6 +1,3 @@
-
-
-
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -128,8 +125,8 @@ export interface Exercise {
   instructions?: string[];
   alternativeExIds?: string[];
   userModified?: boolean;
-  score?: number; // Ett värde mellan 1-10, standard 5
-  userRating?: 'up' | 'down' | null; // Nytt fält för användarens betyg
+  score?: number;
+  userRating?: 'up' | 'down' | null;
 }
 
 export interface BodyMeasurements {
@@ -141,7 +138,7 @@ export interface BodyMeasurements {
   bicepsL?: number;
   bicepsR?: number;
   thighL?: number;
-  thighR?: number; // Fixed typo: 'thihR' to 'thighR'
+  thighR?: number; 
   calves?: number;
   bodyFat?: number;
 }
@@ -151,10 +148,9 @@ export interface UserSettings {
   restTimer?: number;
   keepAwake?: boolean;
   bodyViewMode?: 'list' | 'map';
-  barbellWeight?: number; // t.ex. 20
-  dumbbellBaseWeight?: number; // t.ex. 2 (vikten på själva hantelgreppet)
-  geminiApiKey?: string; // Nytt fält för AI-nyckeln
-  vibrateOnRestEnd?: boolean; // Ny inställning för vibration vid vilans slut
+  barbellWeight?: number; 
+  dumbbellBaseWeight?: number; 
+  vibrateOnRestEnd?: boolean; 
 }
 
 export interface UserProfile {
@@ -187,7 +183,7 @@ export interface WorkoutSet {
   completed: boolean;
   rpe?: number;
   type?: SetType;
-  fatigue?: number; // Added fatigue for per-set logging
+  fatigue?: number; 
 }
 
 export interface PlannedExercise {
@@ -208,12 +204,13 @@ export interface WorkoutSession {
   date: string;
   name: string;
   zoneId: string;
-  locationName?: string; // Add locationName
+  locationName?: string;
   exercises: PlannedExercise[];
   isCompleted: boolean;
   duration?: number;
   rpe?: number;
   feeling?: string;
+  isManual?: boolean;
 }
 
 export interface BiometricLog {
@@ -225,55 +222,47 @@ export interface BiometricLog {
 
 export type ActivityType = 'gym' | 'cardio' | 'rehab' | 'mobility' | 'rest';
 
-// --- ScheduledActivity: Represents a single, concrete planned activity ---
 export interface ScheduledActivity {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string; 
   type: ActivityType;
   title: string;
   isCompleted: boolean;
   linkedSessionId?: string;
   exercises?: PlannedExercise[];
-  recurrenceId?: string; // If this activity was generated from a RecurringPlan, this is the ID of that plan.
+  recurrenceId?: string; 
 }
 
-// --- RecurringPlan: Represents a template for recurring activities ---
 export interface RecurringPlan {
   id: string;
   type: ActivityType;
   title: string;
-  daysOfWeek: number[]; // 0=Sunday, 1=Monday...
-  startDate: string; // The date from which recurrence starts
-  endDate?: string; // Optional end date
+  daysOfWeek: number[]; 
+  startDate: string; 
+  endDate?: string; 
   exercises?: PlannedExercise[];
 }
 
-// --- Type for WorkoutLog to display both ScheduledActivity and RecurringPlan templates ---
 export interface RecurringPlanForDisplay extends RecurringPlan {
-  isTemplate: true; // Custom flag for the UI to identify templates
-  // `daysOfWeek` already exists on RecurringPlan, no need to redefine as `recurringDays`
-  // No `date` field here, as `WorkoutLog` will use `startDate` and `daysOfWeek` for display
-  // No `isCompleted` as templates are never "completed"
+  isTemplate: true; 
 }
 
 export type PlannedActivityForLogDisplay = ScheduledActivity | RecurringPlanForDisplay;
 
-// --- NEW: Gamified User Missions ---
 export interface UserMission {
   id: string;
-  name: string; // E.g., "Bänka 100 kg", "Träna 3 ggr/vecka", "Nå 75 cm i midjan"
-  type: 'weight' | 'frequency' | 'measurement'; // Typ av mål
-  startValue: number; // NEW: The value of the metric when the mission was created
-  targetValue: number; // Målvärdet (t.ex. 100 kg, 3 ggr, 75 cm)
-  exerciseId?: string; // Om målet är viktspecifikt för en övning
-  muscleGroup?: MuscleGroup; // Om målet är kopplat till en muskelgrupp (kan användas med 'weight' eller 'frequency' för att spåra volym i specifik muskelgrupp t.ex.)
-  measurementKey?: keyof BodyMeasurements | 'weight'; // Om målet är kopplat till ett kroppsmått (t.ex. 'waist', 'bicepsL') ELLER 'weight'
+  name: string; 
+  type: 'weight' | 'frequency' | 'measurement'; 
+  startValue: number; 
+  targetValue: number; 
+  exerciseId?: string; 
+  muscleGroup?: MuscleGroup; 
+  measurementKey?: keyof BodyMeasurements | 'weight'; 
   isCompleted: boolean;
   createdAt: string;
   completedAt?: string;
 }
 
-// --- NEW: Type for Plate Display ---
 export interface Plate {
   weight: number;
   count: number;

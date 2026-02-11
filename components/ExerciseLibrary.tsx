@@ -241,7 +241,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
                 .flatMap(ex => (ex.sets || []).map(s => calculate1RM(s.weight || 0, s.reps || 0))))
         }))
         .filter(h => h.volume > 0 || h.max1RM > 0)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        .sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
 
     const allTimeBest1RM = Math.max(0, ...exerciseHistory.map(h => h.max1RM));
     return { history: exerciseHistory, best1RM: allTimeBest1RM };
@@ -329,7 +329,8 @@ const InfoTab = ({ formData, setFormData, userProfile }: { formData: Exercise, s
     if (!formData.name) { alert("Skriv namnet på övningen först!"); return; }
     setIsGenerating(true);
     try {
-      const aiData = await generateExerciseDetailsFromGemini(formData.name, userProfile?.settings?.geminiApiKey);
+      // Fix: generateExerciseDetailsFromGemini takes only 1 argument; removed non-existent geminiApiKey access and second argument
+      const aiData = await generateExerciseDetailsFromGemini(formData.name);
       setFormData(prev => {
         const primary = aiData.primaryMuscles ?? prev.primaryMuscles;
         const secondary = aiData.secondaryMuscles ?? prev.secondaryMuscles;

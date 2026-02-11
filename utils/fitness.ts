@@ -1,45 +1,19 @@
-
 import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal, UserProfile, ExerciseTier, MovementPattern } from '../types';
 import { calculateMuscleRecovery } from './recovery';
 
 /**
- * PT Blueprints per Goal
+ * Beräknar 1RM baserat på Brzycki-formeln.
  */
-const SESSION_BLUEPRINTS: Record<string, { tier: ExerciseTier; sets: number; reps: number }[]> = {
-  [Goal.STRENGTH]: [
-    { tier: 'tier_1', sets: 5, reps: 5 },  // Main Lift
-    { tier: 'tier_2', sets: 3, reps: 8 },  // Heavy Accessory
-    { tier: 'tier_2', sets: 3, reps: 8 },  // Accessory
-    { tier: 'tier_3', sets: 3, reps: 12 }  // Support/Prehab
-  ],
-  [Goal.HYPERTROPHY]: [
-    { tier: 'tier_1', sets: 3, reps: 8 },  // Main Base
-    { tier: 'tier_2', sets: 3, reps: 10 }, // Volume
-    { tier: 'tier_2', sets: 3, reps: 12 }, // Volume
-    { tier: 'tier_3', sets: 3, reps: 12 }, // Isolation
-    { tier: 'tier_3', sets: 2, reps: 15 }  // Finisher/Pump
-  ],
-  [Goal.ENDURANCE]: [
-    { tier: 'tier_1', sets: 3, reps: 12 },
-    { tier: 'tier_2', sets: 3, reps: 15 },
-    { tier: 'tier_2', sets: 3, reps: 15 },
-    { tier: 'tier_3', sets: 3, reps: 20 }
-  ],
-  [Goal.REHAB]: [
-    { tier: 'tier_3', sets: 3, reps: 15 },
-    { tier: 'tier_3', sets: 3, reps: 15 },
-    { tier: 'tier_3', sets: 3, reps: 15 }
-  ]
-};
-
 export const calculate1RM = (weight: number, reps: number): number => {
   if (reps === 1) return weight;
   if (reps === 0) return 0;
-  // Beräkna 1RM och avrunda till närmaste 0.5
   const raw1RM = weight * (1 + reps / 30);
   return Math.round(raw1RM * 2) / 2;
 };
 
+/**
+ * Hittar en ersättningsövning i samma mönster som finns i målzonen.
+ */
 export const findReplacement = (currentExercise: Exercise, targetZone: Zone, allExercises: Exercise[]): Exercise => {
   const candidates = allExercises.filter(ex => 
     ex.pattern === currentExercise.pattern &&
@@ -52,6 +26,9 @@ export const findReplacement = (currentExercise: Exercise, targetZone: Zone, all
   )[0];
 };
 
+/**
+ * Justerar volym (reps/vikt) vid byte av övning baserat på svårighetsgrad.
+ */
 export const adaptVolume = (originalSets: WorkoutSet[], originalEx: Exercise, newEx: Exercise, userGoal: Goal): WorkoutSet[] => {
   const diffRatio = originalEx.difficultyMultiplier / newEx.difficultyMultiplier;
   return originalSets.map(set => ({
@@ -62,6 +39,9 @@ export const adaptVolume = (originalSets: WorkoutSet[], originalEx: Exercise, ne
   }));
 };
 
+/**
+ * Hämtar senaste set-prestationen för en specifik övning.
+ */
 export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]): WorkoutSet[] | null => {
   const sortedHistory = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   for (const session of sortedHistory) {
@@ -72,7 +52,7 @@ export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]
 };
 
 /**
- * Creates sets with Progressive Overload logic.
+ * Skapar set med progressiv överbelastning.
  */
 export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean): WorkoutSet[] => {
   return lastSets.map(s => {
@@ -82,11 +62,11 @@ export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean):
     if (applyOverload && s.completed && s.type !== 'warmup') {
       const rpe = s.rpe || 8;
       if (rpe < 7) {
-        newWeight += 2.5; // Too light
+        newWeight += 2.5; 
       } else if (rpe >= 9) {
-        // Heavy: maintain weight, UI will manage reps
+        // Behåll vikt, fokusera på teknik/reps
       } else {
-        newWeight += 1.25; // Standard micro-loading
+        newWeight += 1.25; 
       }
     }
 
@@ -100,88 +80,133 @@ export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean):
 };
 
 /**
- * SMART WORKOUT GENERATOR
+ * Hjälpfunktion för att bestämma set och reps baserat på mål och övnings-tier.
+ */
+const getTargetVolume = (goal: Goal, tier: ExerciseTier = 'tier_2') => {
+  if (goal === Goal.STRENGTH) {
+    if (tier === 'tier_1') return { sets: 5, reps: 5 }; 
+    if (tier === 'tier_2') return { sets: 4, reps: 8 }; 
+    return { sets: 3, reps: 12 }; 
+  }
+  
+  if (goal === Goal.ENDURANCE) {
+    return { sets: 3, reps: 15 };
+  }
+
+  if (goal === Goal.REHAB) {
+     return { sets: 3, reps: 15 };
+  }
+
+  // HYPERTROFI (Default)
+  if (tier === 'tier_1') return { sets: 4, reps: 8 };
+  if (tier === 'tier_2') return { sets: 3, reps: 10 };
+  return { sets: 3, reps: 12 }; 
+};
+
+/**
+ * Föreslår vikt baserat på historik och målantal reps.
+ */
+const suggestWeight = (exerciseId: string, history: WorkoutSession[], targetReps: number): number => {
+  const lastSets = getLastPerformance(exerciseId, history);
+  if (!lastSets || lastSets.length === 0) return 0;
+
+  const bestSet = lastSets.reduce((prev, current) => 
+    ((current.weight || 0) * (current.reps || 0) > (prev.weight || 0) * (prev.reps || 0)) ? current : prev
+  );
+
+  if (bestSet.reps >= targetReps) {
+    return (bestSet.weight || 0) + 2.5; 
+  }
+  
+  return bestSet.weight || 0;
+};
+
+/**
+ * SMART PT GENERATOR
+ * Bygger ett pass baserat på muskler, zon, profil, historik och önskat antal övningar.
  */
 export const generateWorkoutSession = (
   targetMuscles: MuscleGroup[], 
   zone: Zone, 
   allExercises: Exercise[],
   userProfile: UserProfile,
-  history: WorkoutSession[]
+  history: WorkoutSession[],
+  exerciseCount: number = 6
 ): PlannedExercise[] => {
   
   const plannedExercises: PlannedExercise[] = [];
-  const blueprint = SESSION_BLUEPRINTS[userProfile.goal] || SESSION_BLUEPRINTS[Goal.HYPERTROPHY];
   const recoveryStatus = calculateMuscleRecovery(history, allExercises, userProfile);
   const injuries = userProfile.injuries || [];
 
-  // 1. Filter candidates by Zone and INJURIES
+  // 1. Filtrera fram möjliga övningar
   let candidates = allExercises.filter(ex => {
     const hasEquipment = ex.equipment.every(eq => zone.inventory.includes(eq));
     if (!hasEquipment) return false;
 
-    // INJURY PROTECTION
+    // Träffar valda muskelgrupper
+    const hitsTarget = ex.muscleGroups.some(m => targetMuscles.includes(m));
+    if (!hitsTarget) return false;
+
+    // Skadeskydd
     const impactsInjuredMuscle = ex.primaryMuscles.some(m => injuries.includes(m));
     if (impactsInjuredMuscle) {
-      // If muscle is injured, strictly only allow REHAB exercises
       return ex.pattern === MovementPattern.REHAB;
     }
 
     return true;
   });
 
-  // 2. Build session based on Blueprint
-  blueprint.forEach(slot => {
-    // Priority: Find exercises that target the muscle AND match the blueprint slot
-    const slotCandidates = candidates.filter(ex => 
-      ex.tier === slot.tier && 
-      ex.primaryMuscles.some(m => targetMuscles.includes(m)) &&
-      !plannedExercises.find(p => p.exerciseId === ex.id)
-    );
+  // 2. Definiera strukturen för passet (Tiers)
+  const structure: ExerciseTier[] = [];
+  if (exerciseCount >= 1) structure.push('tier_1');
+  const midCount = Math.max(0, Math.floor((exerciseCount - 1) * 0.6));
+  for (let i = 0; i < midCount; i++) structure.push('tier_2');
+  while (structure.length < exerciseCount) {
+    structure.push('tier_3');
+  }
 
-    if (slotCandidates.length === 0) {
-      // Fallback: If no tier matches (especially common with injuries), try any tier for that muscle
-      const fallbackCandidates = candidates.filter(ex => 
-        ex.primaryMuscles.some(m => targetMuscles.includes(m)) &&
-        !plannedExercises.find(p => p.exerciseId === ex.id)
-      );
-      if (fallbackCandidates.length === 0) return;
+  // 3. Välj övningar baserat på struktur och återhämtning
+  const selectedIds = new Set<string>();
+
+  structure.forEach(targetTier => {
+    let pool = candidates.filter(ex => !selectedIds.has(ex.id) && ex.tier === targetTier);
+    
+    if (pool.length === 0) {
+        pool = candidates.filter(ex => !selectedIds.has(ex.id));
+    }
+
+    if (pool.length > 0) {
+      // Sortera poolen baserat på återhämtning och övningspoäng
+      pool.sort((a, b) => {
+        const scoreA = a.score || 5;
+        const scoreB = b.score || 5;
+        const recoveryScoreA = (recoveryStatus[a.primaryMuscles[0]] || 100);
+        const recoveryScoreB = (recoveryStatus[b.primaryMuscles[0]] || 100);
+        
+        const finalScoreA = recoveryScoreA * (scoreA / 10);
+        const finalScoreB = recoveryScoreB * (scoreB / 10);
+        
+        return finalScoreB - finalScoreA;
+      });
+
+      const chosen = pool[0];
+      const volume = getTargetVolume(userProfile.goal, chosen.tier);
+      const weight = suggestWeight(chosen.id, history, volume.reps);
+
+      plannedExercises.push({
+        exerciseId: chosen.id,
+        sets: Array(volume.sets).fill(null).map(() => ({
+          reps: volume.reps,
+          weight: weight,
+          completed: false,
+          type: 'normal'
+        })),
+        notes: chosen.pattern === MovementPattern.REHAB ? 'Rehab-fokus pga skada.' : 'Smart PT val'
+      });
       
-      // Select the fallback
-      selectAndPlan(fallbackCandidates, slot);
-    } else {
-      selectAndPlan(slotCandidates, slot);
+      selectedIds.add(chosen.id);
     }
   });
-
-  function selectAndPlan(pool: Exercise[], slot: any) {
-    // Sortera baserat på återhämtning OCH poäng
-    pool.sort((a, b) => {
-      const scoreA = a.score || 5;
-      const scoreB = b.score || 5;
-      
-      // Kombinera återhämtningspoäng med övningens egen poäng
-      const recoveryScoreA = (recoveryStatus[a.primaryMuscles[0]] || 100);
-      const recoveryScoreB = (recoveryStatus[b.primaryMuscles[0]] || 100);
-      
-      const finalScoreA = recoveryScoreA * (scoreA / 10);
-      const finalScoreB = recoveryScoreB * (scoreB / 10);
-      
-      return finalScoreB - finalScoreA;
-    });
-
-    const chosen = pool[0];
-    if (!chosen) return;
-    const historyData = getLastPerformance(chosen.id, history);
-
-    plannedExercises.push({
-      exerciseId: chosen.id,
-      sets: historyData 
-        ? createSmartSets(historyData, true) 
-        : Array(slot.sets).fill(0).map(() => ({ reps: slot.reps, weight: 0, completed: false, type: 'normal' })),
-      notes: chosen.pattern === MovementPattern.REHAB ? 'Rehab-fokus pga skada.' : (historyData ? 'Coach: Baserat på din förra prestation!' : 'Ny utmaning!')
-    });
-  }
 
   return plannedExercises;
 };
