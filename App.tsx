@@ -47,10 +47,11 @@ export default function App() {
     }
 
     body {
-      padding-top: var(--safe-area-top);
-      padding-bottom: var(--safe-area-bottom);
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
       min-height: 100vh;
       box-sizing: border-box;
+      background-color: #0f0d15;
     }
 
     .fixed-bottom-nav {
@@ -60,15 +61,10 @@ export default function App() {
 
   useEffect(() => {
     const initNativeHardware = async () => {
-      if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform()) {
+      if (Capacitor.isNativePlatform()) {
         try {
-          // 1. Hindra appen från att gå under statusbar (klockan/batteri)
           await StatusBar.setOverlaysWebView({ overlay: false });
-          
-          // 2. Sätt färgen på statusbar till samma som din app-header
           await StatusBar.setBackgroundColor({ color: '#1a1721' });
-          
-          // 3. Se till att texten (klockan etc) är vit
           await StatusBar.setStyle({ style: Style.Dark });
         } catch (e) {
           console.warn('Statusbar kunde inte konfigureras:', e);
@@ -504,5 +500,3 @@ export default function App() {
     </div>
   );
 }
-
-// Removed the old NavButton component definition as it's no longer used.
