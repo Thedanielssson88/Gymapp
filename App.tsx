@@ -29,6 +29,7 @@ export default function App() {
   const [history, setHistory] = useState<WorkoutSession[]>([]);
   const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>([]);
   const [currentSession, setCurrentSession] = useState<WorkoutSession | null>(null);
+  const [isManualMode, setIsManualMode] = useState(false); // New state for manual backlog mode
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [goalTargets, setGoalTargets] = useState<GoalTarget[]>([]); // Keeping existing goalTargets
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
@@ -214,8 +215,16 @@ export default function App() {
 
   const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
     try {
-      await storage.saveToHistory({ ...session, isCompleted: true, date: new Date().toISOString(), duration, locationName: activeZone.name });
+      await storage.saveToHistory({ 
+        ...session, 
+        isCompleted: true, 
+        // Ensure date is preserved from session (especially important for manual backlog)
+        date: session.date || new Date().toISOString(), 
+        duration, 
+        locationName: activeZone.name 
+      });
       await storage.setActiveSession(null);
+      setIsManualMode(false);
       await refreshData(); // This will also trigger mission checks via useEffect
       setActiveTab('log');
     } catch (error) {
@@ -227,19 +236,22 @@ export default function App() {
   const handleCancelWorkout = async () => {
     await storage.setActiveSession(null);
     setCurrentSession(null);
+    setIsManualMode(false);
     setActiveTab('workout');
   };
 
-  const handleStartWorkout = async (exercises: PlannedExercise[], name: string) => {
+  const handleStartWorkout = async (exercises: PlannedExercise[], name: string, date?: string) => {
     const zone = selectedZoneForStart || zones[0];
+    const isManual = !!date;
     const newSess: WorkoutSession = { 
       id: 'w-' + Date.now(), 
-      date: new Date().toISOString(), 
+      date: date || new Date().toISOString(), 
       name, 
       zoneId: zone.id, 
       exercises, 
       isCompleted: false 
     };
+    setIsManualMode(isManual);
     await storage.setActiveSession(newSess);
     await refreshData();
     setShowStartMenu(false);
@@ -315,6 +327,11 @@ export default function App() {
     }
   };
 
+  const handleLogManualSession = (session: WorkoutSession) => {
+    // This is called from WorkoutLog backlog feature
+    handleStartWorkout(session.exercises, session.name, session.date);
+  }
+
   if (!isReady || !user) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f0d15] text-white p-6">
@@ -341,6 +358,7 @@ export default function App() {
         return <WorkoutView 
                   key={currentSession?.id || 'no-session'}
                   session={currentSession}
+                  isManualMode={isManualMode}
                   allExercises={allExercises}
                   userProfile={user}
                   allZones={zones}
@@ -413,6 +431,7 @@ export default function App() {
                           onDeletePlan={handleDeletePlan}
                           onDeleteHistory={handleDeleteHistory}
                           onStartActivity={handleStartPlannedActivity}
+                          onStartManualSession={handleLogManualSession}
                         />;
       case 'targets': return <TargetsView 
                                 userMissions={userMissions} 
@@ -473,7 +492,7 @@ export default function App() {
             </button>
             <button 
               onClick={() => setActiveTab('body')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <User2 size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Kropp</span>

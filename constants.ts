@@ -1,4 +1,5 @@
 
+
 import { Zone, GoalTarget, Equipment, UserProfile, Goal } from './types';
 
 export const INITIAL_GOAL_TARGETS: GoalTarget[] = [
@@ -25,6 +26,7 @@ export const DEFAULT_PROFILE: UserProfile = {
     includeWarmupInStats: false,
     barbellWeight: 20,
     dumbbellBaseWeight: 2,
-    bodyViewMode: 'list'
+    bodyViewMode: 'list',
+    vibrateOnRestEnd: true
   }
 };

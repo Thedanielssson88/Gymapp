@@ -154,6 +154,7 @@ export interface UserSettings {
   barbellWeight?: number; // t.ex. 20
   dumbbellBaseWeight?: number; // t.ex. 2 (vikten på själva hantelgreppet)
   geminiApiKey?: string; // Nytt fält för AI-nyckeln
+  vibrateOnRestEnd?: boolean; // Ny inställning för vibration vid vilans slut
 }
 
 export interface UserProfile {

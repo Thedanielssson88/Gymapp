@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
@@ -21,6 +20,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             // Provide default values for existing settings if they are missing.
             includeWarmupInStats: prev.settings?.includeWarmupInStats ?? false,
             bodyViewMode: prev.settings?.bodyViewMode ?? 'list',
+            vibrateOnRestEnd: prev.settings?.vibrateOnRestEnd ?? true,
             ...prev.settings,
             [key]: value
         }
@@ -168,6 +168,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.includeWarmupInStats ?? false) ? 'left-7' : 'left-1'}`} />
             </button>
          </div>
+         
+         {/* VIBRATION */}
+         <div className="flex items-center justify-between py-2 border-b border-white/5">
+            <div className="flex items-center gap-3">
+              <Smartphone size={18} className={localProfile.settings?.vibrateOnRestEnd ?? true ? "text-accent-blue" : "text-text-dim"} />
+              <div>
+                <p className="text-sm font-bold text-white">Vibrera vid vilans slut</p>
+                <p className="text-[10px] text-text-dim">Haptisk feedback när timern är klar</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => handleSettingChange('vibrateOnRestEnd', !(localProfile.settings?.vibrateOnRestEnd ?? true))}
+              className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.vibrateOnRestEnd ?? true) ? 'bg-accent-blue' : 'bg-white/10'}`}
+            >
+              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateOnRestEnd ?? true) ? 'left-7' : 'left-1'}`} />
+            </button>
+         </div>
+
          <div className="space-y-4 pt-4 border-t border-white/5">
             <div className="flex flex-col gap-2">
               <label className="text-[10px] font-black uppercase text-text-dim tracking-widest ml-1">
