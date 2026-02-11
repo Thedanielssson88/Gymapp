@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { X, Play, Pause, Check, AlertCircle } from 'lucide-react';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 interface ActiveTimerModalProps {
   targetSeconds: number;
   onComplete: (seconds: number, isFail: boolean) => void;
   onCancel: () => void;
+  vibrateEnabled?: boolean; // Ny prop för inställningar
 }
 
-export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({ targetSeconds, onComplete, onCancel }) => {
+export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({ 
+  targetSeconds, 
+  onComplete, 
+  onCancel, 
+  vibrateEnabled = true 
+}) => {
   const [timeLeft, setTimeLeft] = useState(targetSeconds);
   const [isActive, setIsActive] = useState(true);
   const [elapsed, setElapsed] = useState(0);
@@ -16,14 +23,27 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({ targetSecond
     let interval: any;
     if (isActive && timeLeft > 0) {
       interval = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
+        setTimeLeft((prev) => {
+          const newValue = prev - 1;
+          
+          // Hantera vibrationer
+          if (vibrateEnabled) {
+            if (newValue <= 5 && newValue > 0) {
+              Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+            } else if (newValue === 0) {
+              Haptics.notification({ type: NotificationType.Success }).catch(() => {});
+            }
+          }
+          
+          return newValue;
+        });
         setElapsed((prev) => prev + 1);
       }, 1000);
     } else if (timeLeft === 0) {
       setIsActive(false);
     }
     return () => clearInterval(interval);
-  }, [isActive, timeLeft]);
+  }, [isActive, timeLeft, vibrateEnabled]);
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -31,9 +51,10 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({ targetSecond
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const progress = targetSeconds > 0 ? Math.min(100, (elapsed / targetSeconds) * 100) : 0;
-  const radius = 120;
+  // SVG Cirkel-matematik
+  const radius = 100; // Något mindre för att garantera att den får plats
   const circumference = 2 * Math.PI * radius;
+  const progress = targetSeconds > 0 ? Math.min(100, (elapsed / targetSeconds) * 100) : 0;
   const strokeDashoffset = circumference * (1 - progress / 100);
 
   return (
@@ -46,23 +67,30 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({ targetSecond
 
         <h3 className="text-sm font-black uppercase text-text-dim tracking-widest mb-8">Timer</h3>
 
+        {/* SVG CONTAINER 
+            Använder viewBox för att skala innehållet korrekt oavsett storlek på div.
+            padding på 10px inuti viewBoxen (center 120, radie 100 + stroke 8 = 108)
+        */}
         <div className="relative mb-10 w-64 h-64 flex items-center justify-center">
-           <svg className="w-full h-full transform -rotate-90 absolute inset-0">
-             <circle cx="128" cy="128" r={radius} stroke="currentColor" strokeWidth="8" fill="transparent" className="text-white/5" />
+           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 240 240">
+             {/* Bakgrundscirkel */}
              <circle 
-                cx="128" 
-                cy="128" 
-                r={radius} 
-                stroke="currentColor" 
-                strokeWidth="8" 
-                fill="transparent" 
+               cx="120" cy="120" r={radius} 
+               stroke="currentColor" strokeWidth="12" fill="transparent" 
+               className="text-white/5" 
+             />
+             {/* Progresscirkel */}
+             <circle 
+                cx="120" cy="120" r={radius} 
+                stroke="currentColor" strokeWidth="12" fill="transparent" 
                 strokeDasharray={circumference} 
                 strokeDashoffset={strokeDashoffset} 
+                strokeLinecap="round"
                 className="text-accent-blue transition-all duration-1000 ease-linear" 
-                strokeLinecap="round" 
              />
            </svg>
-           <div className="relative z-10 flex flex-col items-center">
+           
+           <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-6xl font-black italic text-white tabular-nums tracking-tighter">
                 {formatTime(timeLeft)}
               </span>

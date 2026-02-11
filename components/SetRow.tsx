@@ -153,6 +153,7 @@ export const SetRow: React.FC<SetRowProps> = ({
         <ActiveTimerModal 
           targetSeconds={set.duration || 60} 
           onCancel={() => setShowActiveTimer(false)}
+          vibrateEnabled={userProfile.settings?.vibrateOnRestEnd}
           onComplete={(time, isFail) => {
             onUpdate({ 
               duration: isFail ? time : (set.duration || time), 

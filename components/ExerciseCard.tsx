@@ -66,25 +66,18 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     ? `border-l-4 ${leftBorderColor} rounded-l-none ml-4` 
     : '';
 
-  // MARGINAL-LOGIK:
-  // - Vanligt kort: rundade hörn, marginal nere.
-  // - Superset Start: platt nerekant, ingen marginal.
-  // - Superset Mitten: platt uppe/nere, ingen marginal.
-  // - Superset Slut: platt uppekant, marginal nere.
-  
-  let roundingClass = 'rounded-[32px] mb-4'; // Standard (Fristående)
+  let roundingClass = 'rounded-[32px] mb-4'; 
 
   if (isInSuperset) {
     if (isSupersetStart) {
-      roundingClass = 'rounded-t-[32px] rounded-b-none border-b-0 mb-0 pb-1'; // Start
+      roundingClass = 'rounded-t-[32px] rounded-b-none border-b-0 mb-0 pb-1'; 
     } else if (isSupersetEnd) {
-      roundingClass = 'rounded-b-[32px] rounded-t-none border-t-0 mt-0 mb-4 pt-1'; // Slut
+      roundingClass = 'rounded-b-[32px] rounded-t-none border-t-0 mt-0 mb-4 pt-1'; 
     } else {
-      roundingClass = 'rounded-none border-y-0 my-0 py-1'; // Mitten
+      roundingClass = 'rounded-none border-y-0 my-0 py-1'; 
     }
   }
 
-  // Kantlinje: Dölj skarvar i superset
   const borderClass = (isCollapsed && allSetsCompleted && !isInSuperset) 
     ? 'border-green-500/30' 
     : (isInSuperset ? 'border-white/5 border-y-0' : 'border-white/5');
@@ -114,7 +107,6 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 </div>
                 <ChevronDown size={16} className="text-green-500/50 group-hover:text-green-500 transition-colors" />
             </div>
-            {/* Superset Separator Line */}
             {isInSuperset && !isSupersetEnd && <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-white/5 mx-4" />}
         </div>
       );
@@ -151,22 +143,20 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 </button>
               </div>
 
-              {/* ACTION BUTTONS (Flytta/Länka) */}
-              <div className="flex flex-col gap-1 items-end relative z-10">
-                 <div className="flex flex-col gap-1 absolute right-[-8px] top-[-8px]">
-                    {!isFirst && (
-                      <button onClick={onMoveUp} className="p-1.5 bg-black/40 rounded-full hover:bg-white/10 text-text-dim"><ArrowUp size={14} /></button>
-                    )}
-                    {!isFirst && (
-                       <button onClick={onToggleSuperset} className={`p-1.5 rounded-full ${isInSuperset && !isSupersetStart ? 'bg-accent-blue text-black' : 'bg-black/40 text-text-dim hover:bg-white/10'}`} title={isInSuperset ? "Bryt superset" : "Koppla med föregående"}>
-                         {isInSuperset && !isSupersetStart ? <Unlink size={14} /> : <Link size={14} />}
-                       </button>
-                    )}
-                    {!isLast && (
-                      <button onClick={onMoveDown} className="p-1.5 bg-black/40 rounded-full hover:bg-white/10 text-text-dim"><ArrowDown size={14} /></button>
-                    )}
-                    <button onClick={() => setShowMenu(!showMenu)} className="p-1.5 bg-black/40 rounded-full hover:bg-white/10 text-text-dim mt-2"><MoreVertical size={14} /></button>
-                 </div>
+              {/* ACTION BUTTONS (Flytta/Länka) - Fixat: Inga absoluta positioner som skjuter utanför */}
+              <div className="flex flex-col gap-1 items-end relative z-10 -mr-2 -mt-2">
+                  {!isFirst && (
+                    <button onClick={onMoveUp} className="p-1.5 bg-black/40 rounded-full hover:bg-white/10 text-text-dim"><ArrowUp size={14} /></button>
+                  )}
+                  {!isFirst && (
+                      <button onClick={onToggleSuperset} className={`p-1.5 rounded-full ${isInSuperset && !isSupersetStart ? 'bg-accent-blue text-black' : 'bg-black/40 text-text-dim hover:bg-white/10'}`} title={isInSuperset ? "Bryt superset" : "Koppla med föregående"}>
+                        {isInSuperset && !isSupersetStart ? <Unlink size={14} /> : <Link size={14} />}
+                      </button>
+                  )}
+                  {!isLast && (
+                    <button onClick={onMoveDown} className="p-1.5 bg-black/40 rounded-full hover:bg-white/10 text-text-dim"><ArrowDown size={14} /></button>
+                  )}
+                  <button onClick={() => setShowMenu(!showMenu)} className="p-1.5 bg-black/40 rounded-full hover:bg-white/10 text-text-dim mt-2"><MoreVertical size={14} /></button>
               </div>
             </div>
           </div>
