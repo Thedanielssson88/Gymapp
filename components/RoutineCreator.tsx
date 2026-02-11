@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { Exercise, WorkoutRoutine, PlannedExercise, WorkoutSet } from '../types';
+import { Exercise, WorkoutRoutine, PlannedExercise, WorkoutSet, WorkoutSession } from '../types';
 import { ExerciseLibrary } from './ExerciseLibrary';
 import { Save, Plus, Trash2, X } from 'lucide-react';
 
 interface RoutineCreatorProps {
   allExercises: Exercise[];
+  history: WorkoutSession[];
   onSave: (routine: WorkoutRoutine) => void;
   onCancel: () => void;
   initialRoutine?: Partial<WorkoutRoutine>;
 }
 
 export const RoutineCreator: React.FC<RoutineCreatorProps> = ({ 
-  allExercises, onSave, onCancel, initialRoutine 
+  allExercises, history, onSave, onCancel, initialRoutine 
 }) => {
   const [routineName, setRoutineName] = useState(initialRoutine?.name || '');
   const [plannedExercises, setPlannedExercises] = useState<PlannedExercise[]>(initialRoutine?.exercises || []);
@@ -78,6 +79,8 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
       <div className="fixed inset-0 z-[300] bg-[#0f0d15]">
         <ExerciseLibrary 
           allExercises={allExercises} 
+          // FIX: Pass the history prop to ExerciseLibrary
+          history={history}
           onSelect={handleAddExercise} 
           onClose={() => setShowLibrary(false)}
           onUpdate={() => {}}

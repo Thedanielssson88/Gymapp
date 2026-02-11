@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession, UserProfile } from '../types';
 import { storage } from '../services/storage';
@@ -8,7 +7,7 @@ import { ImageUpload } from './ImageUpload';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { generateExerciseDetailsFromGemini } from '../services/geminiService';
 import { calculate1RM } from '../utils/fitness';
-import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2, TrendingUp, Trophy, Clock, SortAsc, ChevronRight } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2, TrendingUp, Trophy, Clock, SortAsc, ChevronRight, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
 
 interface ExerciseLibraryProps {
   allExercises: Exercise[];
@@ -46,7 +45,19 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
   const [activeFilterTab, setActiveFilterTab] = useState<'all' | 'muscles' | 'equipment' | 'pattern'>('all');
   const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(null);
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
+  const handleRate = async (ex: Exercise, rating: 'up' | 'down') => {
+    const newRating = ex.userRating === rating ? null : rating;
+    
+    let newScore = 5;
+    if (newRating === 'up') newScore = 10;
+    if (newRating === 'down') newScore = 1;
+
+    await storage.updateExercise(ex.id, { userRating: newRating, score: newScore });
+    onUpdate();
+  };
+  
   const getLastUsed = (exerciseId: string) => {
     const usage = (history || [])
       .filter(s => s.exercises && s.exercises.some(e => e.exerciseId === exerciseId))
@@ -59,6 +70,10 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
       const q = searchQuery.toLowerCase();
       const matchesSearch = ex.name.toLowerCase().includes(q) || ex.englishName?.toLowerCase().includes(q);
       
+      if (showOnlyFavorites && ex.userRating !== 'up') {
+        return false;
+      }
+
       let matchesFilter = true;
       if (selectedFilterValue) {
           if (activeFilterTab === 'muscles') matchesFilter = ex.primaryMuscles?.includes(selectedFilterValue as MuscleGroup) || ex.muscleGroups?.includes(selectedFilterValue as MuscleGroup);
@@ -81,12 +96,12 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
       }
       return a.name.localeCompare(b.name);
     });
-  }, [allExercises, searchQuery, activeFilterTab, selectedFilterValue, isSelectorMode, activeZone, sortBy, history]);
+  }, [allExercises, searchQuery, activeFilterTab, selectedFilterValue, isSelectorMode, activeZone, sortBy, history, showOnlyFavorites]);
 
   useEffect(() => {
       setDisplayCount(ITEMS_PER_PAGE);
       if (listRef.current) listRef.current.scrollTop = 0;
-  }, [searchQuery, activeFilterTab, selectedFilterValue, sortBy]);
+  }, [searchQuery, activeFilterTab, selectedFilterValue, sortBy, showOnlyFavorites]);
 
   const visibleExercises = filteredExercises.slice(0, displayCount);
 
@@ -143,6 +158,17 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
               {sortBy === 'recent' ? <Clock size={20} /> : <SortAsc size={20} />}
             </button>
           </div>
+          <button
+              onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border ${
+                showOnlyFavorites 
+                ? 'bg-accent-pink/10 border-accent-pink text-accent-pink' 
+                : 'bg-white/5 border-white/5 text-text-dim'
+              }`}
+            >
+              <Heart size={14} fill={showOnlyFavorites ? 'currentColor' : 'none'} />
+              Visa Endast Favoriter ({allExercises.filter(e => e.userRating === 'up').length})
+            </button>
           <div className="flex bg-[#1a1721] p-1 rounded-2xl border border-white/5 overflow-x-auto shrink-0">
             {[{ id: 'all', label: 'Alla' }, { id: 'muscles', label: 'Muskler' }, { id: 'equipment', label: 'Utrustning' }, { id: 'pattern', label: 'Mönster' }].map(tab => (<button key={tab.id} onClick={() => { setActiveFilterTab(tab.id as any); setSelectedFilterValue(null); }} className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeFilterTab === tab.id ? 'bg-white/10 text-white shadow-sm' : 'text-text-dim hover:text-white'}`}>{tab.label}</button>))}
           </div>
@@ -151,7 +177,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
           {activeFilterTab === 'pattern' && <FilterPills items={Object.values(MovementPattern)} />}
       </div>
 
-      <div ref={listRef} className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto scrollbar-hide pt-2 pb-20">
+      <div ref={listRef} className="grid grid-cols-1 gap-3 flex-1 overflow-y-auto scrollbar-hide pt-2 pb-20">
         <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest text-center opacity-50 mb-2">
           Visar {Math.min(displayCount, filteredExercises.length)} av {filteredExercises.length} övningar
           {sortBy === 'recent' && ' • Sorterat på senaste'}
@@ -161,16 +187,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
           return (
             <div 
               key={ex.id} 
-              className={`bg-[#1a1721] p-5 rounded-[32px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors ${lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5'}`}
+              className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors ${lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5'}`}
             >
-              <div className="flex items-center gap-4 overflow-hidden">
+              <div className="flex items-center gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => !isSelectorMode && setEditingExercise(ex)}>
                 <ExerciseImage exercise={ex} />
                 <div className="min-w-0">
                   <h3 className="text-base font-black italic uppercase truncate text-white">{ex.name}</h3>
-                  {ex.englishName && <p className="text-[10px] text-white/30 italic truncate leading-none mb-1">{ex.englishName}</p>}
                   <p className="text-[10px] text-text-dim uppercase tracking-widest truncate mt-1">
-                    {ex.tier?.replace('_', ' ') || 'TIER 3'} • {ex.primaryMuscles?.join(', ') || 'Okänd'}
-                    {lastTime > 0 && sortBy === 'recent' && <span className="text-accent-pink ml-2">• Använd ofta</span>}
+                    {ex.primaryMuscles?.join(', ') || ex.pattern}
                   </p>
                 </div>
               </div>
@@ -179,9 +203,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
                   <Plus size={18} />
                 </button>
               ) : (
-                <button onClick={() => setEditingExercise(ex)} className="p-3 bg-white/5 rounded-xl text-text-dim hover:text-white transition-colors">
-                  <Edit3 size={18} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => handleRate(ex, 'up')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'up' ? 'bg-green-500/20 text-green-500' : 'bg-white/10 text-text-dim'}`}>
+                      <ThumbsUp size={16} fill={ex.userRating === 'up' ? "currentColor" : "none"}/>
+                    </button>
+                    <button onClick={() => handleRate(ex, 'down')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'down' ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-text-dim'}`}>
+                      <ThumbsDown size={16} fill={ex.userRating === 'down' ? "currentColor" : "none"}/>
+                    </button>
+                </div>
               )}
             </div>
           );

@@ -129,6 +129,7 @@ export interface Exercise {
   alternativeExIds?: string[];
   userModified?: boolean;
   score?: number; // Ett värde mellan 1-10, standard 5
+  userRating?: 'up' | 'down' | null; // Nytt fält för användarens betyg
 }
 
 export interface BodyMeasurements {

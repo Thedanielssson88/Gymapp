@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Exercise, UserMission, UserProfile, BodyMeasurements, WorkoutSession, BiometricLog } from '../types';
 import { Search, X, Check, Ruler, Activity, CheckCircle2, Dumbbell, Calendar, Info } from 'lucide-react';
@@ -138,7 +137,8 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({
       startValue: initialMission?.startValue !== undefined ? initialMission.startValue : currentValue,
       targetValue: target,
       exerciseId: type === 'weight' ? selectedExId : undefined,
-      measurementKey: type === 'measurement' ? selectedMeasure : undefined,
+      // FIX: Ensure that an empty string for selectedMeasure results in `undefined` for measurementKey
+      measurementKey: type === 'measurement' && selectedMeasure ? selectedMeasure : undefined,
       isCompleted: initialMission?.isCompleted || false,
       createdAt: initialMission?.createdAt || new Date().toISOString(),
       completedAt: initialMission?.completedAt

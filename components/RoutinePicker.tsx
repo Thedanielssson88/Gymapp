@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { WorkoutRoutine, Zone, Exercise, PlannedExercise, MovementPattern, MuscleGroup, Equipment, UserProfile } from '../types';
+import { WorkoutRoutine, Zone, Exercise, PlannedExercise, MovementPattern, MuscleGroup, Equipment, UserProfile, WorkoutSession } from '../types';
 import { storage } from '../services/storage';
 import { findReplacement, adaptVolume } from '../utils/fitness';
 import { RoutineCreator } from './RoutineCreator';
@@ -12,9 +12,10 @@ interface RoutinePickerProps {
   allExercises: Exercise[];
   userProfile: UserProfile;
   onUpdate: () => void;
+  history: WorkoutSession[];
 }
 
-export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZone, routines, allExercises, userProfile, onUpdate }) => {
+export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZone, routines, allExercises, userProfile, onUpdate, history }) => {
   const [editingRoutine, setEditingRoutine] = useState<Partial<WorkoutRoutine> | null>(null);
 
   const handleSelectRoutine = (routine: WorkoutRoutine) => {
@@ -53,6 +54,7 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
         initialRoutine={editingRoutine}
         onSave={saveRoutine}
         onCancel={() => setEditingRoutine(null)}
+        history={history}
       />
     );
   }

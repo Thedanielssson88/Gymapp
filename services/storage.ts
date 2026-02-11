@@ -1,4 +1,3 @@
-
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
@@ -76,6 +75,14 @@ export const storage = {
 
   getAllExercises: async (): Promise<Exercise[]> => await db.exercises.toArray(),
   saveExercise: async (exercise: Exercise) => await db.exercises.put(exercise),
+
+  updateExercise: async (id: string, updates: Partial<Exercise>) => {
+    const exercise = await db.exercises.get(id);
+    if (exercise) {
+      await db.exercises.put({ ...exercise, ...updates });
+    }
+  },
+  
   deleteExercise: async (id: string) => {
     const ex = await db.exercises.get(id);
     if (ex?.imageId) {
