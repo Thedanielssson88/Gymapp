@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession } from '../types';
+import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession, UserProfile } from '../types';
 import { storage } from '../services/storage';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { ExerciseImporter } from './ExerciseImporter';
@@ -16,7 +16,8 @@ interface ExerciseLibraryProps {
   onUpdate: () => void;
   onSelect?: (exercise: Exercise) => void;
   onClose?: () => void;
-  activeZone?: Zone; 
+  activeZone?: Zone;
+  userProfile?: UserProfile;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -34,7 +35,7 @@ const ExerciseImage = ({ exercise }: { exercise: Exercise }) => {
     );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, history, onUpdate, onSelect, onClose, activeZone }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, history, onUpdate, onSelect, onClose, activeZone, userProfile }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'alphabetical' | 'recent'>('recent');
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -189,13 +190,13 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
         {filteredExercises.length === 0 && (<div className="text-center py-10 opacity-30"><Filter size={48} className="mx-auto mb-2"/><p className="text-xs font-bold uppercase">Inga övningar matchar filtret</p></div>)}
       </div>
 
-      {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={allExercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} />}
+      {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={allExercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} userProfile={userProfile} />}
       {showImporter && !isSelectorMode && <div className="fixed inset-0 z-[200] bg-[#0f0d15] animate-in slide-in-from-bottom-10"><ExerciseImporter onClose={() => setShowImporter(false)} onImport={(data) => { setEditingExercise({ ...editingExercise, ...data } as any); setShowImporter(false); }} /></div>}
     </div>
   );
 };
 
-const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], allExercises: Exercise[], onClose: () => void, onSave: (ex: Exercise) => void, onDelete?: (id: string) => void }> = ({ exercise, history, allExercises, onClose, onSave, onDelete }) => {
+const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], allExercises: Exercise[], onClose: () => void, onSave: (ex: Exercise) => void, onDelete?: (id: string) => void, userProfile?: UserProfile }> = ({ exercise, history, allExercises, onClose, onSave, onDelete, userProfile }) => {
   const [formData, setFormData] = useState<Exercise>({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [] });
   const [activeTab, setActiveTab] = useState<'info' | 'muscles' | 'settings' | 'progression'>('info');
 
@@ -227,7 +228,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
           {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'muscles', label: 'Muskler', icon: Layers }, { id: 'progression', label: 'Progression', icon: TrendingUp }, { id: 'settings', label: 'Data', icon: Scale }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}><tab.icon size={16} /> {tab.label}</button>))}
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
-        {activeTab === 'info' && <InfoTab formData={formData} setFormData={setFormData} />}
+        {activeTab === 'info' && <InfoTab formData={formData} setFormData={setFormData} userProfile={userProfile} />}
         {activeTab === 'muscles' && <MusclesTab formData={formData} setFormData={setFormData} toggleList={toggleList} />}
         {activeTab === 'progression' && <ProgressionTab stats={stats} />}
         {activeTab === 'settings' && <SettingsTab formData={formData} setFormData={setFormData} onDelete={onDelete} allExercises={allExercises} />}
@@ -292,14 +293,14 @@ const ProgressionTab = ({ stats }: { stats: { history: any[], best1RM: number } 
 };
 
 
-const InfoTab = ({ formData, setFormData }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>> }) => {
+const InfoTab = ({ formData, setFormData, userProfile }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>>, userProfile?: UserProfile }) => {
   const [imageUrlInput, setImageUrlInput] = useState(formData.imageUrl || '');
   const [isGenerating, setIsGenerating] = useState(false);
   const handleAiGenerate = async () => {
     if (!formData.name) { alert("Skriv namnet på övningen först!"); return; }
     setIsGenerating(true);
     try {
-      const aiData = await generateExerciseDetailsFromGemini(formData.name);
+      const aiData = await generateExerciseDetailsFromGemini(formData.name, userProfile?.settings?.geminiApiKey);
       setFormData(prev => {
         const primary = aiData.primaryMuscles ?? prev.primaryMuscles;
         const secondary = aiData.secondaryMuscles ?? prev.secondaryMuscles;

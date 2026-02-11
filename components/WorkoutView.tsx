@@ -26,11 +26,12 @@ interface WorkoutViewProps {
   plannedActivities: PlannedActivityForLogDisplay[];
   onStartActivity: (activity: ScheduledActivity) => void;
   onStartEmptyWorkout: () => void;
+  onUpdate: () => void;
 }
 
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session, allExercises, userProfile, allZones, history, activeZone, 
-  onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout
+  onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout, onUpdate
 }) => {
   const [localSession, setLocalSession] = useState<WorkoutSession | null>(session);
   const [timer, setTimer] = useState(0);
@@ -48,7 +49,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   useEffect(() => {
     setLocalSession(session);
     if (session) {
-      setIsTimerActive(true);
+      setIsTimerActive(false); // Ändra från true till false
       setTimer(0);
     }
   }, [session]);
@@ -131,13 +132,50 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     setLocalSession(prev => {
       if (!prev) return null;
       const updatedExercises = [...(prev.exercises || [])];
-      const updatedSets = [...(updatedExercises[exIdx].sets || [])];
-      updatedSets[setIdx] = { ...updatedSets[setIdx], ...updates };
-      updatedExercises[exIdx] = { ...updatedExercises[exIdx], sets: updatedSets };
+      const exercise = updatedExercises[exIdx];
+      const updatedSets = [...(exercise.sets || [])];
+      
+      // 1. Uppdatera det aktuella setet
+      const oldSet = updatedSets[setIdx];
+      updatedSets[setIdx] = { ...oldSet, ...updates };
+  
+      // 2. Logik för att "pusha" värden till efterföljande tomma set
+      // Vi kollar om användaren ändrade vikt, reps, distans eller tid
+      const hasValueChange = 'weight' in updates || 'reps' in updates || 'distance' in updates || 'duration' in updates;
+      
+      if (hasValueChange) {
+        for (let i = setIdx + 1; i < updatedSets.length; i++) {
+          const nextSet = updatedSets[i];
+          // Om nästa set är "tomt" (0 eller undefined), kopiera värdena
+          const isNextSetEmpty = (nextSet.weight === 0 || nextSet.weight === undefined) && 
+                               (nextSet.reps === 0 || nextSet.reps === undefined) &&
+                               (nextSet.distance === 0 || nextSet.distance === undefined) &&
+                               (nextSet.duration === 0 || nextSet.duration === undefined);
+  
+          if (isNextSetEmpty) {
+            updatedSets[i] = {
+              ...nextSet,
+              weight: updatedSets[setIdx].weight ?? nextSet.weight,
+              reps: updatedSets[setIdx].reps ?? nextSet.reps,
+              distance: updatedSets[setIdx].distance ?? nextSet.distance,
+              duration: updatedSets[setIdx].duration ?? nextSet.duration,
+              type: updatedSets[setIdx].type === 'warmup' ? 'normal' : (updatedSets[setIdx].type ?? nextSet.type),
+            };
+          } else {
+            // Så fort vi stöter på ett set som INTE är tomt, slutar vi pusha värden
+            break;
+          }
+        }
+      }
+  
+      // 3. Spara och returnera
+      updatedExercises[exIdx] = { ...exercise, sets: updatedSets };
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
+  
+    // Starta vilotimer om setet markerades som klart
     if (updates.completed) {
       setRestTimer(90);
     }
@@ -154,8 +192,10 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
   }, []);
 
-  const removeExercise = useCallback((exIdx: number) => {
+  const removeExercise = useCallback(async (exIdx: number) => {
     if (confirm("Ta bort övning?")) {
+      const exerciseToRemove = localSession?.exercises[exIdx];
+
       setLocalSession(prevSession => {
         if (!prevSession) return null;
         const updatedExercises = (prevSession.exercises || []).filter((_, index) => index !== exIdx);
@@ -164,8 +204,17 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         return newSession;
       });
       setOpenNotesIdx(null);
+
+      if (exerciseToRemove) {
+        const exData = allExercises.find(e => e.id === exerciseToRemove.exerciseId);
+        if (exData) {
+            const newScore = Math.max(1, (exData.score || 5) - 1);
+            await storage.saveExercise({ ...exData, score: newScore });
+            onUpdate();
+        }
+      }
     }
-  }, []);
+  }, [localSession, allExercises, onUpdate]);
 
   const addSetToExercise = useCallback((exIdx: number) => {
     setLocalSession(prev => {
@@ -186,7 +235,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
   }, []);
 
-  const addNewExercise = (ex: Exercise) => {
+  const addNewExercise = async (ex: Exercise) => {
     const lastSetData = getLastPerformance(ex.id, history || []);
     const newSets: WorkoutSet[] = lastSetData && lastSetData.length > 0
       ? createSmartSets(lastSetData, true)
@@ -199,6 +248,10 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       return updatedSession;
     });
     setShowAddModal(false);
+
+    const newScore = Math.min(10, (ex.score || 5) + 1);
+    await storage.saveExercise({ ...ex, score: newScore });
+    onUpdate();
   };
 
   const handleGenerate = (muscles: MuscleGroup[]) => {
@@ -363,7 +416,28 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                 {restTimer !== null ? (
                   <button onClick={() => setRestTimer(null)} className="w-full h-full bg-accent-pink rounded-[24px] flex items-center gap-4 px-4 shadow-[0_0_20px_rgba(255,45,85,0.4)] animate-in zoom-in duration-300 active:scale-95 transition-transform"><div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0"><RefreshCw size={20} className="animate-spin text-white" /></div><div className="text-left"><span className="text-[8px] font-black uppercase tracking-widest text-white block mb-0.5 opacity-80">VILA</span><span className="text-2xl font-black italic tabular-nums text-white leading-none">{restTimer}s</span></div></button>
                 ) : (
-                  <button onClick={() => setIsTimerActive(!isTimerActive)} className="w-full h-full bg-white/5 border border-white/5 rounded-[24px] flex items-center gap-4 px-4 hover:bg-white/10 transition-all active:scale-95"><div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isTimerActive ? 'bg-white text-[#0f0d15]' : 'bg-accent-blue text-white'}`}>{isTimerActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}</div><div className="text-left"><span className="text-[8px] font-black uppercase text-text-dim block tracking-[0.2em] mb-0.5">TID</span><span className="text-2xl font-black italic tabular-nums leading-none tracking-tighter">{Math.floor(timer/60)}:{String(timer%60).padStart(2,'0')}</span></div></button>
+                  <button 
+                    onClick={() => setIsTimerActive(!isTimerActive)} 
+                    className={`w-full h-full rounded-[24px] flex items-center gap-4 px-4 transition-all active:scale-95 ${
+                      timer === 0 && !isTimerActive 
+                        ? 'bg-green-500 text-black shadow-[0_0_20px_rgba(34,197,94,0.4)]' 
+                        : 'bg-white/5 border border-white/5'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      timer === 0 && !isTimerActive ? 'bg-black text-white' : isTimerActive ? 'bg-white text-[#0f0d15]' : 'bg-accent-blue text-white'
+                    }`}>
+                      {isTimerActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                    </div>
+                    <div className="text-left">
+                      <span className="text-[8px] font-black uppercase block tracking-[0.2em] mb-0.5">
+                        {timer === 0 && !isTimerActive ? 'REDO?' : 'TID'}
+                      </span>
+                      <span className="text-2xl font-black italic tabular-nums leading-none tracking-tighter">
+                        {timer === 0 && !isTimerActive ? 'STARTA PASS' : `${Math.floor(timer/60)}:${String(timer%60).padStart(2,'0')}`}
+                      </span>
+                    </div>
+                  </button>
                 )}
              </div>
              <button

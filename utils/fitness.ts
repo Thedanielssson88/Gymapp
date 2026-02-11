@@ -155,23 +155,30 @@ export const generateWorkoutSession = (
   });
 
   function selectAndPlan(pool: Exercise[], slot: any) {
-    // 3. Prioritize Recovery Score
+    // Sortera baserat på återhämtning OCH poäng
     pool.sort((a, b) => {
-       const scoreA = recoveryStatus[a.primaryMuscles[0]] || 100;
-       const scoreB = recoveryStatus[b.primaryMuscles[0]] || 100;
-       
-       if (Math.abs(scoreA - scoreB) > 15) return scoreB - scoreA;
-       return 0.5 - Math.random();
+      const scoreA = a.score || 5;
+      const scoreB = b.score || 5;
+      
+      // Kombinera återhämtningspoäng med övningens egen poäng
+      const recoveryScoreA = (recoveryStatus[a.primaryMuscles[0]] || 100);
+      const recoveryScoreB = (recoveryStatus[b.primaryMuscles[0]] || 100);
+      
+      const finalScoreA = recoveryScoreA * (scoreA / 10);
+      const finalScoreB = recoveryScoreB * (scoreB / 10);
+      
+      return finalScoreB - finalScoreA;
     });
 
     const chosen = pool[0];
+    if (!chosen) return;
     const historyData = getLastPerformance(chosen.id, history);
 
     plannedExercises.push({
       exerciseId: chosen.id,
       sets: historyData 
         ? createSmartSets(historyData, true) 
-        : Array(slot.sets).fill({ reps: slot.reps, weight: 0, completed: false, type: 'normal' }),
+        : Array(slot.sets).fill(0).map(() => ({ reps: slot.reps, weight: 0, completed: false, type: 'normal' })),
       notes: chosen.pattern === MovementPattern.REHAB ? 'Rehab-fokus pga skada.' : (historyData ? 'Coach: Baserat på din förra prestation!' : 'Ny utmaning!')
     });
   }

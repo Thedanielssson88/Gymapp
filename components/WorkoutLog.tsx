@@ -48,10 +48,26 @@ interface LogSetRowProps {
 const LogSetRow: React.FC<LogSetRowProps> = ({ set, type, isPR }) => {
   const oneRM = (type === 'reps_weight' || !type) ? calculate1RM(set.weight, set.reps) : 0;
   
+  const renderTypeBadge = () => {
+    switch (set.type) {
+      case 'warmup':
+        return <span className="text-[8px] px-1.5 py-0.5 bg-accent-blue/20 text-accent-blue rounded uppercase">Uppvärmning</span>;
+      case 'failure':
+        return <span className="text-[8px] px-1.5 py-0.5 bg-red-500/20 text-red-500 rounded uppercase">To Failure</span>;
+      case 'drop':
+        return <span className="text-[8px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded uppercase">Drop set</span>;
+      default:
+        return null; // Normala set behöver ingen etikett
+    }
+  };
+
   return (
     <div className={`bg-black/20 p-2.5 rounded-xl flex justify-between items-center text-xs font-bold border ${isPR ? 'border-accent-pink/30' : 'border-transparent'}`}>
       <div className="flex items-center gap-2">
         <span className="text-text-dim opacity-50 font-mono text-[9px]">SET</span>
+        
+        {renderTypeBadge()}
+
         {isPR && (
           <div className="flex items-center gap-1 bg-accent-pink/10 text-accent-pink px-1.5 py-0.5 rounded-md animate-pulse">
             <Trophy size={10} />
@@ -62,16 +78,21 @@ const LogSetRow: React.FC<LogSetRowProps> = ({ set, type, isPR }) => {
 
       <div className="flex items-center gap-4">
         {oneRM > 0 && (
-          <span className="text-accent-blue/60 uppercase text-[9px] font-black">est. 1RM: {oneRM.toString().replace('.',',')}kg</span>
+          <span className="text-accent-blue/60 uppercase text-[9px] font-black">est. 1RM: {oneRM}kg</span>
         )}
         
         <div className="text-right">
+          {/* Hantera olika träningstyper (vikt vs cardio) */}
           {type === 'reps_weight' || !type ? (
             <span className="text-white">{set.reps} × {set.weight}kg</span>
           ) : type === 'time_distance' ? (
             <div className="text-right">
                <span className="text-white">{set.distance}m @ {formatSeconds(set.duration || 0)}</span>
-               {calculatePace(set.duration || 0, set.distance || 0) && <p className="text-[8px] text-accent-blue uppercase font-black">{calculatePace(set.duration || 0, set.distance || 0)}</p>}
+               {calculatePace(set.duration || 0, set.distance || 0) && (
+                 <p className="text-[8px] text-accent-blue uppercase font-black">
+                   {calculatePace(set.duration || 0, set.distance || 0)}
+                 </p>
+               )}
             </div>
           ) : type === 'time_only' ? (
             <span className="text-white">{formatSeconds(set.duration || 0)}</span>
@@ -83,6 +104,7 @@ const LogSetRow: React.FC<LogSetRowProps> = ({ set, type, isPR }) => {
     </div>
   );
 };
+
 
 // --- HUVUDKOMPONENT ---
 interface WorkoutLogProps {

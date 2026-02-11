@@ -136,10 +136,9 @@ const getTargetProgress = (
 
   const finalPercentage = Math.max(0, Math.min(100, Math.round(percentage)));
 
-  let colorClass = "bg-accent-blue";
+  let colorClass = "bg-accent-pink";
   if (finalPercentage >= 90) colorClass = "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
   else if (finalPercentage >= 50) colorClass = "bg-orange-500";
-  else if (finalPercentage > 0) colorClass = "bg-accent-pink";
 
   return { 
     current: currentVal, 
@@ -185,15 +184,24 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
 
       const calculateLevelData = (xp: number) => {
         let currentLvl = 1;
-        let accumulatedXp = 0;
-        while (xp >= accumulatedXp + (500 * currentLvl * (1 + 0.1 * (currentLvl - 1)))) {
-          accumulatedXp += Math.round(500 * currentLvl * (1 + 0.1 * (currentLvl - 1)));
+        let xpRequiredForNext = 500; 
+        let totalXpThreshold = 0;
+      
+        while (xp >= totalXpThreshold + xpRequiredForNext) {
+          totalXpThreshold += xpRequiredForNext;
           currentLvl++;
+          xpRequiredForNext = Math.round(xpRequiredForNext * 1.25); 
         }
-        const xpToNextLevel = Math.round(500 * currentLvl * (1 + 0.1 * (currentLvl - 1)));
-        const xpEarnedInLevel = Math.round(xp - accumulatedXp);
-        const progress = (xpToNextLevel > 0) ? (xpEarnedInLevel / xpToNextLevel) * 100 : 0;
-        return { level: currentLvl, xpProgress: progress, currentLevelXP: xpEarnedInLevel, xpToNextLevel };
+      
+        const xpEarnedInLevel = Math.round(xp - totalXpThreshold);
+        const progress = (xpRequiredForNext > 0) ? (xpEarnedInLevel / xpRequiredForNext) * 100 : 0;
+      
+        return { 
+          level: currentLvl, 
+          xpProgress: progress, 
+          currentLevelXP: xpEarnedInLevel, 
+          xpToNextLevel: xpRequiredForNext 
+        };
       };
 
       const levelData = calculateLevelData(totalXP);
@@ -335,7 +343,12 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
                       <span className="text-text-dim">Start: {start} {unit} • Nu: {current} {unit}</span>
                       <span className={`${percentage === 100 ? 'text-green-500' : 'text-accent-blue'}`}>{percentage}% Slutfört</span>
                     </div>
-                    <div className="h-1.5 bg-black/40 rounded-full overflow-hidden"><div className={`h-full ${colorClass} transition-all duration-1000`} style={{ width: `${percentage}%` }} /></div>
+                    <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px]">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ${colorClass}`} 
+                        style={{ width: `${percentage}%` }} 
+                      />
+                    </div>
                   </div>
                 </div>
               );

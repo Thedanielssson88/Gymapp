@@ -64,7 +64,7 @@ export default function App() {
       if (Capacitor.isNativePlatform()) {
         try {
           await StatusBar.setOverlaysWebView({ overlay: false });
-          await StatusBar.setBackgroundColor({ color: '#1a1721' });
+          await StatusBar.setBackgroundColor({ color: '#000000' });
           await StatusBar.setStyle({ style: Style.Dark });
         } catch (e) {
           console.warn('Statusbar kunde inte konfigureras:', e);
@@ -74,6 +74,11 @@ export default function App() {
 
     initNativeHardware();
   }, []);
+
+  // Scroll to top when active tab changes
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab]);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([
@@ -354,6 +359,7 @@ export default function App() {
                   plannedActivities={plannedActivities}
                   onStartActivity={handleStartPlannedActivity}
                   onStartEmptyWorkout={handleStartEmptyWorkout}
+                  onUpdate={refreshData}
                />;
       case 'body':
         return (
@@ -418,7 +424,7 @@ export default function App() {
                                 onAddMission={handleAddMission} 
                                 onDeleteMission={handleDeleteMission} 
                               />;
-      case 'library': return <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} />;
+      case 'library': return <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} userProfile={user} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
       default: return null;
     }
@@ -451,45 +457,45 @@ export default function App() {
 
       {!isWorkoutActive && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent fixed-bottom-nav">
-          <div className="max-w-md mx-auto flex justify-between items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl">
+          <div className="max-w-md mx-auto flex gap-1 items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl overflow-x-auto scrollbar-hide">
             <button 
               onClick={() => setActiveTab('workout')}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <Dumbbell size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Träning</span>
             </button>
             <button 
               onClick={() => setActiveTab('gyms')}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <MapPin size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Platser</span>
             </button>
             <button 
               onClick={() => setActiveTab('body')}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <User2 size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Kropp</span>
             </button>
             <button 
               onClick={() => setActiveTab('targets')}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <Trophy size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Mål</span>
             </button>
             <button 
               onClick={() => setActiveTab('library')}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <BookOpen size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Övningar</span>
             </button>
             <button 
               onClick={() => setActiveTab('log')}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}
             >
               <Calendar size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Logg</span>

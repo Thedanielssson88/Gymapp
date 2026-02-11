@@ -1,5 +1,6 @@
 
 
+
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -127,6 +128,7 @@ export interface Exercise {
   instructions?: string[];
   alternativeExIds?: string[];
   userModified?: boolean;
+  score?: number; // Ett värde mellan 1-10, standard 5
 }
 
 export interface BodyMeasurements {
@@ -150,6 +152,7 @@ export interface UserSettings {
   bodyViewMode?: 'list' | 'map';
   barbellWeight?: number; // t.ex. 20
   dumbbellBaseWeight?: number; // t.ex. 2 (vikten på själva hantelgreppet)
+  geminiApiKey?: string; // Nytt fält för AI-nyckeln
 }
 
 export interface UserProfile {

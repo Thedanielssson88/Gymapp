@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
@@ -12,9 +13,12 @@ export const getWorkoutInsights = async (
   exerciseHistory: string
 ): Promise<string> => {
   try {
-    // Initialisera Gemini klienten med API-nyckel från miljövariabler enligt riktlinjer.
-    // Vi skapar en ny instans vid varje anrop för att säkerställa att vi har den senaste konfigurationen.
-    const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
+    const apiKey = profile.settings?.geminiApiKey || process.env.API_KEY;
+    if (!apiKey) {
+      return "AI-coach är ej tillgänglig. API-nyckel saknas i inställningarna.";
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -30,12 +34,10 @@ Historik: ${exerciseHistory}`,
       },
     });
 
-    // Returnera genererad text genom att hämta .text egenskapen direkt från GenerateContentResponse.
     return response.text || "Fokusera på kontakten i varje repetition idag för maximal muskelaktivering.";
   } catch (error) {
     console.error("Kunde inte hämta insikter från Gemini API:", error);
     
-    // Slumpmässiga reservtips om API-anropet misslyckas för att behålla UI-upplevelsen.
     const fallbacks = [
       "Fokusera på kontrollerade excentriska faser idag för att maximera muskelkontakten.",
       "Kom ihåg att andas genom hela rörelsen, särskilt under den tyngsta delen av lyftet.",
@@ -51,10 +53,16 @@ Historik: ${exerciseHistory}`,
  * Genererar detaljerad övningsdata från ett namn med hjälp av Gemini API.
  */
 export const generateExerciseDetailsFromGemini = async (
-  exerciseName: string
+  exerciseName: string,
+  apiKey?: string
 ): Promise<Partial<Exercise>> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const finalApiKey = apiKey || process.env.API_KEY;
+    if (!finalApiKey) {
+      throw new Error("Gemini API-nyckel saknas. Vänligen lägg till den i inställningarna.");
+    }
+
+    const ai = new GoogleGenAI({ apiKey: finalApiKey });
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -129,6 +137,6 @@ export const generateExerciseDetailsFromGemini = async (
 
   } catch (error) {
     console.error("Kunde inte generera övningsdata från Gemini API:", error);
-    throw new Error("AI-genereringen misslyckades. Kontrollera att `process.env.API_KEY` är korrekt inställd och försök igen.");
+    throw new Error("AI-genereringen misslyckades. Kontrollera att din API-nyckel är korrekt inställd och försök igen.");
   }
 };

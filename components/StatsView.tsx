@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   AreaChart, Area, XAxis, Tooltip, ResponsiveContainer, 
@@ -96,7 +97,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'recovery' | 'injuries' | 'analytics'>(initialMode === 'analytics' ? 'analytics' : 'recovery');
   const [timeRange, setTimeRange] = useState('3M');
-  const [selectedExerciseId, setSelectedExerciseId] = useState<string>(allExercises[0]?.id || '');
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string>('');
   
   // Sync if initialMode changes externally (e.g. from App.tsx navigation)
   useEffect(() => {
@@ -113,6 +114,19 @@ export const StatsView: React.FC<StatsViewProps> = ({
     await storage.setUserProfile({ ...userProfile, injuries: newInjuries });
     onUpdateProfile();
   };
+  
+  const exercisesWithHistory = useMemo(() => {
+    const performedExerciseIds = new Set(
+      history.flatMap(sess => sess.exercises.map(e => e.exerciseId))
+    );
+    return allExercises.filter(ex => performedExerciseIds.has(ex.id));
+  }, [allExercises, history]);
+
+  useEffect(() => {
+    if (!selectedExerciseId && exercisesWithHistory.length > 0) {
+      setSelectedExerciseId(exercisesWithHistory[0].id);
+    }
+  }, [exercisesWithHistory, selectedExerciseId]);
 
   // --- STATISTIK DATA ---
   const analyticsData = useMemo(() => {
@@ -138,13 +152,15 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
     // 4. 1RM för vald övning
     const strengthData: any[] = [];
-    filteredHistory.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).forEach(sess => {
-       const ex = sess.exercises.find(e => e.exerciseId === selectedExerciseId);
-       if(ex) {
-          const max1RM = Math.max(...ex.sets.filter(s => s.completed).map(s => calculate1RM(s.weight, s.reps)), 0);
-          if (max1RM > 0) strengthData.push({ date: formatDate(sess.date), oneRM: Math.round(max1RM) });
-       }
-    });
+    if (selectedExerciseId) {
+      filteredHistory.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).forEach(sess => {
+         const ex = sess.exercises.find(e => e.exerciseId === selectedExerciseId);
+         if(ex) {
+            const max1RM = Math.max(...ex.sets.filter(s => s.completed).map(s => calculate1RM(s.weight, s.reps)), 0);
+            if (max1RM > 0) strengthData.push({ date: formatDate(sess.date), oneRM: Math.round(max1RM) });
+         }
+      });
+    }
 
     // 5. Muskelbalans (Radar)
     const muscleCounts: Record<string, number> = {};
@@ -285,8 +301,16 @@ export const StatsView: React.FC<StatsViewProps> = ({
              <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
                 <div className="mb-4">
                    <h3 className="text-xs font-black italic uppercase text-white mb-2">Styrkeutveckling (1RM)</h3>
-                   <select value={selectedExerciseId} onChange={(e) => setSelectedExerciseId(e.target.value)} className="w-full bg-black/30 text-white text-xs font-bold p-2 rounded-lg outline-none border border-white/10">
-                      {allExercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                   <select 
+                     value={selectedExerciseId} 
+                     onChange={(e) => setSelectedExerciseId(e.target.value)} 
+                     className="w-full bg-black/30 text-white text-xs font-bold p-2 rounded-lg outline-none border border-white/10"
+                   >
+                     {exercisesWithHistory.length > 0 ? (
+                       exercisesWithHistory.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)
+                     ) : (
+                       <option value="">Ingen historik tillgänglig</option>
+                     )}
                    </select>
                 </div>
                 <div className="h-48 w-full">

@@ -37,7 +37,8 @@ export const storage = {
     const completedSession = { 
       ...session, 
       isCompleted: true, 
-      date: session.date || new Date().toISOString() 
+      date: session.date || new Date().toISOString(),
+      duration: session.duration
     };
     await db.workoutHistory.put(completedSession);
     

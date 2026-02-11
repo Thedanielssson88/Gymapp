@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Zap } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -168,6 +168,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.includeWarmupInStats ?? false) ? 'left-7' : 'left-1'}`} />
             </button>
          </div>
+         <div className="space-y-4 pt-4 border-t border-white/5">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-black uppercase text-text-dim tracking-widest ml-1">
+                Gemini API Nyckel (AI)
+              </label>
+              <div className="relative">
+                <input 
+                  type="password"
+                  placeholder="Klistra in din API-nyckel här..."
+                  value={localProfile.settings?.geminiApiKey || ''}
+                  onChange={(e) => handleSettingChange('geminiApiKey', e.target.value)}
+                  className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white text-xs font-bold outline-none focus:border-accent-pink/50"
+                />
+                <Zap size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-accent-pink opacity-50" />
+              </div>
+              <p className="text-[9px] text-text-dim italic ml-1">
+                Nyckeln används lokalt för att generera smarta tips och analyser.
+              </p>
+            </div>
+          </div>
       </section>
 
       {/* EQUIPMENT SECTION */}

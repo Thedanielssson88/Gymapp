@@ -30,6 +30,22 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     }
   }, []);
 
+  const saveValue = (num: number) => {
+    if (unit === 'kg' && barWeight > 0 && step === 2.5) {
+        const plateWeight = num - barWeight;
+        if (plateWeight > 0) {
+            const roundedPlateWeight = Math.round(plateWeight / 2.5) * 2.5;
+            const finalWeight = barWeight + roundedPlateWeight;
+            onSave(Math.max(min, Math.min(max, finalWeight)));
+        } else {
+            onSave(Math.max(min, Math.min(max, barWeight)));
+        }
+    } else {
+        const rounded = precision === 0 ? Math.round(num) : parseFloat(num.toFixed(precision));
+        onSave(Math.max(min, Math.min(max, rounded)));
+    }
+  };
+
   const handleStep = (direction: 'up' | 'down') => {
     const currentNum = parseFloat(localVal) || 0;
     const newValue = direction === 'up' ? currentNum + step : currentNum - step;
@@ -53,30 +69,12 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   };
 
   const handleQuickSelect = (val: number) => {
-    if (precision === 0) {
-        setLocalVal(Math.round(val).toString());
-    } else {
-        setLocalVal(parseFloat(val.toFixed(precision)).toString());
-    }
+    saveValue(val);
   };
 
   const handleFinalSave = () => {
     const num = parseFloat(localVal) || 0;
-
-    if (unit === 'kg' && barWeight > 0 && step === 2.5) { // Bara avrunda om det är en skivstångsvikt
-        const plateWeight = num - barWeight;
-        if (plateWeight > 0) {
-            // Avrunda vikten FÖR plattorna till närmaste 2.5 kg
-            const roundedPlateWeight = Math.round(plateWeight / 2.5) * 2.5;
-            const finalWeight = barWeight + roundedPlateWeight;
-            onSave(Math.max(min, Math.min(max, finalWeight)));
-        } else {
-            onSave(Math.max(min, Math.min(max, barWeight)));
-        }
-    } else {
-        const rounded = precision === 0 ? Math.round(num) : parseFloat(num.toFixed(precision));
-        onSave(Math.max(min, Math.min(max, rounded)));
-    }
+    saveValue(num);
   };
 
   const quickValues = useMemo(() => {
@@ -132,18 +130,15 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
 
             <div className="flex-1 flex flex-col items-center">
               <div className="flex items-baseline justify-center w-full">
-                <input 
-                  ref={inputRef}
-                  type="text"
-                  inputMode={precision === 0 ? "numeric" : "decimal"}
-                  value={localVal}
-                  onChange={handleInputChange}
-                  className="bg-transparent text-6xl font-black text-white w-full text-center outline-none focus:text-accent-pink transition-colors caret-accent-pink"
-                  placeholder="0"
-                />
+                {/* Ändrat från input till div för att dölja tangentbordet */}
+                <div className="text-6xl font-black text-white w-full text-center py-2 select-none">
+                  {localVal || "0"}
+                  <span className="animate-pulse text-accent-pink ml-1">|</span>
+                </div>
               </div>
               <span className="text-sm font-black italic text-accent-blue uppercase tracking-widest mt-1">{unit}</span>
             </div>
+
 
             <button 
               onMouseDown={(e) => e.preventDefault()}
