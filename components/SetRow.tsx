@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { WorkoutSet, SetType, TrackingType, Exercise, UserProfile, Equipment } from '../types';
-import { Check, Plus, Thermometer, Zap, AlertCircle, Scale, BarChart3 as RepsIcon, Map as DistanceIcon, Timer as TimerIcon } from 'lucide-react';
+import { Check, Thermometer, Zap, AlertCircle, Timer as TimerIcon } from 'lucide-react';
 import { TimePickerModal } from './TimePickerModal';
 import { NumberPickerModal } from './NumberPickerModal';
 import { ActiveTimerModal } from './ActiveTimerModal';
@@ -106,13 +106,9 @@ export const SetRow: React.FC<SetRowProps> = ({
   };
 
   const getBaseWeight = () => {
-    if (isDumbbellExercise) {
-      return userProfile.settings?.dumbbellBaseWeight ?? 2;
-    }
-    if (isBarbellExercise) {
-      return userProfile.settings?.barbellWeight ?? 20;
-    }
-    return 0; // No base weight for other equipment
+    if (isDumbbellExercise) return userProfile.settings?.dumbbellBaseWeight ?? 2;
+    if (isBarbellExercise) return userProfile.settings?.barbellWeight ?? 20;
+    return 0;
   };
 
   return (
@@ -133,7 +129,8 @@ export const SetRow: React.FC<SetRowProps> = ({
         </div>
 
         <div className="pl-2">
-          {trackingType === 'time_only' && !isCompleted ? (
+          {/* HÄR ÄR ÄNDRINGEN: Visa Timer-ikon för BÅDE time_only och time_distance */}
+          {(trackingType === 'time_only' || trackingType === 'time_distance') && !isCompleted ? (
             <button 
               onClick={() => setShowActiveTimer(true)} 
               className="w-12 h-12 bg-accent-blue/10 border border-accent-blue/20 rounded-xl flex items-center justify-center text-accent-blue transition-all active:scale-90"
@@ -152,6 +149,21 @@ export const SetRow: React.FC<SetRowProps> = ({
       </div>
       
       {/* MODALS */}
+      {showActiveTimer && (
+        <ActiveTimerModal 
+          targetSeconds={set.duration || 60} 
+          onCancel={() => setShowActiveTimer(false)}
+          onComplete={(time, isFail) => {
+            onUpdate({ 
+              duration: isFail ? time : (set.duration || time), 
+              completed: true,
+              type: isFail ? 'failure' : set.type 
+            });
+            setShowActiveTimer(false);
+          }}
+        />
+      )}
+
       {activeModal === 'time' && (
         <TimePickerModal 
           title="Ange Tid"
@@ -202,21 +214,6 @@ export const SetRow: React.FC<SetRowProps> = ({
           availablePlates={availablePlates}
           onSave={(v) => { onUpdate({ weight: v }); setActiveModal(null); }}
           onClose={() => setActiveModal(null)}
-        />
-      )}
-
-      {showActiveTimer && (
-        <ActiveTimerModal 
-          targetSeconds={set.duration || 60}
-          onCancel={() => setShowActiveTimer(false)}
-          onComplete={(time, isFail) => {
-            onUpdate({ 
-              duration: isFail ? time : (set.duration || time),
-              completed: true,
-              type: isFail ? 'failure' : set.type
-            });
-            setShowActiveTimer(false);
-          }}
         />
       )}
     </>
