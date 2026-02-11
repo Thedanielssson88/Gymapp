@@ -6,12 +6,12 @@ import { calculateMuscleRecovery } from './recovery';
  * Stödjer AND/OR-logik.
  */
 export const hasRequiredEquipment = (ex: Exercise, zoneInventory: Equipment[]): boolean => {
-  // Om inga specifika kravgrupper finns, använd den gamla "måste ha allt"-logiken
+  // Om inga krav finns definierade, utgå från att ALL utrustning i listan krävs (fallback)
   if (!ex.equipmentRequirements || ex.equipmentRequirements.length === 0) {
     return ex.equipment.every(eq => zoneInventory.includes(eq));
   }
 
-  // NY LOGIK: Kolla varje kravgrupp (AND mellan grupper, OR inom grupper)
+  // NY LOGIK: "OCH" mellan grupper, "ELLER" inom grupper
   return ex.equipmentRequirements.every(group => 
     group.some(item => zoneInventory.includes(item))
   );

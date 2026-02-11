@@ -197,6 +197,7 @@ export interface PlannedExercise {
   exerciseId: string;
   sets: WorkoutSet[];
   notes?: string;
+  supersetId?: string; // Ett unikt ID som delas av övningar i samma superset
 }
 
 export interface WorkoutRoutine {

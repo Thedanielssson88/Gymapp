@@ -13,6 +13,8 @@ import { ExerciseLibrary } from './ExerciseLibrary';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat } from 'lucide-react';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
 interface WorkoutViewProps {
   session: WorkoutSession | null;
   allExercises: Exercise[];
@@ -95,6 +97,50 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       ex.sets.some(set => set.completed)
     );
   }, [localSession]);
+  
+  const moveExercise = (index: number, direction: 'up' | 'down') => {
+      setLocalSession(prev => {
+        if (!prev) return prev;
+        const newExercises = [...prev.exercises];
+        
+        if (direction === 'up' && index === 0) return prev;
+        if (direction === 'down' && index === newExercises.length - 1) return prev;
+    
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        [newExercises[index], newExercises[targetIndex]] = [newExercises[targetIndex], newExercises[index]];
+    
+        const updated = { ...prev, exercises: newExercises };
+        storage.setActiveSession(updated);
+        return updated;
+      });
+  };
+
+  const toggleSupersetWithPrevious = (index: number) => {
+    if (index === 0) return;
+  
+    setLocalSession(prev => {
+      if (!prev) return prev;
+      const newExercises = [...prev.exercises];
+      const current = newExercises[index];
+      const previous = newExercises[index - 1];
+  
+      if (current.supersetId && current.supersetId === previous.supersetId) {
+         newExercises[index] = { ...current, supersetId: undefined };
+      } 
+      else if (previous.supersetId) {
+         newExercises[index] = { ...current, supersetId: previous.supersetId };
+      }
+      else {
+         const newId = generateId();
+         newExercises[index - 1] = { ...previous, supersetId: newId };
+         newExercises[index] = { ...current, supersetId: newId };
+      }
+  
+      const updated = { ...prev, exercises: newExercises };
+      storage.setActiveSession(updated);
+      return updated;
+    });
+  };
 
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
@@ -411,12 +457,44 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         </button>
       </div>
 
-      <div className="space-y-4 px-2">
+      <div className="space-y-0 px-2">
         {(localSession.exercises || []).map((item, exIdx) => {
           const exData = (allExercises || []).find(e => e.id === item.exerciseId);
-          return exData ? (
-            <ExerciseCard key={`${item.exerciseId}-${exIdx}`} item={item} exIdx={exIdx} exData={exData} userProfile={userProfile} activeZone={activeZone} isNotesOpen={openNotesIdx === exIdx} onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)} onUpdateNotes={(notes) => updateNotes(exIdx, notes)} onRemove={() => removeExercise(exIdx)} onAddSet={() => addSetToExercise(exIdx)} onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })} />
-          ) : null;
+          if (!exData) return null;
+          
+          const currentId = item.supersetId;
+          const prevId = localSession.exercises[exIdx - 1]?.supersetId;
+          const nextId = localSession.exercises[exIdx + 1]?.supersetId;
+      
+          const isInSuperset = !!currentId;
+          const isSupersetStart = isInSuperset && currentId !== prevId;
+          const isSupersetEnd = isInSuperset && currentId !== nextId;
+
+          return (
+            <ExerciseCard 
+                key={`${item.exerciseId}-${exIdx}`} 
+                item={item} 
+                exData={exData} 
+                exIdx={exIdx} 
+                userProfile={userProfile} 
+                activeZone={activeZone} 
+                isNotesOpen={openNotesIdx === exIdx} 
+                onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)} 
+                onUpdateNotes={(notes) => updateNotes(exIdx, notes)} 
+                onRemove={() => removeExercise(exIdx)} 
+                onAddSet={() => addSetToExercise(exIdx)} 
+                onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} 
+                onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })}
+                isFirst={exIdx === 0}
+                isLast={exIdx === localSession.exercises.length - 1}
+                isInSuperset={isInSuperset}
+                isSupersetStart={isSupersetStart}
+                isSupersetEnd={isSupersetEnd}
+                onMoveUp={() => moveExercise(exIdx, 'up')}
+                onMoveDown={() => moveExercise(exIdx, 'down')}
+                onToggleSuperset={() => toggleSupersetWithPrevious(exIdx)}
+            />
+          );
         })}
       </div>
 

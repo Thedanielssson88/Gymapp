@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { WorkoutSet, SetType, TrackingType, Exercise, UserProfile, Equipment } from '../types';
 import { Check, Plus, Thermometer, Zap, AlertCircle, Scale, BarChart3 as RepsIcon, Map as DistanceIcon, Timer as TimerIcon } from 'lucide-react';
@@ -10,8 +9,6 @@ interface SetRowProps {
   set: WorkoutSet;
   isCompleted: boolean;
   onUpdate: (updates: Partial<WorkoutSet>) => void;
-  onAddSet?: () => void;
-  isLast?: boolean;
   trackingType?: TrackingType;
   exData: Exercise;
   userProfile: UserProfile;
@@ -23,8 +20,6 @@ export const SetRow: React.FC<SetRowProps> = ({
   set,
   isCompleted,
   onUpdate,
-  onAddSet,
-  isLast,
   trackingType = 'reps_weight',
   exData,
   userProfile,
@@ -136,11 +131,7 @@ export const SetRow: React.FC<SetRowProps> = ({
         </div>
 
         <div className="pl-2">
-          {isLast && !isCompleted ? (
-            <button onClick={onAddSet} className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-text-dim hover:bg-white/10 hover:text-white transition-all active:scale-90"><Plus size={20} /></button>
-          ) : (
-            <button onClick={() => onUpdate({ completed: !isCompleted })} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${ isCompleted ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-[#25222e] text-white/20 border border-white/5 hover:border-accent-pink/50 hover:text-accent-pink' }`}><Check size={24} strokeWidth={4} /></button>
-          )}
+          <button onClick={() => onUpdate({ completed: !isCompleted })} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${ isCompleted ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-[#25222e] text-white/20 border border-white/5 hover:border-accent-pink/50 hover:text-accent-pink' }`}><Check size={24} strokeWidth={4} /></button>
         </div>
       </div>
       
