@@ -437,50 +437,38 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       exercise.sets = updatedSets;
       updatedExercises[exIdx] = exercise;
       
-      // --- SUPERSET SCROLL LOGIK (Flyttad hit!) ---
-      // Vi kör detta ENDAST om vi just markerade ett set som klart
-      if (updates.completed) {
-          const currentSupersetId = exercise.supersetId;
+      // --- KORRIGERAD SUPERSET SCROLL LOGIK ---
+      if (updates.completed && exercise.supersetId) {
+        const supersetGroup = updatedExercises
+          .map((ex, idx) => ({ ...ex, originalIdx: idx }))
+          .filter(ex => ex.supersetId === exercise.supersetId);
 
-          if (currentSupersetId) {
-            // Hitta alla övningar i detta superset
-            const supersetIndices = updatedExercises
-              .map((ex, idx) => ({ ...ex, originalIdx: idx }))
-              .filter(ex => ex.supersetId === currentSupersetId)
-              .map(ex => ex.originalIdx);
+        if (supersetGroup.length > 1) {
+          const currentInGroupIdx = supersetGroup.findIndex(g => g.originalIdx === exIdx);
+          let nextTargetIdx = -1;
 
-            if (supersetIndices.length > 1) {
-              const currentPos = supersetIndices.indexOf(exIdx);
-              let nextTargetIdx = -1;
-              
-              // Loopa för att hitta nästa
-              for (let i = 1; i <= supersetIndices.length; i++) {
-                const checkIndex = supersetIndices[(currentPos + i) % supersetIndices.length];
-                const targetEx = updatedExercises[checkIndex];
-                
-                // VIKTIGT: Vi kollar på 'updatedExercises' som innehåller vår senaste ändring!
-                const hasIncompleteSets = targetEx.sets.some(s => !s.completed);
-                
-                if (hasIncompleteSets) {
-                  nextTargetIdx = checkIndex;
-                  break;
-                }
-              }
-
-              // Om vi hittade en annan övning att hoppa till
-              if (nextTargetIdx !== -1 && nextTargetIdx !== exIdx) {
-                // Vi måste använda setTimeout för att scrolla efter render
-                setTimeout(() => {
-                  const element = document.getElementById(`exercise-row-${nextTargetIdx}`);
-                  if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }
-                }, 300); // Lite delay för att kännas naturligt
-              }
+          // Cirkulär sökning efter nästa övning med oklara set
+          for (let i = 1; i <= supersetGroup.length; i++) {
+            const checkIdx = (currentInGroupIdx + i) % supersetGroup.length;
+            const candidate = supersetGroup[checkIdx];
+            
+            if (candidate.sets.some(s => !s.completed)) {
+              nextTargetIdx = candidate.originalIdx;
+              break;
             }
           }
+
+          if (nextTargetIdx !== -1 && nextTargetIdx !== exIdx) {
+            setTimeout(() => {
+              // Vi letar efter ID:t 'exercise-row-X'
+              const element = document.getElementById(`exercise-row-${nextTargetIdx}`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 300);
+          }
+        }
       }
-      // ---------------------------------------------
 
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
