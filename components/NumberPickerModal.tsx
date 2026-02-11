@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, ChevronUp, ChevronDown, Scale } from 'lucide-react';
 import { PlateDisplay } from './PlateDisplay';
@@ -69,7 +68,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   };
 
   const handleQuickSelect = (val: number) => {
-    saveValue(val);
+    setLocalVal(val.toString());
   };
 
   const handleFinalSave = () => {

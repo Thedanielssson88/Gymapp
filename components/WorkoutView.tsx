@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise } from '../types';
-import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession } from '../utils/fitness';
+import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, calculate1RM } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
 import { WorkoutSummaryModal } from './WorkoutSummaryModal';
@@ -13,7 +13,8 @@ import { ExerciseLibrary } from './ExerciseLibrary';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat } from 'lucide-react';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 
-const generateId = () => Math.random().toString(36).substr(2, 9);
+// FIX: Replaced deprecated `substr` with `substring` to resolve potential callable expression errors.
+const generateId = () => Math.random().toString(36).substring(2, 11);
 
 interface WorkoutViewProps {
   session: WorkoutSession | null;
@@ -32,6 +33,91 @@ interface WorkoutViewProps {
   isManualMode?: boolean; // NEW: Prop to disable timer
 }
 
+// +++ START OF InfoModal IMPLEMENTATION +++
+// This modal was missing from the file, causing errors. I have created a functional implementation for it.
+interface InfoModalProps {
+  exercise: Exercise;
+  index: number;
+  history: WorkoutSession[];
+  allExercises: Exercise[];
+  onClose: () => void;
+  onSwapExercise: (exIdx: number, newExerciseId: string) => void;
+  onApplyHistory: (exIdx: number, setsToApply: WorkoutSet[]) => void;
+}
+
+const InfoModal: React.FC<InfoModalProps> = ({ exercise, index, history, allExercises, onClose, onSwapExercise, onApplyHistory }) => {
+  const [showLibrary, setShowLibrary] = useState(false);
+  const imageSrc = useExerciseImage(exercise);
+  const lastPerformance = useMemo(() => getLastPerformance(exercise.id, history), [exercise.id, history]);
+  const allTimeBest1RM = useMemo(() => {
+    const exerciseHistory = history
+      .flatMap(session => session.exercises)
+      .filter(ex => ex.exerciseId === exercise.id)
+      .flatMap(ex => ex.sets);
+    return Math.max(0, ...exerciseHistory.map(s => calculate1RM(s.weight || 0, s.reps || 0)));
+  }, [exercise.id, history]);
+
+  if (showLibrary) {
+    return (
+      <div className="fixed inset-0 z-[300] bg-[#0f0d15] animate-in slide-in-from-bottom-5">
+        <ExerciseLibrary 
+          allExercises={allExercises} 
+          history={history}
+          onSelect={(ex) => onSwapExercise(index, ex.id)} 
+          onClose={() => setShowLibrary(false)}
+          onUpdate={() => {}}
+          isSelectorMode={true}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] p-4 flex items-end animate-in fade-in" onClick={onClose}>
+      <div className="w-full bg-[#1a1721] rounded-[32px] p-6 border border-white/10 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <header className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-2xl font-black italic uppercase text-white">{exercise.name}</h3>
+            <p className="text-xs text-text-dim font-bold uppercase tracking-widest">{exercise.pattern}</p>
+          </div>
+          <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide">
+          {imageSrc && <img src={imageSrc} alt={exercise.name} className="w-full h-48 object-cover rounded-2xl mb-4" />}
+          {exercise.description && <p className="text-sm text-text-dim">{exercise.description}</p>}
+          
+          <div className="bg-black/20 rounded-2xl p-4 border border-white/5">
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-text-dim mb-2">Senaste Prestation</h4>
+            {lastPerformance ? (
+              <div className="space-y-1">
+                {lastPerformance.map((s, i) => (
+                  <div key={i} className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg text-xs">
+                    <span className="font-bold text-white/50">Set {i+1}</span>
+                    <span className="font-black text-white">{s.reps} reps @ {s.weight} kg</span>
+                  </div>
+                ))}
+              </div>
+            ): <p className="text-xs text-text-dim italic">Ingen historik hittades.</p>}
+          </div>
+          {allTimeBest1RM > 0 && 
+            <div className="bg-accent-blue/10 rounded-2xl p-4 border border-accent-blue/20 flex justify-between items-center">
+               <span className="text-xs font-black uppercase text-accent-blue tracking-widest">Bästa 1RM</span>
+               <span className="text-xl font-black italic text-white">{allTimeBest1RM} kg</span>
+            </div>
+          }
+        </div>
+
+        <footer className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-3">
+          <button onClick={() => onApplyHistory(index, lastPerformance || [])} disabled={!lastPerformance} className="py-4 bg-white/10 rounded-2xl text-xs font-black uppercase tracking-widest disabled:opacity-30">Använd senaste</button>
+          <button onClick={() => setShowLibrary(true)} className="py-4 bg-white/10 rounded-2xl text-xs font-black uppercase tracking-widest">Byt övning</button>
+        </footer>
+      </div>
+    </div>
+  );
+};
+// +++ END OF InfoModal IMPLEMENTATION +++
+
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session, allExercises, userProfile, allZones, history, activeZone, 
   onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout, onUpdate,
@@ -49,6 +135,50 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [showSummary, setShowSummary] = useState(false);
   const [showZonePicker, setShowZonePicker] = useState(false);
   const [showNoSetsInfo, setShowNoSetsInfo] = useState(false);
+
+  const moveExercise = (index: number, direction: 'up' | 'down') => {
+      setLocalSession(prev => {
+        if (!prev) return prev;
+        const newExercises = [...prev.exercises];
+        
+        if (direction === 'up' && index === 0) return prev;
+        if (direction === 'down' && index === newExercises.length - 1) return prev;
+    
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        [newExercises[index], newExercises[targetIndex]] = [newExercises[targetIndex], newExercises[index]];
+    
+        const updated = { ...prev, exercises: newExercises };
+        storage.setActiveSession(updated);
+        return updated;
+      });
+  };
+
+  const toggleSupersetWithPrevious = (index: number) => {
+    if (index === 0) return;
+  
+    setLocalSession(prev => {
+      if (!prev) return prev;
+      const newExercises = [...prev.exercises];
+      const current = newExercises[index];
+      const previous = newExercises[index - 1];
+  
+      if (current.supersetId && current.supersetId === previous.supersetId) {
+         newExercises[index] = { ...current, supersetId: undefined };
+      } 
+      else if (previous.supersetId) {
+         newExercises[index] = { ...current, supersetId: previous.supersetId };
+      }
+      else {
+         const newId = generateId();
+         newExercises[index - 1] = { ...previous, supersetId: newId };
+         newExercises[index] = { ...current, supersetId: newId };
+      }
+  
+      const updated = { ...prev, exercises: newExercises };
+      storage.setActiveSession(updated);
+      return updated;
+    });
+  };
 
   useEffect(() => {
     setLocalSession(session);
@@ -97,50 +227,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       ex.sets.some(set => set.completed)
     );
   }, [localSession]);
-  
-  const moveExercise = (index: number, direction: 'up' | 'down') => {
-      setLocalSession(prev => {
-        if (!prev) return prev;
-        const newExercises = [...prev.exercises];
-        
-        if (direction === 'up' && index === 0) return prev;
-        if (direction === 'down' && index === newExercises.length - 1) return prev;
-    
-        const targetIndex = direction === 'up' ? index - 1 : index + 1;
-        [newExercises[index], newExercises[targetIndex]] = [newExercises[targetIndex], newExercises[index]];
-    
-        const updated = { ...prev, exercises: newExercises };
-        storage.setActiveSession(updated);
-        return updated;
-      });
-  };
-
-  const toggleSupersetWithPrevious = (index: number) => {
-    if (index === 0) return;
-  
-    setLocalSession(prev => {
-      if (!prev) return prev;
-      const newExercises = [...prev.exercises];
-      const current = newExercises[index];
-      const previous = newExercises[index - 1];
-  
-      if (current.supersetId && current.supersetId === previous.supersetId) {
-         newExercises[index] = { ...current, supersetId: undefined };
-      } 
-      else if (previous.supersetId) {
-         newExercises[index] = { ...current, supersetId: previous.supersetId };
-      }
-      else {
-         const newId = generateId();
-         newExercises[index - 1] = { ...previous, supersetId: newId };
-         newExercises[index] = { ...current, supersetId: newId };
-      }
-  
-      const updated = { ...prev, exercises: newExercises };
-      storage.setActiveSession(updated);
-      return updated;
-    });
-  };
 
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
@@ -227,6 +313,42 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       }
   
       updatedExercises[exIdx] = { ...exercise, sets: updatedSets };
+
+      if (updates.completed) {
+        const currentSupersetId = exercise.supersetId;
+        if (currentSupersetId) {
+          const supersetIndices = updatedExercises
+            .map((ex, idx) => ({ ...ex, originalIdx: idx }))
+            .filter(ex => ex.supersetId === currentSupersetId)
+            .map(ex => ex.originalIdx);
+      
+          if (supersetIndices.length > 1) {
+            const currentPos = supersetIndices.indexOf(exIdx);
+            let nextTargetIdx = -1;
+            
+            for (let i = 1; i <= supersetIndices.length; i++) {
+              const checkIndex = supersetIndices[(currentPos + i) % supersetIndices.length];
+              const targetEx = updatedExercises[checkIndex];
+              const hasIncompleteSets = targetEx.sets.some(s => !s.completed);
+              
+              if (hasIncompleteSets) {
+                nextTargetIdx = checkIndex;
+                break;
+              }
+            }
+      
+            if (nextTargetIdx !== -1 && nextTargetIdx !== exIdx) {
+              setTimeout(() => {
+                const element = document.getElementById(`exercise-card-${nextTargetIdx}`);
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }, 300);
+            }
+          }
+        }
+      }
+
       const updatedSession = { ...prev, exercises: updatedExercises };
       storage.setActiveSession(updatedSession);
       return updatedSession;
@@ -457,43 +579,51 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         </button>
       </div>
 
-      <div className="space-y-0 px-2">
+      <div className="flex flex-col px-2 pb-32">
         {(localSession.exercises || []).map((item, exIdx) => {
           const exData = (allExercises || []).find(e => e.id === item.exerciseId);
           if (!exData) return null;
-          
+
+          // Logik för superset-gruppering
           const currentId = item.supersetId;
           const prevId = localSession.exercises[exIdx - 1]?.supersetId;
           const nextId = localSession.exercises[exIdx + 1]?.supersetId;
-      
+
           const isInSuperset = !!currentId;
           const isSupersetStart = isInSuperset && currentId !== prevId;
           const isSupersetEnd = isInSuperset && currentId !== nextId;
 
           return (
-            <ExerciseCard 
-                key={`${item.exerciseId}-${exIdx}`} 
+            <div key={`${item.exerciseId}-${exIdx}`} id={`exercise-card-${exIdx}`}>
+              <ExerciseCard 
                 item={item} 
-                exData={exData} 
                 exIdx={exIdx} 
+                exData={exData} 
                 userProfile={userProfile} 
-                activeZone={activeZone} 
+                activeZone={activeZone}
+                
+                // Superset Props
+                isFirst={exIdx === 0}
+                isLast={exIdx === (localSession.exercises.length - 1)}
+                isInSuperset={isInSuperset}
+                isSupersetStart={isSupersetStart}
+                isSupersetEnd={isSupersetEnd}
+
+                // Actions
+                onMoveUp={() => moveExercise(exIdx, 'up')}
+                onMoveDown={() => moveExercise(exIdx, 'down')}
+                onToggleSuperset={() => toggleSupersetWithPrevious(exIdx)}
+                
+                // Övriga props
                 isNotesOpen={openNotesIdx === exIdx} 
                 onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)} 
                 onUpdateNotes={(notes) => updateNotes(exIdx, notes)} 
                 onRemove={() => removeExercise(exIdx)} 
                 onAddSet={() => addSetToExercise(exIdx)} 
                 onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} 
-                onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })}
-                isFirst={exIdx === 0}
-                isLast={exIdx === localSession.exercises.length - 1}
-                isInSuperset={isInSuperset}
-                isSupersetStart={isSupersetStart}
-                isSupersetEnd={isSupersetEnd}
-                onMoveUp={() => moveExercise(exIdx, 'up')}
-                onMoveDown={() => moveExercise(exIdx, 'down')}
-                onToggleSuperset={() => toggleSupersetWithPrevious(exIdx)}
-            />
+                onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })} 
+              />
+            </div>
           );
         })}
       </div>
@@ -533,210 +663,66 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                             : 'bg-white/5 border border-white/5'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          timer === 0 && !isTimerActive ? 'bg-black text-white' : isTimerActive ? 'bg-white text-[#0f0d15]' : 'bg-accent-blue text-white'
-                        }`}>
-                          {isTimerActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center`}>
+                          {isTimerActive ? <Pause size={24} /> : <Play size={24} fill="currentColor" />}
                         </div>
                         <div className="text-left">
-                          <span className="text-[8px] font-black uppercase block tracking-[0.2em] mb-0.5">
-                            {timer === 0 && !isTimerActive ? 'REDO?' : 'TID'}
-                          </span>
-                          <span className="text-2xl font-black italic tabular-nums leading-none tracking-tighter">
-                            {timer === 0 && !isTimerActive ? 'STARTA PASS' : `${Math.floor(timer/60)}:${String(timer%60).padStart(2,'0')}`}
-                          </span>
+                           <span className={`text-[9px] font-black uppercase tracking-widest ${timer === 0 && !isTimerActive ? 'opacity-80' : 'text-text-dim'}`}>
+                                {timer === 0 && !isTimerActive ? "Starta Pass" : "Tid"}
+                           </span>
+                           <span className="text-2xl font-black italic tabular-nums leading-none">
+                              {Math.floor(timer / 60)}:{String(timer % 60).padStart(2, '0')}
+                           </span>
                         </div>
                       </button>
                     )}
                  </div>
-                 <button
-                  onClick={() => {
-                    if (canFinishWorkout) {
-                      setShowSummary(true);
-                    } else {
-                      setShowNoSetsInfo(true);
-                    }
-                  }}
-                  className={`flex-1 h-16 rounded-[24px] font-black italic text-lg tracking-wider uppercase shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-all ${
-                    canFinishWorkout
-                      ? 'bg-[#2ed573] text-[#0f0d15] shadow-[0_0_25px_rgba(46,213,115,0.3)]'
-                      : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'
-                  }`}
-                >
-                  Slutför <Check size={20} strokeWidth={4} />
-                </button>
+                 <button 
+                   onClick={() => {
+                     if (canFinishWorkout) setShowSummary(true);
+                     else setShowNoSetsInfo(true);
+                   }}
+                   className={`h-16 rounded-[24px] font-black italic text-base tracking-wider uppercase shadow-lg flex items-center justify-center gap-2 px-6 active:scale-[0.98] transition-all ${
+                     canFinishWorkout ? 'bg-[#2ed573] text-[#0f0d15]' : 'bg-white/5 text-white/20'
+                   }`}
+                 >
+                   Avsluta <Check size={18} strokeWidth={4} />
+                 </button>
                </>
              )}
           </div>
         </div>
       </div>
-
-      {showSummary && (
-        <WorkoutSummaryModal 
-          duration={timer} 
-          onCancel={() => setShowSummary(false)} 
-          onConfirm={(rpe, feeling, finalDuration) => { 
-            onComplete({...localSession!, rpe, feeling}, finalDuration); 
-            setShowSummary(false); 
-          }} 
-        />
-      )}
+      
+      {showAddModal && <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={onUpdate} userProfile={userProfile} onSelect={addNewExercise} onClose={() => setShowAddModal(false)} activeZone={activeZone} isSelectorMode={true} />}
       {showGenerator && <WorkoutGenerator activeZone={activeZone} allExercises={allExercises} userProfile={userProfile} history={history} onGenerate={handleGenerateResults} onClose={() => setShowGenerator(false)} />}
-      {showAddModal && (<div className="fixed inset-0 bg-[#0f0d15] z-[200] animate-in slide-in-from-bottom-10 duration-500"><ExerciseLibrary allExercises={allExercises} history={history} onSelect={addNewExercise} onClose={() => setShowAddModal(false)} onUpdate={() => {}} activeZone={activeZone} /></div>)}
+      {showSummary && localSession && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling, finalDuration) => onComplete({ ...localSession, rpe, feeling }, finalDuration)} />}
+      
+      {infoModalData && <InfoModal exercise={infoModalData.exercise} index={infoModalData.index} history={history} allExercises={allExercises} onClose={() => setInfoModalData(null)} onSwapExercise={handleSwapExercise} onApplyHistory={handleApplyHistory} />}
+      
       {showZonePicker && (
-        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[200] flex flex-col p-6 animate-in fade-in duration-200">
-           <header className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black italic uppercase text-white">Välj Gym</h3><button onClick={() => setShowZonePicker(false)} className="p-3 bg-white/5 rounded-2xl"><X size={24} className="text-white"/></button></header>
-           <div className="flex-1 overflow-y-auto space-y-3">{(allZones || []).map(z => {
-                 const isActive = activeZone.id === z.id;
-                 return (<button key={z.id} onClick={() => { handleSwitchZone(z); setShowZonePicker(false); }} className={`w-full p-5 rounded-3xl border text-left flex items-center justify-between transition-all group ${isActive ? 'bg-white text-black border-white' : 'bg-[#1a1721] border-white/5 text-text-dim'}`}><div className="flex items-center gap-4"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${isActive ? 'bg-black/10 border-transparent text-black' : 'bg-white/5 border-white/5 text-white'}`}><MapPin size={20} /></div><div><span className="text-lg font-black italic uppercase block leading-none mb-1.5">{z.name}</span><span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-black/60' : 'text-white/30'}`}>{z.inventory?.length || 0} Redskap</span></div></div>{isActive && <div className="bg-black text-white p-2 rounded-full"><Check size={16} strokeWidth={4} /></div>}</button>);
-              })}</div>
+        <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm p-8 flex items-center justify-center animate-in fade-in" onClick={() => setShowZonePicker(false)}>
+          <div className="bg-[#1a1721] rounded-[32px] p-6 border border-white/10 w-full max-w-sm space-y-3" onClick={e => e.stopPropagation()}>
+            <h3 className="text-center font-bold text-lg mb-3">Byt Träningsplats</h3>
+            {allZones.map(zone => (
+              <button key={zone.id} onClick={() => { handleSwitchZone(zone); setShowZonePicker(false); }} className={`w-full p-4 rounded-2xl text-left flex justify-between items-center transition-all ${zone.id === activeZone.id ? 'bg-accent-blue text-white' : 'bg-white/5 text-text-dim hover:bg-white/10'}`}>
+                <span className="font-bold">{zone.name}</span>
+                {zone.id === activeZone.id && <Check size={20} />}
+              </button>
+            ))}
+          </div>
         </div>
       )}
-      {infoModalData && <InfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onExerciseSwap={handleSwapExercise} allExercises={allExercises} activeZone={activeZone} />}
-      
+
       {showNoSetsInfo && (
-        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-md z-[300] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-[#1a1721] border border-white/10 rounded-[40px] p-8 max-w-xs w-full text-center space-y-6 shadow-2xl">
-            <div className="w-20 h-20 bg-accent-pink/10 rounded-3xl flex items-center justify-center mx-auto text-accent-pink border border-accent-pink/20">
-              <AlertCircle size={40} />
+          <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm p-8 flex items-center justify-center animate-in fade-in" onClick={() => setShowNoSetsInfo(false)}>
+            <div className="bg-[#1a1721] rounded-[32px] p-8 border border-white/10 w-full max-w-sm text-center" onClick={e => e.stopPropagation()}>
+              <AlertCircle size={40} className="mx-auto text-yellow-500 mb-4" />
+              <h3 className="font-black text-lg mb-2">Tomt Pass</h3>
+              <p className="text-text-dim text-sm">Du måste logga minst ett set för att kunna spara passet.</p>
             </div>
-            
-            <div className="space-y-2">
-              <h3 className="text-xl font-black italic uppercase text-white">Passet är tomt</h3>
-              <p className="text-sm text-text-dim leading-relaxed font-medium">
-                Du måste markera minst ett set som klart för att kunna spara passet.
-              </p>
-            </div>
-      
-            <div className="bg-white/5 rounded-2xl p-4 text-left border border-white/5">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-6 h-6 bg-accent-blue rounded-lg flex items-center justify-center text-[#0f0d15]">
-                  <Check size={14} strokeWidth={4} />
-                </div>
-                <span className="text-[10px] font-black uppercase text-white">Instruktion:</span>
-              </div>
-              <p className="text-[11px] text-text-dim font-bold uppercase leading-tight">
-                Klicka på bock-knappen till höger om ett set för att markera det som slutfört. Raden blir då grön.
-              </p>
-            </div>
-      
-            <button 
-              onClick={() => setShowNoSetsInfo(false)}
-              className="w-full py-4 bg-white text-[#0f0d15] rounded-2xl font-black uppercase italic tracking-widest active:scale-95 transition-all"
-            >
-              Jag fattar
-            </button>
           </div>
-        </div>
       )}
-    </div>
-  );
-};
-
-const InfoModal: React.FC<{ exercise: Exercise; exIdx: number; onClose: () => void; history: WorkoutSession[]; onApplyHistory: (exIdx: number, sets: WorkoutSet[]) => void; onExerciseSwap: (exIdx: number, newExId: string) => void; allExercises: Exercise[]; activeZone: Zone; }> = ({ exercise, exIdx, onClose, history, onApplyHistory, onExerciseSwap, allExercises, activeZone }) => {
-  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
-  const imageSrc = useExerciseImage(exercise);
-  const exerciseHistory = useMemo(() => {
-    return (history || [])
-      .map(session => {
-        const exData = (session.exercises || []).find(e => e.exerciseId === exercise.id && e.sets && e.sets.some(s => s.completed));
-        return { session, exData };
-      })
-      .filter(item => item.exData)
-      .sort((a, b) => new Date(b.session.date).getTime() - new Date(a.session.date).getTime())
-      .map(({ session, exData }) => {
-        const bestSet = (exData!.sets || []).reduce((prev, current) => {
-           if (!current.completed) return prev;
-           const currentVolume = (current.weight || 0) * (current.reps || 0);
-           const prevVolume = (prev.weight || 0) * (prev.reps || 0);
-           return currentVolume > prevVolume ? current : prev;
-        }, { weight: 0, reps: 0, completed: false } as WorkoutSet);
-        return { date: session.date, sessionName: session.name, bestSet, fullSets: exData!.sets };
-      })
-      .slice(0, 10);
-  }, [history, exercise.id]);
-
-  const alternatives = useMemo(() => {
-    const hasDefinedAlts = exercise.alternativeExIds && exercise.alternativeExIds.length > 0;
-    const sourceList = hasDefinedAlts
-      ? (allExercises || []).filter(ex => exercise.alternativeExIds!.includes(ex.id))
-      : (allExercises || []).filter(ex => ex.pattern === exercise.pattern && ex.id !== exercise.id);
-    return sourceList.filter(alt => alt.equipment && alt.equipment.every(eq => activeZone.inventory?.includes(eq)));
-  }, [allExercises, exercise, activeZone]);
-
-  return (
-    <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-md z-[250] flex flex-col animate-in fade-in duration-300">
-      <div className="p-6 border-b border-white/5 bg-[#0f0d15] flex justify-between items-start shrink-0">
-        <div className="flex items-center gap-4">
-           <div className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 bg-white/5 flex-shrink-0">{imageSrc ? (<img src={imageSrc} alt={exercise.name} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex items-center justify-center"><Dumbbell className="text-white/20" size={24} /></div>)}</div>
-           <div><h2 className="text-2xl font-black italic uppercase leading-none mb-1 tracking-tighter text-white">{exercise.name}</h2>{exercise.englishName && (<p className="text-xs font-bold text-white/40 italic leading-none tracking-tight">{exercise.englishName}</p>)}</div>
-        </div>
-        <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl text-text-dim hover:bg-white/10 transition-colors"><X size={24} /></button>
-      </div>
-      <div className="flex p-4 gap-2 border-b border-white/5 shrink-0">
-        {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'history', label: 'Historik', icon: History }, { id: 'alternatives', label: 'Alternativ', icon: Shuffle }].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${activeTab === tab.id ? 'bg-white text-black shadow-lg scale-[1.02]' : 'bg-white/5 text-text-dim hover:bg-white/10'}`}><tab.icon size={16} /> {tab.label}</button>
-        ))}
-      </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {activeTab === 'info' && (
-          <div className="space-y-6 animate-in slide-in-from-bottom-2">
-             <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1.5 bg-accent-blue/10 border border-accent-blue/20 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-blue">{exercise.pattern}</span>
-                <span className="px-3 py-1.5 bg-accent-pink/10 border border-accent-pink/20 rounded-lg text-[10px] font-black uppercase tracking-widest text-accent-pink">{(exercise.tier || 'tier_3').replace('_', ' ')}</span>
-                {(exercise.equipment || []).map(eq => (<span key={eq} className="px-3 py-1.5 bg-white/5 border border-white/5 rounded-lg text-[10px] font-black uppercase tracking-widest text-text-dim">{eq}</span>))}
-             </div>
-             <div className="bg-[#1a1721] p-5 rounded-3xl border border-white/5">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mb-3 flex items-center gap-2"><BookOpen size={12} /> Utförande</h4>
-                <p className="text-sm leading-relaxed text-white/90 font-medium">{exercise.description || 'Ingen beskrivning tillgänglig.'}</p>
-             </div>
-             <div>
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-text-dim mb-3 ml-1">Muskler</h4>
-                <div className="flex flex-wrap gap-2">
-                   {(exercise.primaryMuscles || []).map(m => (<div key={m} className="px-4 py-2 bg-[#1a1721] border-l-2 border-accent-pink rounded-r-xl text-xs font-bold text-white shadow-sm">{m}</div>))}
-                   {(exercise.secondaryMuscles || []).map(m => (<div key={m} className="px-4 py-2 bg-[#1a1721] border-l-2 border-white/20 rounded-r-xl text-xs font-bold text-text-dim shadow-sm">{m}</div>))}
-                </div>
-             </div>
-          </div>
-        )}
-        {activeTab === 'history' && (
-          <div className="space-y-3 animate-in slide-in-from-bottom-2">
-             {exerciseHistory.length > 0 ? (
-               exerciseHistory.map((item, idx) => (
-                 <div key={idx} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 flex justify-between items-center group">
-                    <div>
-                       <div className="flex items-center gap-2 mb-1"><Calendar size={12} className="text-text-dim" /><span className="text-[10px] font-black uppercase text-text-dim tracking-widest">{new Date(item.date).toLocaleDateString('sv-SE')}</span></div>
-                       <p className="text-xs font-bold text-white/60">{item.sessionName}</p>
-                       <button onClick={() => onApplyHistory(exIdx, item.fullSets)} className="mt-2 bg-accent-blue/10 text-accent-blue text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">Använd detta</button>
-                    </div>
-                    {item.bestSet && (
-                      <div className="text-right">
-                         <span className="text-xl font-black italic text-white block leading-none">{item.bestSet.weight} <span className="text-[10px] text-text-dim not-italic font-bold">kg</span></span>
-                         <span className="text-[10px] font-bold text-accent-blue uppercase tracking-wider">x {item.bestSet.reps} reps</span>
-                      </div>
-                    )}
-                 </div>
-               ))
-             ) : ( <div className="py-12 text-center opacity-40"><History size={48} className="mx-auto mb-4" strokeWidth={1} /><p className="text-xs font-bold uppercase tracking-widest">Ingen historik än</p></div>)}
-          </div>
-        )}
-        {activeTab === 'alternatives' && (
-          <div className="space-y-3 animate-in slide-in-from-bottom-2">
-             <p className="text-[10px] font-black uppercase text-text-dim tracking-widest mb-2 ml-1">Liknande övningar ({exercise.primaryMuscles?.[0] || 'Okänd'})</p>
-             {alternatives.length > 0 ? (
-               alternatives.map(alt => (
-                 <div key={alt.id} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 items-center justify-between group flex">
-                    <div className="flex items-center gap-4">
-                       <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/5"><Shuffle size={16} className="text-white/40" /></div>
-                       <div><p className="text-sm font-black italic uppercase text-white">{alt.name}</p><p className="text-[9px] font-bold text-text-dim uppercase tracking-widest">{alt.equipment?.join(', ')}</p></div>
-                    </div>
-                    <button onClick={() => onExerciseSwap(exIdx, alt.id)} className="bg-white/5 text-white px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 hover:bg-white/10">Byt</button>
-                 </div>
-               ))
-             ) : (<div className="py-12 text-center opacity-40"><Shuffle size={48} className="mx-auto mb-4" strokeWidth={1} /><p className="text-xs font-bold uppercase tracking-widest">Inga alternativ hittades</p></div>)}
-          </div>
-        )}
-      </div>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { WorkoutSet, SetType, TrackingType, Exercise, UserProfile, Equipment } f
 import { Check, Plus, Thermometer, Zap, AlertCircle, Scale, BarChart3 as RepsIcon, Map as DistanceIcon, Timer as TimerIcon } from 'lucide-react';
 import { TimePickerModal } from './TimePickerModal';
 import { NumberPickerModal } from './NumberPickerModal';
+import { ActiveTimerModal } from './ActiveTimerModal';
 
 interface SetRowProps {
   setIdx: number;
@@ -26,6 +27,7 @@ export const SetRow: React.FC<SetRowProps> = ({
   availablePlates
 }) => {
   const [activeModal, setActiveModal] = useState<'reps' | 'weight' | 'dist' | 'time' | null>(null);
+  const [showActiveTimer, setShowActiveTimer] = useState(false);
 
   const isBarbellExercise = useMemo(() => 
     exData.equipment.includes(Equipment.BARBELL) || 
@@ -131,7 +133,21 @@ export const SetRow: React.FC<SetRowProps> = ({
         </div>
 
         <div className="pl-2">
-          <button onClick={() => onUpdate({ completed: !isCompleted })} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${ isCompleted ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-[#25222e] text-white/20 border border-white/5 hover:border-accent-pink/50 hover:text-accent-pink' }`}><Check size={24} strokeWidth={4} /></button>
+          {trackingType === 'time_only' && !isCompleted ? (
+            <button 
+              onClick={() => setShowActiveTimer(true)} 
+              className="w-12 h-12 bg-accent-blue/10 border border-accent-blue/20 rounded-xl flex items-center justify-center text-accent-blue transition-all active:scale-90"
+            >
+              <TimerIcon size={22} />
+            </button>
+          ) : (
+            <button 
+              onClick={() => onUpdate({ completed: !isCompleted })} 
+              className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 active:scale-90 shadow-lg ${ isCompleted ? 'bg-green-500 text-black shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'bg-[#25222e] text-white/20 border border-white/5 hover:border-accent-pink/50 hover:text-accent-pink' }`}
+            >
+              <Check size={24} strokeWidth={4} />
+            </button>
+          )}
         </div>
       </div>
       
@@ -186,6 +202,21 @@ export const SetRow: React.FC<SetRowProps> = ({
           availablePlates={availablePlates}
           onSave={(v) => { onUpdate({ weight: v }); setActiveModal(null); }}
           onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {showActiveTimer && (
+        <ActiveTimerModal 
+          targetSeconds={set.duration || 60}
+          onCancel={() => setShowActiveTimer(false)}
+          onComplete={(time, isFail) => {
+            onUpdate({ 
+              duration: isFail ? time : (set.duration || time),
+              completed: true,
+              type: isFail ? 'failure' : set.type
+            });
+            setShowActiveTimer(false);
+          }}
         />
       )}
     </>
