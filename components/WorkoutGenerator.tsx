@@ -90,8 +90,8 @@ export const WorkoutGenerator: React.FC<WorkoutGeneratorProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0f0d15] z-[200] flex flex-col p-6 animate-in slide-in-from-bottom-10 duration-500">
-      <header className="flex justify-between items-center mb-10 pt-4">
+    <div className="fixed inset-0 bg-[#0f0d15] z-[200] flex flex-col p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] animate-in slide-in-from-bottom-10 duration-500">
+      <header className="flex justify-between items-center mb-10">
         <div>
            <h2 className="text-3xl font-black italic uppercase text-white flex items-center gap-2">
              <Sparkles className="text-accent-blue" size={28} /> Smart PT

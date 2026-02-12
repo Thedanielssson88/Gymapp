@@ -917,7 +917,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       )}
 
       {showZonePicker && (
-        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[9999] flex flex-col p-6 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[9999] flex flex-col p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] animate-in fade-in duration-200">
            <header className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black italic uppercase text-white">Välj Gym</h3><button onClick={() => setShowZonePicker(false)} className="p-3 bg-white/5 rounded-2xl"><X size={24} className="text-white"/></button></header>
            <div className="flex-1 overflow-y-auto space-y-3">{(allZones || []).map(z => {
                  const isActive = activeZone.id === z.id;

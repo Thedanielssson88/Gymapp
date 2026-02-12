@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
-import { getAccessToken, uploadBackup, findBackupFile, BackupData } from '../services/googleDrive';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { getAccessToken, uploadBackup, findBackupFile, BackupData, isTokenValid } from '../services/googleDrive';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -14,7 +14,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   const [localProfile, setLocalProfile] = useState<UserProfile>(userProfile);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [connectionError, setConnectionError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Proactively check token validity on mount if user is linked
+    if (userProfile.settings?.googleDriveLinked) {
+      isTokenValid().then(valid => {
+        if (!valid) {
+          setConnectionError(true);
+        }
+      });
+    }
+  }, [userProfile.settings?.googleDriveLinked]);
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
     setLocalProfile(prev => ({
@@ -39,12 +51,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   const handleCloudSync = async () => {
     setIsSyncing(true);
     setSyncStatus('idle');
+    setConnectionError(false);
+
     try {
       const token = await getAccessToken();
       if (!token) {
-        alert("Kunde inte ansluta till Google Drive. Kontrollera din inloggning.");
-        setIsSyncing(false);
-        return;
+        throw new Error("Kunde inte ansluta till Google. Försök igen.");
       }
 
       const backupData = await storage.getFullBackupData();
@@ -68,6 +80,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
       setSyncStatus('error');
     } finally {
       setIsSyncing(false);
+      setTimeout(() => setSyncStatus('idle'), 3000); // Reset status after 3s
     }
   };
 
@@ -131,6 +144,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     }
   };
 
+  const getSyncButtonContent = () => {
+    if (isSyncing) return <><Loader2 className="animate-spin" size={18} /> Synkroniserar...</>;
+    if (syncStatus === 'success') return <><CheckCircle2 size={18} /> Synkning Lyckades!</>;
+    if (syncStatus === 'error') return <><AlertCircle size={18} /> Försök Igen</>;
+    return <><Cloud size={18} /> {localProfile.settings?.googleDriveLinked ? 'Synka Nu' : 'Anslut till Google Drive'}</>;
+  };
+  
+  const getSyncButtonClass = () => {
+    if (isSyncing) return 'bg-white/5 text-white/40 cursor-not-allowed';
+    if (syncStatus === 'success') return 'bg-accent-green text-black';
+    if (syncStatus === 'error') return 'bg-red-500 text-white';
+    return 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20';
+  };
 
   return (
     <div className="space-y-8 pb-32 px-2 animate-in fade-in">
@@ -188,17 +214,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
           </div>
         </div>
 
+        {connectionError && (
+          <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl animate-in fade-in">
+            <AlertCircle className="text-red-500" size={24} />
+            <p className="text-[10px] font-bold text-red-500 uppercase leading-snug">
+              Anslutningen till Google har löpt ut. Tryck på "Synka Nu" för att logga in igen.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-4">
           <button 
             onClick={handleCloudSync}
             disabled={isSyncing}
-            className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs transition-all active:scale-95 ${isSyncing ? 'bg-white/5 text-white/20' : 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20'}`}
+            className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs transition-all active:scale-95 ${getSyncButtonClass()}`}
           >
-            {isSyncing ? <RefreshCw className="animate-spin" size={18} /> : <Cloud size={18} />}
-            {localProfile.settings?.googleDriveLinked ? 'Synka Nu' : 'Anslut till Google Drive'}
+            {getSyncButtonContent()}
           </button>
 
-          {localProfile.settings?.lastCloudSync && (
+          {localProfile.settings?.lastCloudSync && !connectionError && (
             <p className="text-[9px] text-center text-text-dim uppercase font-bold">
               Senaste synk: {new Date(localProfile.settings.lastCloudSync).toLocaleString('sv-SE')}
             </p>

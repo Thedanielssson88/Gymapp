@@ -17,6 +17,24 @@ const STORAGE_KEY_TOKEN = 'google_access_token';
 const STORAGE_KEY_EXPIRY = 'google_token_expiry';
 
 /**
+ * Checks if the currently stored token is still valid by pinging Google's token info endpoint.
+ */
+export const isTokenValid = async (): Promise<boolean> => {
+    const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+    const expiry = localStorage.getItem(STORAGE_KEY_EXPIRY);
+    // 5-minute safety margin (300000 ms)
+    if (storedToken && expiry && Date.now() < parseInt(expiry) - 300000) {
+        try {
+            const response = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${storedToken}`);
+            return response.ok;
+        } catch {
+            return false;
+        }
+    }
+    return false;
+};
+
+/**
  * Handles Google OAuth2 login and returns an access token, now with localStorage persistence.
  */
 export const getAccessToken = async (): Promise<string | null> => {

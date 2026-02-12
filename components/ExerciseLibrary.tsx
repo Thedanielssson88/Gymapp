@@ -304,7 +304,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
 
   return (
     <div className="fixed inset-0 bg-[#0f0d15] z-[250] flex flex-col animate-in slide-in-from-bottom-10">
-      <header className="flex justify-between items-center p-6 border-b border-white/5 bg-[#0f0d15]"><h3 className="text-2xl font-black italic uppercase">Redigera Övning</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
+      <header className="flex justify-between items-center p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] border-b border-white/5 bg-[#0f0d15]"><h3 className="text-2xl font-black italic uppercase">Redigera Övning</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
       <div className="flex p-4 gap-2 border-b border-white/5">
           {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'muscles', label: 'Muskler', icon: Layers }, { id: 'progression', label: 'Progression', icon: TrendingUp }, { id: 'settings', label: 'Data', icon: Scale }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}><tab.icon size={16} /> {tab.label}</button>))}
       </div>
@@ -423,7 +423,7 @@ const AlternativeSelectorModal: React.FC<{ allExercises: Exercise[], selectedIds
   const toggleSelection = (id: string) => setCurrentSelection(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   const handleSave = () => { onSave(currentSelection); onClose(); };
   return (
-    <div className="fixed inset-0 bg-[#0f0d15] z-[300] flex flex-col p-6 animate-in slide-in-from-bottom-10">
+    <div className="fixed inset-0 bg-[#0f0d15] z-[300] flex flex-col p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] animate-in slide-in-from-bottom-10">
       <header className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black italic uppercase">Välj Alternativ</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
       <div className="relative group mb-4"><Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim" size={18} /><input type="text" placeholder="Sök övning..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-14 outline-none focus:border-accent-blue" /></div>
       <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-24">{filteredExercises.map(ex => { const isSelected = currentSelection.includes(ex.id); return (<button key={ex.id} onClick={() => toggleSelection(ex.id)} className={`w-full p-4 rounded-2xl flex items-center justify-between transition-all border ${isSelected ? 'bg-accent-blue/10 border-accent-blue' : 'bg-white/5 border-transparent'}`}><span className={`font-bold text-sm ${isSelected ? 'text-accent-blue' : 'text-white'}`}>{ex.name}</span><div className={`w-6 h-6 rounded-full border flex items-center justify-center ${isSelected ? 'bg-accent-blue border-accent-blue' : 'border-white/20'}`}>{isSelected && <Check size={14} className="text-black" />}</div></button>)})}</div>
