@@ -85,27 +85,20 @@ export default function App() {
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
       const isVibrationEnabled = user?.settings?.vibrateOnRestEnd ?? true; 
-
       if (!isVibrationEnabled) return;
 
-      let target = e.target as HTMLElement;
+      const target = e.target as HTMLElement;
+      const button = target.closest('button, a, [role="button"]');
       
-      while (target && target !== document.body) {
-        const tagName = target.tagName;
-        
-        if (tagName === 'BUTTON' || tagName === 'A' || target.getAttribute('role') === 'button') {
+      if (button) {
           triggerHaptic.light(); 
-          break;
-        }
-        
-        target = target.parentElement as HTMLElement;
       }
     };
 
     window.addEventListener('click', handleGlobalClick);
 
     return () => window.removeEventListener('click', handleGlobalClick);
-  }, [user]);
+  }, [user?.settings?.vibrateOnRestEnd]);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([

@@ -31,6 +31,8 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({
             if (newValue <= 5 && newValue > 0) {
               Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
             } else if (newValue === 0) {
+              // KRAFTIG VIBRATION: 1 sekunds vibration + notis
+              Haptics.vibrate({ duration: 1000 }).catch(() => {});
               Haptics.notification({ type: NotificationType.Success }).catch(() => {});
             }
           }
