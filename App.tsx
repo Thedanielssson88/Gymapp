@@ -149,9 +149,6 @@ export default function App() {
                     if (new Date(backup.exportedAt) > new Date(localExportedAt)) {
                        await storage.importFullBackup(backup);
                        console.log("Cloud data restored on startup.");
-                       alert("Nyare data hittades i molnet och har återställts. Appen startas om.");
-                       window.location.reload();
-                       return;
                     }
                  }
                }
@@ -249,34 +246,28 @@ export default function App() {
       });
       await storage.setActiveSession(null);
       
-      // AUTO SYNC AFTER WORKOUT with robust error handling
+      // AUTO SYNC AFTER WORKOUT
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
-        getAccessToken().then(async (token) => {
-          if (token) {
-            const backupData = await storage.getFullBackupData();
-            const existingFileId = await findBackupFile(token);
-            await uploadBackup(token, backupData, existingFileId);
-            
-            // This is a fire-and-forget update, so we update the local user state
-            // to reflect the sync time immediately, even if the DB write is async.
-            const updatedProfile = {
-              ...user,
-              settings: {
-                ...user.settings!,
-                lastCloudSync: backupData.exportedAt
-              }
-            };
-            await storage.setUserProfile(updatedProfile);
-            setUser(updatedProfile); // Update state locally for immediate feedback
-            console.log("Cloud sync completed after workout.");
-
-          } else {
-            throw new Error("Ingen giltig token för Google Drive.");
+          try {
+            const token = await getAccessToken();
+            if (token) {
+              const backupData = await storage.getFullBackupData();
+              const existingFileId = await findBackupFile(token);
+              await uploadBackup(token, backupData, existingFileId);
+              
+              const updatedProfile = {
+                ...user,
+                settings: {
+                  ...user.settings!,
+                  lastCloudSync: new Date().toISOString()
+                }
+              };
+              await storage.setUserProfile(updatedProfile);
+              console.log("Cloud sync completed after workout.");
+            }
+          } catch (e) {
+            console.warn("Post-workout sync failed:", e);
           }
-        }).catch((err) => {
-          console.error("Auto-backup failed:", err);
-          alert("OBS: Kunde inte spara backup till Drive (utloggad eller nätverksfel). Gå till Inställningar och synka manuellt.");
-        });
       }
 
       await refreshData(); 

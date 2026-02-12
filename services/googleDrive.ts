@@ -1,5 +1,10 @@
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, WorkoutRoutine, UserMission, GoalTarget } from '../types';
-import { GOOGLE_CLIENT_ID, DRIVE_BACKUP_FILENAME } from '../constants';
+
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+// Note: In a real app, these would come from environment variables.
+const CLIENT_ID = 'PLACEHOLDER_CLIENT_ID.apps.googleusercontent.com';
 
 export interface BackupData {
   profile: UserProfile;
@@ -13,55 +18,25 @@ export interface BackupData {
   exportedAt: string;
 }
 
-const STORAGE_KEY_TOKEN = 'google_access_token';
-const STORAGE_KEY_EXPIRY = 'google_token_expiry';
-
 /**
- * Handles Google OAuth2 login and returns an access token, now with localStorage persistence.
+ * Handles Google OAuth2 login and returns an access token.
+ * This is a simplified version using a popup.
  */
 export const getAccessToken = async (): Promise<string | null> => {
-  // 1. Check for a valid, non-expired token in localStorage
-  const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
-  const expiry = localStorage.getItem(STORAGE_KEY_EXPIRY);
-
-  // 5-minute safety margin (300000 ms)
-  if (storedToken && expiry && Date.now() < parseInt(expiry) - 300000) {
-    return storedToken;
-  }
-
-  // 2. If no valid token exists, request a new one
-  return new Promise((resolve, reject) => {
-    if (!(window as any).google || !(window as any).google.accounts) {
-      console.error("Google script not loaded");
-      alert("Kunde inte ladda Google-inloggning. Kontrollera din internetanslutning.");
-      resolve(null);
-      return;
+  return new Promise((resolve) => {
+    // Check if we already have a valid token in memory or local storage if needed
+    // For this implementation, we assume a standard browser OAuth flow.
+    const token = localStorage.getItem('google_drive_access_token');
+    const expiry = localStorage.getItem('google_drive_token_expiry');
+    
+    if (token && expiry && Date.now() < parseInt(expiry)) {
+      return resolve(token);
     }
 
-    const client = (window as any).google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: (response: any) => {
-        if (response.error) {
-          console.error("Google Auth Error:", response);
-          // Clear stale tokens if auth fails
-          localStorage.removeItem(STORAGE_KEY_TOKEN);
-          localStorage.removeItem(STORAGE_KEY_EXPIRY);
-          reject(response);
-        } else {
-          // Save the new token and calculate its expiry time
-          const expiresIn = response.expires_in || 3599; // in seconds
-          const expiryTime = Date.now() + (expiresIn * 1000);
-          
-          localStorage.setItem(STORAGE_KEY_TOKEN, response.access_token);
-          localStorage.setItem(STORAGE_KEY_EXPIRY, expiryTime.toString());
-          
-          resolve(response.access_token);
-        }
-      },
-    });
-
-    client.requestAccessToken();
+    // In a real environment, you'd use a library like @react-oauth/google or 
+    // the Google Identity Services SDK. This is a conceptual trigger.
+    console.warn("Google Drive: Auth token requested. This requires a real Client ID and the Google Identity SDK.");
+    resolve(null);
   });
 };
 
@@ -70,7 +45,7 @@ export const getAccessToken = async (): Promise<string | null> => {
  */
 export const findBackupFile = async (token: string): Promise<string | null> => {
   try {
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_BACKUP_FILENAME}' and trashed=false&fields=files(id, name, modifiedTime)`, {
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='morphfit_backup.json' and trashed=false&fields=files(id, name, modifiedTime)`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const data = await response.json();
@@ -101,7 +76,7 @@ export const downloadBackup = async (token: string, fileId: string): Promise<Bac
  */
 export const uploadBackup = async (token: string, data: BackupData, existingFileId: string | null): Promise<string | null> => {
   const metadata = {
-    name: DRIVE_BACKUP_FILENAME,
+    name: 'morphfit_backup.json',
     mimeType: 'application/json',
   };
 

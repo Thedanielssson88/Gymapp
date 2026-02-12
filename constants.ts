@@ -30,6 +30,3 @@ export const DEFAULT_PROFILE: UserProfile = {
     vibrateOnRestEnd: true
   }
 };
-
-export const GOOGLE_CLIENT_ID = '780206293738-lkma7befhm89jp7kd2cgr7u6g0c3bpb0.apps.googleusercontent.com';
-export const DRIVE_BACKUP_FILENAME = 'morphfit_backup.json';
