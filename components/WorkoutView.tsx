@@ -752,7 +752,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             const currentId = item.supersetId;
             const prevId = localSession.exercises[exIdx - 1]?.supersetId;
             const nextId = localSession.exercises[exIdx + 1]?.supersetId;
-            const isInSuperset = !!currentId;
+            const isInSuperset = !!currentId && (currentId === prevId || currentId === nextId);
             const isSupersetStart = isInSuperset && currentId !== prevId;
             const isSupersetEnd = isInSuperset && currentId !== nextId;
             return (

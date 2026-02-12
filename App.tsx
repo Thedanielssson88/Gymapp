@@ -171,6 +171,10 @@ export default function App() {
 
         setLoadingStatus('Läser in användardata...');
         await refreshData();
+        const activeSess = await storage.getActiveSession();
+        if (activeSess) {
+          setActiveTab('workout');
+        }
         setLoadingStatus('Slutför...');
       } catch (error) {
         console.error("Kritisk fel vid start:", error);
@@ -307,12 +311,19 @@ export default function App() {
       isManual: !!pendingManualDate
     };
     
-    await storage.setActiveSession(newSess);
-    await refreshData();
+    // 1. Tell storage to save the session (this is debounced and non-blocking)
+    storage.setActiveSession(newSess);
+    
+    // 2. Update local state in App.tsx immediately (Optimistic Update)
+    setCurrentSession(newSess);
+    
+    // 3. Force the view to the workout tab
+    setActiveTab('workout');
+    
+    // 4. Close modals and reset temporary state
     setShowStartMenu(false);
     setSelectedZoneForStart(null);
     setPendingManualDate(null);
-    setActiveTab('workout');
   };
 
   const handleStartEmptyWorkout = () => {
