@@ -35,7 +35,8 @@ const ExerciseImage = ({ exercise }: { exercise: Exercise }) => {
     );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, history, onUpdate, onSelect, onClose, activeZone, userProfile }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: initialExercises, history, onUpdate, onSelect, onClose, activeZone, userProfile }) => {
+  const [exercises, setExercises] = useState(initialExercises || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'alphabetical' | 'recent'>('recent');
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -47,6 +48,12 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
   const [selectedFilterValue, setSelectedFilterValue] = useState<string | null>(null);
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
+
+  useEffect(() => {
+    if (initialExercises.length !== exercises.length) {
+      setExercises(initialExercises);
+    }
+  }, [initialExercises, exercises.length]);
 
   const handleRate = async (ex: Exercise, rating: 'up' | 'down') => {
     const newRating = ex.userRating === rating ? null : rating;
@@ -67,7 +74,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
   };
 
   const filteredExercises = useMemo(() => {
-    let filtered = (allExercises || []).filter(ex => {
+    let filtered = (exercises || []).filter(ex => {
       const q = searchQuery.toLowerCase();
       const matchesSearch = ex.name.toLowerCase().includes(q) || ex.englishName?.toLowerCase().includes(q);
       
@@ -105,7 +112,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
       }
       return a.name.localeCompare(b.name);
     });
-  }, [allExercises, searchQuery, activeFilterTab, selectedFilterValue, isSelectorMode, activeZone, sortBy, history, showOnlyFavorites]);
+  }, [exercises, searchQuery, activeFilterTab, selectedFilterValue, isSelectorMode, activeZone, sortBy, history, showOnlyFavorites]);
 
   useEffect(() => {
       setDisplayCount(ITEMS_PER_PAGE);
@@ -114,19 +121,42 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
 
   const visibleExercises = filteredExercises.slice(0, displayCount);
 
-  const handleSave = async (exercise: Exercise) => {
-    const updatedExercise = { ...exercise, muscleGroups: Array.from(new Set([...(exercise.primaryMuscles || []), ...(exercise.secondaryMuscles || [])])) };
-    await storage.saveExercise(updatedExercise);
-    setEditingExercise(null);
-    onUpdate();
+  const handleSave = async (exerciseData: Exercise) => {
+    try {
+        const exerciseToSave = { 
+            ...exerciseData, 
+            muscleGroups: Array.from(new Set([...(exerciseData.primaryMuscles || []), ...(exerciseData.secondaryMuscles || [])])) 
+        };
+
+        await storage.saveExercise(exerciseToSave);
+
+        setExercises(prev => {
+            const exists = prev.find(ex => ex.id === exerciseToSave.id);
+            if (exists) {
+                return prev.map(ex => ex.id === exerciseToSave.id ? exerciseToSave : ex);
+            }
+            return [exerciseToSave, ...prev];
+        });
+
+        setEditingExercise(null);
+        
+        if (onUpdate) {
+            onUpdate(); 
+        }
+
+    } catch (error) {
+        console.error("Fel vid sparning:", error);
+    }
   };
 
+
   const handleDelete = async (id: string) => {
-      if(confirm("Är du säker på att du vill ta bort denna övning?")) {
-          await storage.deleteExercise(id);
-          setEditingExercise(null);
-          onUpdate();
-      }
+    if(confirm("Är du säker på att du vill ta bort denna övning?")) {
+        await storage.deleteExercise(id);
+        setExercises(prev => prev.filter(ex => ex.id !== id));
+        setEditingExercise(null);
+        onUpdate();
+    }
   }
 
   const FilterPills = ({ items }: { items: string[] }) => (
@@ -142,7 +172,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
       <header className="flex justify-between items-center mb-2">
         <div>
           <h2 className="text-3xl font-black italic uppercase tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2>
-          {!isSelectorMode && (<p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{(allExercises || []).length} ÖVNINGAR I DATABASEN</p>)}
+          {!isSelectorMode && (<p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{(exercises || []).length} ÖVNINGAR I DATABASEN</p>)}
         </div>
         {isSelectorMode ? (<button onClick={onClose} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (<div className="flex gap-2"><button onClick={() => setShowImporter(true)} className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl"><Plus size={24} /></button><button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [], equipmentRequirements: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button></div>)}
       </header>
@@ -176,7 +206,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
               }`}
             >
               <Heart size={14} fill={showOnlyFavorites ? 'currentColor' : 'none'} />
-              Visa Endast Favoriter ({allExercises.filter(e => e.userRating === 'up').length})
+              Visa Endast Favoriter ({exercises.filter(e => e.userRating === 'up').length})
             </button>
           <div className="flex bg-[#1a1721] p-1 rounded-2xl border border-white/5 overflow-x-auto shrink-0">
             {[{ id: 'all', label: 'Alla' }, { id: 'muscles', label: 'Muskler' }, { id: 'equipment', label: 'Utrustning' }, { id: 'pattern', label: 'Mönster' }].map(tab => (<button key={tab.id} onClick={() => { setActiveFilterTab(tab.id as any); setSelectedFilterValue(null); }} className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeFilterTab === tab.id ? 'bg-white/10 text-white shadow-sm' : 'text-text-dim hover:text-white'}`}>{tab.label}</button>))}
@@ -193,12 +223,24 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
         </div>
         {visibleExercises.map(ex => {
           const lastTime = getLastUsed(ex.id);
+          
+          const handleItemClick = () => {
+            if (isSelectorMode && onSelect) {
+              onSelect(ex);
+            } else {
+              setEditingExercise(ex);
+            }
+          };
+
           return (
             <div 
               key={ex.id} 
-              className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors ${lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5'}`}
+              onClick={handleItemClick}
+              className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors cursor-pointer ${
+                lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5 hover:border-white/10'
+              }`}
             >
-              <div className="flex items-center gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => !isSelectorMode && setEditingExercise(ex)}>
+              <div className="flex items-center gap-4 overflow-hidden flex-1">
                 <ExerciseImage exercise={ex} />
                 <div className="min-w-0">
                   <h3 className="text-base font-black italic uppercase truncate text-white">{ex.name}</h3>
@@ -207,12 +249,13 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
                   </p>
                 </div>
               </div>
+              
               {isSelectorMode && onSelect ? (
-                <button onClick={() => onSelect(ex)} className="p-3 bg-accent-pink rounded-xl text-white active:scale-90 transition-transform">
+                <div className="p-3 bg-accent-pink rounded-xl text-white active:scale-90 transition-transform">
                   <Plus size={18} />
-                </button>
+                </div>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}> 
                     <button onClick={() => handleRate(ex, 'up')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'up' ? 'bg-green-500/20 text-green-500' : 'bg-white/10 text-text-dim'}`}>
                       <ThumbsUp size={16} fill={ex.userRating === 'up' ? "currentColor" : "none"}/>
                     </button>
@@ -228,7 +271,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
         {filteredExercises.length === 0 && (<div className="text-center py-10 opacity-30"><Filter size={48} className="mx-auto mb-2"/><p className="text-xs font-bold uppercase">Inga övningar matchar filtret</p></div>)}
       </div>
 
-      {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={allExercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} userProfile={userProfile} />}
+      {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={exercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} userProfile={userProfile} />}
       {showImporter && !isSelectorMode && <div className="fixed inset-0 z-[200] bg-[#0f0d15] animate-in slide-in-from-bottom-10"><ExerciseImporter onClose={() => setShowImporter(false)} onImport={(data) => { setEditingExercise({ ...editingExercise, ...data } as any); setShowImporter(false); }} /></div>}
     </div>
   );

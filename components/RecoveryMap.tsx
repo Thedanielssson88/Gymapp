@@ -23,8 +23,6 @@ export const RecoveryMap: React.FC<RecoveryMapProps> = ({
     if (mode !== 'load' || !loadScores) return 1;
     const values = Object.values(loadScores);
     if (values.length === 0) return 1;
-    // FIX: The type of `values` can be inferred as `unknown[]`, which is not compatible with `Math.max`.
-    // Casting to `number[]` resolves the type mismatch.
     return Math.max(...(values as number[]), 1);
   }, [mode, loadScores]);
 

@@ -12,12 +12,7 @@ export const getWorkoutInsights = async (
   exerciseHistory: string
 ): Promise<string> => {
   try {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      return "AI-coach är ej tillgänglig. API-nyckel saknas.";
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -55,12 +50,7 @@ export const generateExerciseDetailsFromGemini = async (
   exerciseName: string
 ): Promise<Partial<Exercise>> => {
   try {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-      throw new Error("Gemini API-nyckel saknas.");
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
