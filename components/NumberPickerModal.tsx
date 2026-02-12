@@ -1,8 +1,7 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, ChevronUp, ChevronDown, Scale } from 'lucide-react';
 import { PlateDisplay } from './PlateDisplay';
-import { UserProfile } from '../types';
-import { triggerHaptic } from '../utils/haptics';
 
 interface NumberPickerModalProps {
   title: string;
@@ -16,11 +15,10 @@ interface NumberPickerModalProps {
   availablePlates?: number[];
   onSave: (value: number) => void;
   onClose: () => void;
-  userProfile?: UserProfile;
 }
 
 export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
-  title, unit, value, step = 1, min = 0, max = 99999, precision = 2, barWeight = 0, onSave, onClose, availablePlates, userProfile
+  title, unit, value, step = 1, min = 0, max = 99999, precision = 2, barWeight = 0, onSave, onClose, availablePlates
 }) => {
   const [localVal, setLocalVal] = useState<string>(value.toString());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,10 +51,6 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     const newValue = direction === 'up' ? currentNum + step : currentNum - step;
     const clampedValue = Math.max(min, Math.min(max, newValue));
     
-    if (userProfile && clampedValue !== currentNum) {
-      triggerHaptic.tick(userProfile);
-    }
-    
     if (precision === 0) {
         setLocalVal(Math.round(clampedValue).toString());
     } else {
@@ -75,7 +69,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   };
 
   const handleQuickSelect = (val: number) => {
-    setLocalVal(val.toString());
+    saveValue(val);
   };
 
   const handleFinalSave = () => {

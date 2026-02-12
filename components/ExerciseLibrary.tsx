@@ -193,24 +193,12 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
         </div>
         {visibleExercises.map(ex => {
           const lastTime = getLastUsed(ex.id);
-          
-          const handleItemClick = () => {
-            if (isSelectorMode && onSelect) {
-              onSelect(ex);
-            } else {
-              setEditingExercise(ex);
-            }
-          };
-
           return (
             <div 
               key={ex.id} 
-              onClick={handleItemClick}
-              className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors cursor-pointer ${
-                lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5 hover:border-white/10'
-              }`}
+              className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors ${lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5'}`}
             >
-              <div className="flex items-center gap-4 overflow-hidden flex-1">
+              <div className="flex items-center gap-4 overflow-hidden flex-1 cursor-pointer" onClick={() => !isSelectorMode && setEditingExercise(ex)}>
                 <ExerciseImage exercise={ex} />
                 <div className="min-w-0">
                   <h3 className="text-base font-black italic uppercase truncate text-white">{ex.name}</h3>
@@ -219,13 +207,12 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
                   </p>
                 </div>
               </div>
-              
               {isSelectorMode && onSelect ? (
-                <div className="p-3 bg-accent-pink rounded-xl text-white active:scale-90 transition-transform">
+                <button onClick={() => onSelect(ex)} className="p-3 bg-accent-pink rounded-xl text-white active:scale-90 transition-transform">
                   <Plus size={18} />
-                </div>
+                </button>
               ) : (
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}> 
+                <div className="flex items-center gap-2">
                     <button onClick={() => handleRate(ex, 'up')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'up' ? 'bg-green-500/20 text-green-500' : 'bg-white/10 text-text-dim'}`}>
                       <ThumbsUp size={16} fill={ex.userRating === 'up' ? "currentColor" : "none"}/>
                     </button>

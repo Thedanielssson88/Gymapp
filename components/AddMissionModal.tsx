@@ -137,6 +137,7 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({
       startValue: initialMission?.startValue !== undefined ? initialMission.startValue : currentValue,
       targetValue: target,
       exerciseId: type === 'weight' ? selectedExId : undefined,
+      // FIX: Ensure that an empty string for selectedMeasure results in `undefined` for measurementKey
       measurementKey: type === 'measurement' && selectedMeasure ? selectedMeasure : undefined,
       isCompleted: initialMission?.isCompleted || false,
       createdAt: initialMission?.createdAt || new Date().toISOString(),

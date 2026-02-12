@@ -79,6 +79,7 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
       <div className="fixed inset-0 z-[300] bg-[#0f0d15]">
         <ExerciseLibrary 
           allExercises={allExercises} 
+          // FIX: Pass the history prop to ExerciseLibrary
           history={history}
           onSelect={handleAddExercise} 
           onClose={() => setShowLibrary(false)}

@@ -1,267 +1,132 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { UserProfile, BiometricLog, BodyMeasurements } from '../types';
+
+import React, { useState } from 'react';
+import { UserProfile, BodyMeasurements } from '../types';
 import { storage } from '../services/storage';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer 
-} from 'recharts';
-import { 
-  ChevronLeft, Plus, Calendar, History, 
-  TrendingUp, Scale, Ruler, Check, X 
-} from 'lucide-react';
+import { X, Check, Ruler, Plus, History } from 'lucide-react';
 
 interface MeasurementsViewProps {
   profile: UserProfile;
   onUpdate: () => void;
 }
 
-// Definition of fields to display
-const MEASUREMENT_CONFIG = [
-  { key: 'weight', label: 'Vikt', unit: 'kg', icon: '⚖️' },
-  { key: 'neck', label: 'Nacke', unit: 'cm', icon: '🧣' },
-  { key: 'shoulders', label: 'Axlar', unit: 'cm', icon: '🔱' },
-  { key: 'chest', label: 'Bröst', unit: 'cm', icon: '👕' },
-  { key: 'waist', label: 'Midja', unit: 'cm', icon: '📏' },
-  { key: 'hips', label: 'Höfter', unit: 'cm', icon: '🍑' },
-  { key: 'bicepsL', label: 'Vänster Biceps', unit: 'cm', icon: '💪', pair: 'biceps' },
-  { key: 'bicepsR', label: 'Höger Biceps', unit: 'cm', icon: '💪', pair: 'biceps' },
-  { key: 'thighL', label: 'Vänster Lår', unit: 'cm', icon: '🍗', pair: 'thigh' },
-  { key: 'thighR', label: 'Höger Lår', unit: 'cm', icon: '🍗', pair: 'thigh' },
-  { key: 'calves', label: 'Vader', unit: 'cm', icon: '🦵' },
-];
-
 export const MeasurementsView: React.FC<MeasurementsViewProps> = ({ profile, onUpdate }) => {
-  const [selectedField, setSelectedField] = useState<typeof MEASUREMENT_CONFIG[0] | null>(null);
-  const [history, setHistory] = useState<BiometricLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState<UserProfile>(profile);
 
-  // Load history from storage
-  useEffect(() => {
-    const loadHistory = async () => {
-      const logs = await storage.getBiometricLogs();
-      setHistory(logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-      setLoading(false);
-    };
-    loadHistory();
-  }, []);
+  const handleSave = async () => {
+    await storage.setUserProfile(formData);
+    onUpdate();
+    setIsModalOpen(false);
+  };
 
-  const latestLog = useMemo(() => history[history.length - 1], [history]);
+  const updateMeasurement = (key: keyof BodyMeasurements, val: string) => {
+    const num = parseFloat(val) || 0;
+    setFormData({
+      ...formData,
+      measurements: {
+        ...formData.measurements,
+        [key]: num
+      }
+    });
+  };
+
+  const m = profile.measurements || {};
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* HEADER STATS */}
-      <div className="px-2">
-        <div className="bg-gradient-to-br from-[#1a1721] to-[#110f16] p-6 rounded-[40px] border border-white/5 shadow-2xl">
-          <div className="flex justify-between items-start">
+      <div className="bg-[#1a1721] rounded-[32px] p-8 border border-white/5 shadow-xl">
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="text-xl font-black italic uppercase">Aktuella Mått</h3>
+          <Ruler size={20} className="text-accent-pink" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-6">
+          <Metric label="Hals" value={m.neck} unit="cm" />
+          <Metric label="Axlar" value={m.shoulders} unit="cm" />
+          <Metric label="Bröst" value={m.chest} unit="cm" />
+          <Metric label="Midja" value={m.waist} unit="cm" />
+          <Metric label="Höft" value={m.hips} unit="cm" />
+          <Metric label="Biceps (V/H)" value={`${m.bicepsL || 0} / ${m.bicepsR || 0}`} unit="cm" />
+          <Metric label="Lår (V/H)" value={`${m.thighL || 0} / ${m.thighR || 0}`} unit="cm" />
+          <Metric label="Vader" value={m.calves} unit="cm" />
+          <Metric label="Fett %" value={m.bodyFat} unit="%" />
+          <Metric label="Vikt" value={profile.weight} unit="kg" />
+        </div>
+
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="w-full mt-10 bg-white text-black py-5 rounded-2xl font-black italic uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg"
+        >
+          <Plus size={20} strokeWidth={3} /> Logga Mått
+        </button>
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-6 overflow-y-auto animate-in slide-in-from-bottom-4">
+          <header className="flex justify-between items-center mb-10">
             <div>
-              <p className="text-[10px] font-black uppercase text-text-dim tracking-[0.2em] mb-1">Status</p>
-              <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">Kroppsmått</h2>
+              <span className="text-[10px] font-black text-accent-pink uppercase tracking-[0.3em] block mb-1">Update Biometrics</span>
+              <h3 className="text-3xl font-black italic uppercase tracking-tighter">Nya Mått</h3>
             </div>
-            <div className="bg-accent-pink/10 p-3 rounded-2xl border border-accent-pink/20">
-              <Ruler className="text-accent-pink" size={24} />
+            <button onClick={() => setIsModalOpen(false)} className="p-3 bg-white/5 rounded-2xl border border-white/10"><X size={28}/></button>
+          </header>
+
+          <div className="space-y-8 pb-32">
+            <div className="grid grid-cols-2 gap-4">
+               <InputBlock label="Vikt (kg)" value={formData.weight} onChange={(v) => setFormData({...formData, weight: parseFloat(v) || 0})} />
+               <InputBlock label="Fett %" value={formData.measurements.bodyFat} onChange={(v) => updateMeasurement('bodyFat', v)} />
+               <InputBlock label="Hals (cm)" value={formData.measurements.neck} onChange={(v) => updateMeasurement('neck', v)} />
+               <InputBlock label="Axlar (cm)" value={formData.measurements.shoulders} onChange={(v) => updateMeasurement('shoulders', v)} />
+               <InputBlock label="Bröst (cm)" value={formData.measurements.chest} onChange={(v) => updateMeasurement('chest', v)} />
+               <InputBlock label="Midja (cm)" value={formData.measurements.waist} onChange={(v) => updateMeasurement('waist', v)} />
+               <InputBlock label="Höft (cm)" value={formData.measurements.hips} onChange={(v) => updateMeasurement('hips', v)} />
+               <InputBlock label="Vader (cm)" value={formData.measurements.calves} onChange={(v) => updateMeasurement('calves', v)} />
             </div>
+
+            <div className="bg-white/5 p-6 rounded-[32px] border border-white/5 space-y-6">
+               <h4 className="text-[10px] font-black text-text-dim uppercase tracking-widest">Symmetri (Vänster / Höger)</h4>
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                     <InputBlock label="Biceps V" value={formData.measurements.bicepsL} onChange={(v) => updateMeasurement('bicepsL', v)} />
+                     <InputBlock label="Lår V" value={formData.measurements.thighL} onChange={(v) => updateMeasurement('thighL', v)} />
+                  </div>
+                  <div className="space-y-4">
+                     <InputBlock label="Biceps H" value={formData.measurements.bicepsR} onChange={(v) => updateMeasurement('bicepsR', v)} />
+                     <InputBlock label="Lår H" value={formData.measurements.thighR} onChange={(v) => updateMeasurement('thighR', v)} />
+                  </div>
+               </div>
+            </div>
+
+            <button 
+              onClick={handleSave}
+              className="w-full bg-accent-pink py-6 rounded-3xl font-black italic tracking-widest uppercase shadow-2xl flex items-center justify-center gap-3 text-xl"
+            >
+              <Check size={24} strokeWidth={3} /> Spara Mått
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* GRID WITH CARDS */}
-      <div className="grid grid-cols-2 gap-3 px-2 pb-32">
-        {MEASUREMENT_CONFIG.map((field) => {
-          const value = field.key === 'weight' 
-            ? latestLog?.weight 
-            : latestLog?.measurements?.[field.key as keyof BodyMeasurements];
-
-          return (
-            <button
-              key={field.key}
-              onClick={() => setSelectedField(field)}
-              className="bg-[#1a1721] p-5 rounded-[32px] border border-white/5 flex flex-col items-start gap-3 active:scale-95 transition-all group hover:border-accent-pink/20 text-left"
-            >
-              <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center text-xl group-hover:bg-accent-pink/10 transition-colors">
-                {field.icon}
-              </div>
-              <div>
-                <p className="text-[9px] font-black uppercase text-text-dim tracking-widest mb-1">{field.label}</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black italic text-white">{value || '--'}</span>
-                  <span className="text-[10px] font-bold text-text-dim uppercase">{field.unit}</span>
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* DETAIL MODAL */}
-      {selectedField && (
-        <MeasurementDetailModal 
-          field={selectedField}
-          history={history}
-          profile={profile}
-          onClose={() => setSelectedField(null)}
-          onSave={async (val, date) => {
-            const currentMeasurements = { ...(latestLog?.measurements || profile.measurements || {}) };
-            
-            const newLog: BiometricLog = {
-              id: `log-${Date.now()}`,
-              date: date.toISOString(),
-              weight: selectedField.key === 'weight' ? val : (latestLog?.weight || profile.weight),
-              measurements: {
-                ...currentMeasurements,
-                [selectedField.key]: selectedField.key !== 'weight' ? val : (currentMeasurements[selectedField.key as keyof BodyMeasurements])
-              }
-            };
-            
-            await storage.saveBiometricLog(newLog);
-            
-            const updatedProfile = {
-                ...profile,
-                weight: newLog.weight,
-                measurements: newLog.measurements
-            };
-            await storage.setUserProfile(updatedProfile);
-            
-            onUpdate();
-            
-            const logs = await storage.getBiometricLogs();
-            setHistory(logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-            
-            setSelectedField(null);
-          }}
-        />
       )}
     </div>
   );
 };
 
-interface DetailModalProps {
-    field: typeof MEASUREMENT_CONFIG[0];
-    history: BiometricLog[];
-    profile: UserProfile;
-    onClose: () => void;
-    onSave: (val: number, date: Date) => Promise<void>;
-}
+const Metric = ({ label, value, unit }: { label: string; value: any; unit: string }) => (
+  <div className="flex flex-col gap-1">
+    <span className="text-[9px] font-black text-white/30 uppercase tracking-widest">{label}</span>
+    <span className="text-xl font-bold italic">{value || '--'} <span className="text-[10px] text-white/20 not-italic font-black">{unit}</span></span>
+  </div>
+);
 
-const MeasurementDetailModal: React.FC<DetailModalProps> = ({ field, history, onClose, onSave }) => {
-  const [newValue, setNewValue] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date());
-
-  // Prevent background scrolling when modal is open
-  useEffect(() => {
-    const originalStyle = window.getComputedStyle(document.body).overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalStyle;
-    };
-  }, []);
-
-  // Prepare data for graph
-  const chartData = useMemo(() => {
-    return history
-      .map((log: BiometricLog) => ({
-        date: new Date(log.date).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' }),
-        value: field.key === 'weight' ? log.weight : log.measurements?.[field.key as keyof BodyMeasurements]
-      }))
-      .filter((d: any) => d.value !== undefined);
-  }, [history, field.key]);
-
-  return (
-    <div className="fixed inset-0 z-[200] bg-[#0f0d15] flex flex-col animate-in slide-in-from-bottom duration-300 overflow-hidden">
-      {/* MODAL HEADER */}
-      <div className="p-6 flex justify-between items-center border-b border-white/5 shrink-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
-        <div className="flex items-center gap-4">
-          <button onClick={onClose} className="p-2 bg-white/5 rounded-xl text-white active:scale-90 transition-transform"><ChevronLeft /></button>
-          <div>
-            <h3 className="text-xl font-black italic uppercase text-white leading-none">{field.label}</h3>
-            <p className="text-[10px] font-bold text-text-dim uppercase tracking-widest mt-1">Historik & Registrering</p>
-          </div>
-        </div>
-        <button onClick={onClose} className="p-2 text-text-dim hover:text-white transition-colors">
-            <X size={24} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
-        {/* GRAPH SECTION */}
-        <div className="bg-[#1a1721] p-4 rounded-[32px] border border-white/5 h-64 shadow-inner">
-          {chartData.length > 1 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ff2d55" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#ff2d55" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis dataKey="date" stroke="rgba(255,255,255,0.3)" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis hide domain={['dataMin - 2', 'dataMax + 2']} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1a1721', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                  itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                />
-                <Area type="monotone" dataKey="value" stroke="#ff2d55" strokeWidth={3} fillOpacity={1} fill="url(#colorVal)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-text-dim opacity-50">
-              <TrendingUp size={48} strokeWidth={1} />
-              <p className="text-[10px] font-black uppercase mt-4">Behöver minst två mätningar för graf</p>
-            </div>
-          )}
-        </div>
-
-        {/* INPUT SECTION */}
-        <div className="space-y-6">
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Registrera Nytt Mått ({field.unit})</label>
-            <div className="relative">
-              <input 
-                autoFocus
-                type="number" 
-                step="0.1"
-                placeholder="0.0"
-                value={newValue}
-                onChange={(e) => setNewValue(e.target.value)}
-                className="w-full bg-[#1a1721] border border-white/10 rounded-3xl p-6 text-4xl font-black italic text-white outline-none focus:border-accent-pink transition-all"
-              />
-              <div className="absolute right-6 top-1/2 -translate-y-1/2 text-xl font-black italic text-text-dim uppercase pointer-events-none">{field.unit}</div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Datum</label>
-            {/* Datumbehållaren är nu strikt relative så att input inte läcker ut */}
-            <div className="relative bg-[#1a1721] border border-white/10 rounded-3xl p-5 flex items-center justify-between overflow-hidden cursor-pointer hover:border-white/20 transition-colors">
-              <div className="flex items-center gap-3">
-                <Calendar className="text-accent-pink" size={20} />
-                <span className="text-sm font-bold text-white">{selectedDate.toLocaleDateString('sv-SE')}</span>
-              </div>
-              
-              {/* Den osynliga inputen täcker nu EXAKT denna ruta tack vare parent: relative */}
-              <input 
-                type="date" 
-                className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                onChange={(e) => setSelectedDate(new Date(e.target.value))}
-                value={selectedDate.toISOString().split('T')[0]}
-              />
-              
-              <button className="text-[10px] font-black uppercase text-accent-blue pointer-events-none">Ändra</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* FOOTER ACTION */}
-      <div className="p-6 bg-[#0f0d15] border-t border-white/5 pb-safe shrink-0">
-        <button 
-          onClick={() => newValue && onSave(parseFloat(newValue), selectedDate)}
-          disabled={!newValue}
-          className="w-full py-5 bg-white text-black rounded-3xl font-black italic uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-20 shadow-xl"
-        >
-          <Check size={24} strokeWidth={4} /> Spara Mätning
-        </button>
-      </div>
-    </div>
-  );
-};
+const InputBlock = ({ label, value, onChange }: { label: string; value: any; onChange: (v: string) => void }) => (
+  <div className="space-y-2">
+    <label className="text-[10px] font-black text-text-dim uppercase tracking-widest ml-1">{label}</label>
+    <input 
+      type="number" 
+      step="0.1"
+      value={value || ''} 
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 font-black text-lg outline-none focus:border-accent-pink" 
+      placeholder="0.0"
+    />
+  </div>
+);
