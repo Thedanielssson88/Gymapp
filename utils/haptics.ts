@@ -18,6 +18,15 @@ const canVibrate = async () => {
 const isHapticsAvailable = canVibrate();
 
 export const triggerHaptic = {
+  light: async () => {
+    if (!(await isHapticsAvailable)) return;
+    try {
+      await Haptics.impact({ style: ImpactStyle.Light });
+    } catch (e) {
+      console.warn("Haptics light failed", e);
+    }
+  },
+  
   tick: async (user: UserProfile | null) => {
     if (!user?.settings?.vibrateOnRestEnd || !(await isHapticsAvailable)) return;
     try {

@@ -90,7 +90,7 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
 
   return (
     <div className="fixed inset-0 z-[250] bg-[#0f0d15] flex flex-col animate-in slide-in-from-bottom-10">
-      <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#1a1721] sticky top-0">
+      <div className="p-4 pt-[calc(env(safe-area-inset-top)+1rem)] border-b border-white/10 flex justify-between items-center bg-[#1a1721] sticky top-0 z-10">
         <div>
           <h3 className="text-xl font-black italic uppercase text-white">{initialRoutine?.id ? 'Redigera' : 'Skapa'} Rutin</h3>
           <p className="text-[10px] text-text-dim uppercase tracking-widest">Designa ditt pass</p>

@@ -168,7 +168,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   );
 
   return (
-    <div className="pb-32 animate-in fade-in space-y-4 px-4 pt-8 h-full flex flex-col">
+    <div className="pb-32 animate-in fade-in space-y-4 px-4 h-full flex flex-col" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 2rem)' }}>
       <header className="flex justify-between items-center mb-2">
         <div>
           <h2 className="text-3xl font-black italic uppercase tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2>

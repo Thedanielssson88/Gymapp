@@ -13,6 +13,7 @@ import { ExerciseLibrary } from './ExerciseLibrary';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat, MessageSquare } from 'lucide-react';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { triggerHaptic } from '../utils/haptics';
+import { ConfirmModal } from './ConfirmModal';
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -105,8 +106,8 @@ const InfoModal = ({
   }, [allExercises, exercise]);
 
   return (
-    <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[9999] flex flex-col animate-in fade-in duration-200">
-      <header className="flex justify-between items-center p-6 border-b border-white/5">
+    <div className="fixed inset-0 bg-[#0f0d15] z-[9999] flex flex-col animate-in fade-in duration-200">
+      <header className="flex justify-between items-center p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] border-b border-white/5 bg-[#0f0d15]">
         <h3 className="text-2xl font-black italic uppercase text-white truncate pr-4">{exercise.name}</h3>
         <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl active:scale-95 transition-transform"><X size={24} className="text-white"/></button>
       </header>
@@ -353,6 +354,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [showZonePicker, setShowZonePicker] = useState(false);
   const [showNoSetsInfo, setShowNoSetsInfo] = useState(false);
   const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null);
+  const [exerciseToDelete, setExerciseToDelete] = useState<number | null>(null);
 
   useEffect(() => {
     setLocalSession(session);
@@ -557,27 +559,32 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
   }, []);
 
-  const removeExercise = useCallback(async (exIdx: number) => {
-    if (confirm("Ta bort övning?")) {
-      const exerciseToRemove = localSession?.exercises[exIdx];
-      setLocalSession(prevSession => {
-        if (!prevSession) return null;
-        const updatedExercises = (prevSession.exercises || []).filter((_, index) => index !== exIdx);
-        const newSession = { ...prevSession, exercises: updatedExercises };
-        storage.setActiveSession(newSession);
-        return newSession;
-      });
-      setOpenNotesIdx(null);
-      if (exerciseToRemove) {
-        const exData = allExercises.find(e => e.id === exerciseToRemove.exerciseId);
-        if (exData) {
-            const newScore = Math.max(1, (exData.score || 5) - 1);
-            await storage.saveExercise({ ...exData, score: newScore });
-            onUpdate();
-        }
+  const confirmDeleteExercise = useCallback(async () => {
+    if (exerciseToDelete === null) return;
+    
+    const exIdx = exerciseToDelete;
+    const exerciseToRemove = localSession?.exercises[exIdx];
+    
+    setLocalSession(prevSession => {
+      if (!prevSession) return null;
+      const updatedExercises = (prevSession.exercises || []).filter((_, index) => index !== exIdx);
+      const newSession = { ...prevSession, exercises: updatedExercises };
+      storage.setActiveSession(newSession);
+      return newSession;
+    });
+
+    setOpenNotesIdx(null);
+    
+    if (exerciseToRemove) {
+      const exData = allExercises.find(e => e.id === exerciseToRemove.exerciseId);
+      if (exData) {
+          const newScore = Math.max(1, (exData.score || 5) - 1);
+          await storage.saveExercise({ ...exData, score: newScore });
+          onUpdate();
       }
     }
-  }, [localSession, allExercises, onUpdate]);
+    setExerciseToDelete(null);
+  }, [exerciseToDelete, localSession, allExercises, onUpdate]);
 
   const addSetToExercise = useCallback((exIdx: number) => {
     setLocalSession(prev => {
@@ -814,7 +821,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             const isSupersetStart = isInSuperset && currentId !== prevId;
             const isSupersetEnd = isInSuperset && currentId !== nextId;
             return (
-              <div id={`exercise-row-${exIdx}`} key={`${item.exerciseId}-${exIdx}`} className="contents">
+              <div id={`exercise-row-${exIdx}`} key={`${item.exerciseId}-${exIdx}`} className="block mb-2 scroll-mt-24">
                 <ExerciseCard 
                   item={item} 
                   exIdx={exIdx} 
@@ -832,7 +839,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   isNotesOpen={openNotesIdx === exIdx} 
                   onToggleNotes={() => setOpenNotesIdx(openNotesIdx === exIdx ? null : exIdx)} 
                   onUpdateNotes={(notes) => updateNotes(exIdx, notes)} 
-                  onRemove={() => removeExercise(exIdx)} 
+                  onRemove={() => setExerciseToDelete(exIdx)} 
                   onAddSet={() => addSetToExercise(exIdx)} 
                   onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} 
                   onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })} 
@@ -888,6 +895,17 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           </div>
         </div>
       </div>
+
+      {exerciseToDelete !== null && (
+        <ConfirmModal
+          title="Ta bort övning?"
+          message={`Är du säker på att du vill ta bort "${localSession?.exercises[exerciseToDelete] ? allExercises.find(e => e.id === localSession.exercises[exerciseToDelete].exerciseId)?.name : 'övningen'}" från passet?`}
+          confirmLabel="Ja, ta bort"
+          isDestructive={true}
+          onConfirm={confirmDeleteExercise}
+          onCancel={() => setExerciseToDelete(null)}
+        />
+      )}
 
       {showSummary && <WorkoutSummaryModal duration={timer} onCancel={() => setShowSummary(false)} onConfirm={(rpe, feeling, finalDuration) => { onComplete({...localSession!, rpe, feeling}, finalDuration); setShowSummary(false); }} />}
       {showGenerator && <WorkoutGenerator activeZone={activeZone} allExercises={allExercises} userProfile={userProfile} history={history} onGenerate={handleGenerateResults} onClose={() => setShowGenerator(false)} />}

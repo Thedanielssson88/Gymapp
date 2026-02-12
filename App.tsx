@@ -17,6 +17,7 @@ import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRig
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { triggerHaptic } from './utils/haptics';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -79,6 +80,32 @@ export default function App() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeTab]);
+
+  // --- GLOBAL KNAPP-VIBRATION ---
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const isVibrationEnabled = user?.settings?.vibrateOnRestEnd ?? true; 
+
+      if (!isVibrationEnabled) return;
+
+      let target = e.target as HTMLElement;
+      
+      while (target && target !== document.body) {
+        const tagName = target.tagName;
+        
+        if (tagName === 'BUTTON' || tagName === 'A' || target.getAttribute('role') === 'button') {
+          triggerHaptic.light(); 
+          break;
+        }
+        
+        target = target.parentElement as HTMLElement;
+      }
+    };
+
+    window.addEventListener('click', handleGlobalClick);
+
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, [user]);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([
@@ -454,8 +481,8 @@ export default function App() {
                />;
       case 'body':
         return (
-          <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen">
-            <nav className="flex items-center justify-center gap-4 pt-8 border-b border-white/5 pb-4 px-2">
+          <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen pt-[calc(env(safe-area-inset-top)+2rem)]">
+            <nav className="flex items-center justify-center gap-4 border-b border-white/5 pb-4 px-2">
               <button 
                 onClick={() => setBodySubTab('recovery')} 
                 className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'recovery' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
@@ -536,7 +563,7 @@ export default function App() {
       {renderContent()}
       
       {showStartMenu && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 flex flex-col overflow-y-auto scrollbar-hide">
+        <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 pt-[calc(env(safe-area-inset-top)+2rem)] flex flex-col overflow-y-auto scrollbar-hide">
           <header className="flex justify-between items-center mb-10"><h3 className="text-3xl font-black italic uppercase tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3><button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); setPendingManualDate(null); }} className="text-text-dim p-2"><X size={32}/></button></header>
           {!selectedZoneForStart ? (
             <div className="grid grid-cols-1 w-full gap-4">

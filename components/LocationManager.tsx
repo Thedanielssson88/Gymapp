@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Zone, Equipment } from '../types';
 import { storage } from '../services/storage';
@@ -211,7 +210,7 @@ const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, 
 
   return (
     <div className="fixed inset-0 bg-[#0f0d15] z-[200] flex flex-col animate-in slide-in-from-bottom-10">
-      <div className="p-6 pb-2 border-b border-white/10 bg-[#0f0d15] flex justify-between items-center">
+      <div className="p-6 pb-2 pt-[calc(env(safe-area-inset-top)+1.5rem)] border-b border-white/10 bg-[#0f0d15] flex justify-between items-center">
         <h3 className="text-2xl font-black italic uppercase text-white">Redigera Plats</h3>
         <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X size={24}/></button>
       </div>
