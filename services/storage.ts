@@ -2,6 +2,8 @@ import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
 
+let saveTimeout: ReturnType<typeof setTimeout>;
+
 export const storage = {
   init: async () => {
     await migrateFromLocalStorage();
@@ -27,6 +29,11 @@ export const storage = {
   },
 
   getBiometricLogs: async (): Promise<BiometricLog[]> => await db.biometricLogs.toArray(),
+  
+  saveBiometricLog: async (log: BiometricLog) => {
+    await db.biometricLogs.put(log);
+  },
+
   getZones: async (): Promise<Zone[]> => await db.zones.toArray(),
   saveZone: async (zone: Zone) => await db.zones.put(zone),
   deleteZone: async (id: string) => await db.zones.delete(id),
@@ -60,17 +67,28 @@ export const storage = {
     }
     return undefined;
   },
-  setActiveSession: async (session: WorkoutSession | null) => {
-    if (session) {
-      const sessionToStore = { 
-        ...session, 
-        originalId: session.id, 
-        id: 'current' 
-      };
-      await db.activeSession.put(sessionToStore as any);
-    } else {
-      await db.activeSession.clear();
+  
+  setActiveSession: (session: WorkoutSession | null): void => {
+    clearTimeout(saveTimeout);
+
+    if (!session) {
+      db.activeSession.clear().catch(err => console.error("Failed to clear active session:", err));
+      return;
     }
+
+    saveTimeout = setTimeout(async () => {
+      try {
+        const sessionToStore = { 
+          ...session, 
+          originalId: session.id, 
+          id: 'current' 
+        };
+        await db.activeSession.put(sessionToStore as any);
+        console.log("Session saved to IndexedDB after 500ms debounce.");
+      } catch (err) {
+        console.error("Failed to save debounced active session:", err);
+      }
+    }, 500);
   },
 
   getAllExercises: async (): Promise<Exercise[]> => await db.exercises.toArray(),

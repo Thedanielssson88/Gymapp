@@ -12,6 +12,7 @@ import { useExerciseImage } from '../hooks/useExerciseImage';
 import { ExerciseLibrary } from './ExerciseLibrary';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat } from 'lucide-react';
 import { Haptics, NotificationType } from '@capacitor/haptics';
+import { triggerHaptic } from '../utils/haptics';
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -396,90 +397,96 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   };
 
   const updateSet = useCallback((exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => {
+    if (updates.completed) {
+        triggerHaptic.success(userProfile);
+    }
+    
     setLocalSession(prev => {
-      if (!prev) return null;
-      
-      // 1. Skapa kopior för immutability
-      const updatedExercises = [...(prev.exercises || [])];
-      const exercise = { ...updatedExercises[exIdx] }; // Kopiera övningen
-      const updatedSets = [...(exercise.sets || [])]; // Kopiera sets
-      
-      // 2. Uppdatera det specifika setet
-      const oldSet = updatedSets[setIdx];
-      updatedSets[setIdx] = { ...oldSet, ...updates };
-      
-      // 3. Smart autofill-logik (kopiera vikt/reps till nästa set om tomt)
-      const hasValueChange = 'weight' in updates || 'reps' in updates || 'distance' in updates || 'duration' in updates;
-      if (hasValueChange) {
-        for (let i = setIdx + 1; i < updatedSets.length; i++) {
-          const nextSet = updatedSets[i];
-          const isNextSetEmpty = (nextSet.weight === 0 || nextSet.weight === undefined) && 
-                               (nextSet.reps === 0 || nextSet.reps === undefined) &&
-                               (nextSet.distance === 0 || nextSet.distance === undefined) &&
-                               (nextSet.duration === 0 || nextSet.duration === undefined);
-  
-          if (isNextSetEmpty) {
-            updatedSets[i] = {
-              ...nextSet,
-              weight: updatedSets[setIdx].weight ?? nextSet.weight,
-              reps: updatedSets[setIdx].reps ?? nextSet.reps,
-              distance: updatedSets[setIdx].distance ?? nextSet.distance,
-              duration: updatedSets[setIdx].duration ?? nextSet.duration,
-              type: updatedSets[setIdx].type === 'warmup' ? 'normal' : (updatedSets[setIdx].type ?? nextSet.type),
-            };
-          } else {
-            break;
-          }
-        }
-      }
-  
-      // 4. Spara tillbaka setsen i övningen
-      exercise.sets = updatedSets;
-      updatedExercises[exIdx] = exercise;
-      
-      // --- KORRIGERAD SUPERSET SCROLL LOGIK ---
-      if (updates.completed && exercise.supersetId) {
-        const supersetGroup = updatedExercises
-          .map((ex, idx) => ({ ...ex, originalIdx: idx }))
-          .filter(ex => ex.supersetId === exercise.supersetId);
+        if (!prev) return null;
+        
+        const updatedExercises = [...(prev.exercises || [])];
+        const exercise = { ...updatedExercises[exIdx] };
+        const updatedSets = [...(exercise.sets || [])];
+        updatedSets[setIdx] = { ...updatedSets[setIdx], ...updates };
+        exercise.sets = updatedSets;
+        updatedExercises[exIdx] = exercise;
 
-        if (supersetGroup.length > 1) {
-          const currentInGroupIdx = supersetGroup.findIndex(g => g.originalIdx === exIdx);
-          let nextTargetIdx = -1;
+        if (updates.completed && exercise.supersetId) {
+            const wasOldSetIncomplete = !prev.exercises[exIdx].sets[setIdx].completed;
 
-          // Cirkulär sökning efter nästa övning med oklara set
-          for (let i = 1; i <= supersetGroup.length; i++) {
-            const checkIdx = (currentInGroupIdx + i) % supersetGroup.length;
-            const candidate = supersetGroup[checkIdx];
-            
-            if (candidate.sets.some(s => !s.completed)) {
-              nextTargetIdx = candidate.originalIdx;
-              break;
+            if (wasOldSetIncomplete) {
+                const allExercisesInSuperset = updatedExercises.filter(ex => ex.supersetId === exercise.supersetId);
+                const isSupersetNowFinished = allExercisesInSuperset.every(ex => ex.sets.every(s => s.completed));
+                
+                if (isSupersetNowFinished) {
+                    triggerHaptic.double(userProfile);
+                }
             }
-          }
-
-          if (nextTargetIdx !== -1 && nextTargetIdx !== exIdx) {
-            setTimeout(() => {
-              // Vi letar efter ID:t 'exercise-row-X'
-              const element = document.getElementById(`exercise-row-${nextTargetIdx}`);
-              if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-            }, 300);
-          }
         }
-      }
+        
+        const hasValueChange = 'weight' in updates || 'reps' in updates || 'distance' in updates || 'duration' in updates;
+        if (hasValueChange) {
+            for (let i = setIdx + 1; i < updatedSets.length; i++) {
+                const nextSet = updatedSets[i];
+                const isNextSetEmpty = (nextSet.weight === 0 || nextSet.weight === undefined) && 
+                                     (nextSet.reps === 0 || nextSet.reps === undefined) &&
+                                     (nextSet.distance === 0 || nextSet.distance === undefined) &&
+                                     (nextSet.duration === 0 || nextSet.duration === undefined);
+    
+                if (isNextSetEmpty) {
+                    updatedSets[i] = {
+                        ...nextSet,
+                        weight: updatedSets[setIdx].weight ?? nextSet.weight,
+                        reps: updatedSets[setIdx].reps ?? nextSet.reps,
+                        distance: updatedSets[setIdx].distance ?? nextSet.distance,
+                        duration: updatedSets[setIdx].duration ?? nextSet.duration,
+                        type: updatedSets[setIdx].type === 'warmup' ? 'normal' : (updatedSets[setIdx].type ?? nextSet.type),
+                    };
+                } else {
+                    break;
+                }
+            }
+        }
+    
+        if (updates.completed && exercise.supersetId) {
+            const supersetGroup = updatedExercises
+              .map((ex, idx) => ({ ...ex, originalIdx: idx }))
+              .filter(ex => ex.supersetId === exercise.supersetId);
 
-      const updatedSession = { ...prev, exercises: updatedExercises };
-      storage.setActiveSession(updatedSession);
-      return updatedSession;
+            if (supersetGroup.length > 1) {
+              const currentInGroupIdx = supersetGroup.findIndex(g => g.originalIdx === exIdx);
+              let nextTargetIdx = -1;
+
+              for (let i = 1; i <= supersetGroup.length; i++) {
+                const checkIdx = (currentInGroupIdx + i) % supersetGroup.length;
+                const candidate = supersetGroup[checkIdx];
+                
+                if (candidate.sets.some(s => !s.completed)) {
+                  nextTargetIdx = candidate.originalIdx;
+                  break;
+                }
+              }
+
+              if (nextTargetIdx !== -1 && nextTargetIdx !== exIdx) {
+                setTimeout(() => {
+                  const element = document.getElementById(`exercise-row-${nextTargetIdx}`);
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
+                }, 300);
+              }
+            }
+        }
+
+        const updatedSession = { ...prev, exercises: updatedExercises };
+        storage.setActiveSession(updatedSession);
+        return updatedSession;
     });
-  
-    // Hantera timer utanför state-uppdateringen (sidoeffekt)
+
     if (updates.completed && !isManualMode) {
       setRestTimer(90);
     }
-  }, [isManualMode]);
+  }, [isManualMode, userProfile]);
 
   const updateNotes = useCallback((exIdx: number, notes: string) => {
     setLocalSession(prev => {
@@ -648,7 +655,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     if (localSession) {
       const updatedSession = { ...localSession, name };
       setLocalSession(updatedSession);
-      await storage.setActiveSession(updatedSession);
+      storage.setActiveSession(updatedSession);
     }
   }, [localSession]);
 

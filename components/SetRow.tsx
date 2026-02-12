@@ -183,6 +183,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           precision={0}
           min={0}
           max={99999}
+          userProfile={userProfile}
           onSave={(v) => { onUpdate({ distance: v }); setActiveModal(null); }}
           onClose={() => setActiveModal(null)}
         />
@@ -197,6 +198,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           precision={0}
           min={0}
           max={999}
+          userProfile={userProfile}
           onSave={(v) => { onUpdate({ reps: v }); setActiveModal(null); }}
           onClose={() => setActiveModal(null)}
         />
@@ -211,6 +213,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           precision={2}
           min={0}
           max={999}
+          userProfile={userProfile}
           barWeight={getBaseWeight()}
           availablePlates={availablePlates}
           onSave={(v) => { onUpdate({ weight: v }); setActiveModal(null); }}
