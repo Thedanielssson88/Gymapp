@@ -19,7 +19,6 @@ export class GymDatabase extends Dexie {
   exercises!: Table<Exercise, string>;
   workoutHistory!: Table<WorkoutSession, string>;
   biometricLogs!: Table<BiometricLog, string>;
-  activeSession!: Table<WorkoutSession, string>;
   goalTargets!: Table<GoalTarget, string>;
   workoutRoutines!: Table<WorkoutRoutine, string>;
   images!: Table<StoredImage, string>;
@@ -36,7 +35,6 @@ export class GymDatabase extends Dexie {
       exercises: 'id, name, muscleGroups',
       workoutHistory: 'id, date',
       biometricLogs: 'id, date',
-      activeSession: 'id',
       goalTargets: 'id',
       workoutRoutines: 'id',
       images: 'id',
@@ -77,13 +75,12 @@ export const migrateFromLocalStorage = async () => {
     { key: 'db_table_exercises', table: db.exercises },
     { key: 'db_table_workout_history', table: db.workoutHistory },
     { key: 'db_table_biometric_logs', table: db.biometricLogs },
-    { key: 'db_table_active_session', table: db.activeSession },
     { key: 'db_table_goal_targets', table: db.goalTargets },
     { key: 'db_table_workout_routines', table: db.workoutRoutines },
   ];
 
   try {
-    await (db as Dexie).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.activeSession, db.goalTargets, db.workoutRoutines], async () => {
+    await (db as Dexie).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.goalTargets, db.workoutRoutines], async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);
         if (raw) {

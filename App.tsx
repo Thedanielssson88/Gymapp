@@ -251,7 +251,7 @@ export default function App() {
         duration, 
         locationName: activeZone.name 
       });
-      await storage.setActiveSession(null);
+      storage.setActiveSession(null);
       
       // AUTO SYNC AFTER WORKOUT with robust error handling
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
@@ -291,13 +291,13 @@ export default function App() {
     }
   };
 
-  const handleCancelWorkout = async () => {
-    await storage.setActiveSession(null);
+  const handleCancelWorkout = () => {
+    storage.setActiveSession(null);
     setCurrentSession(null);
     setActiveTab('workout');
   };
 
-  const handleStartWorkout = async (exercises: PlannedExercise[], name: string) => {
+  const handleStartWorkout = (exercises: PlannedExercise[], name: string) => {
     const zone = selectedZoneForStart || zones[0];
     const sessionDate = pendingManualDate ? new Date(pendingManualDate).toISOString() : new Date().toISOString();
     
@@ -311,10 +311,10 @@ export default function App() {
       isManual: !!pendingManualDate
     };
     
-    // 1. Tell storage to save the session (this is debounced and non-blocking)
+    // 1. Save to localStorage immediately (sync)
     storage.setActiveSession(newSess);
     
-    // 2. Update local state in App.tsx immediately (Optimistic Update)
+    // 2. Update React state
     setCurrentSession(newSess);
     
     // 3. Force the view to the workout tab
@@ -437,11 +437,11 @@ export default function App() {
                   allZones={zones}
                   history={history}
                   activeZone={activeZone}
-                  onZoneChange={async (z) => {
+                  onZoneChange={(z) => {
                     if (currentSession) {
                       const newSession = {...currentSession, zoneId: z.id};
                       setCurrentSession(newSession);
-                      await storage.setActiveSession(newSession);
+                      storage.setActiveSession(newSession);
                     }
                   }} 
                   onComplete={handleFinishWorkout} 

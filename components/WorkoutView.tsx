@@ -10,7 +10,7 @@ import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { ExerciseLibrary } from './ExerciseLibrary';
-import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat } from 'lucide-react';
+import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat, MessageSquare } from 'lucide-react';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -82,16 +82,15 @@ const InfoModal = ({
       .filter(s => s.exercises.some(e => e.exerciseId === exercise.id))
       .map(s => {
         const ex = s.exercises.find(e => e.exerciseId === exercise.id);
-        const bestSet = ex?.sets.filter(set => set.completed).sort((a,b) => (calculate1RM(b.weight, b.reps)) - (calculate1RM(a.weight, a.reps)))[0];
         return {
           date: s.date,
           sessionName: s.name,
-          bestSet,
-          fullSets: ex?.sets || []
+          sets: ex?.sets || [],
+          notes: ex?.notes
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 5);
+      .slice(0, 5); // Visar de 5 senaste gångerna
   }, [history, exercise.id]);
 
   const alternatives = useMemo(() => {
@@ -233,24 +232,79 @@ const InfoModal = ({
 
         {/* --- FLIK 2: HISTORIK --- */}
         {activeTab === 'history' && (
-          <div className="space-y-3 animate-in slide-in-from-bottom-2">
-             {historyItems.length > 0 ? (
-               historyItems.map((item, i) => (
-                 <div key={i} className="bg-[#1a1721] p-4 rounded-2xl border border-white/5 flex justify-between items-center group hover:border-white/10 transition-colors">
+          <div className="space-y-4 animate-in slide-in-from-bottom-2">
+            {historyItems.length > 0 ? (
+              historyItems.map((item, i) => (
+                <div key={i} className="bg-[#1a1721] rounded-3xl border border-white/5 overflow-hidden">
+                  {/* Header för passet */}
+                  <div className="p-4 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
                     <div>
-                       <div className="flex items-center gap-2 mb-1"><Calendar size={12} className="text-text-dim" /><span className="text-[10px] font-black uppercase text-text-dim tracking-widest">{new Date(item.date).toLocaleDateString('sv-SE')}</span></div>
-                       <p className="text-xs font-bold text-white/60">{item.sessionName}</p>
-                       <button onClick={() => onApplyHistory(exIdx, item.fullSets)} className="mt-2 bg-accent-blue/10 text-accent-blue text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"><RefreshCw size={10}/> Kopiera pass</button>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Calendar size={12} className="text-accent-blue" />
+                        <span className="text-[10px] font-black uppercase text-white/90 tracking-widest">
+                          {new Date(item.date).toLocaleDateString('sv-SE')}
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-bold text-text-dim uppercase tracking-wide">{item.sessionName}</p>
                     </div>
-                    {item.bestSet && (
-                      <div className="text-right">
-                         <span className="text-xl font-black italic text-white block leading-none">{item.bestSet.weight} <span className="text-[10px] text-text-dim not-italic font-bold">kg</span></span>
-                         <span className="text-[10px] font-bold text-accent-blue uppercase tracking-wider">x {item.bestSet.reps} reps</span>
+                    <button 
+                      onClick={() => onApplyHistory(exIdx, item.sets)} 
+                      className="bg-accent-blue/10 text-accent-blue text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl active:scale-95 transition-all flex items-center gap-1.5"
+                    >
+                      <RefreshCw size={10}/> Använd
+                    </button>
+                  </div>
+
+                  {/* Set-detaljer (Samma som i loggen) */}
+                  <div className="p-4 space-y-2">
+                    {item.sets.map((set, sIdx) => (
+                      <div key={sIdx} className="flex items-center justify-between py-1 border-b border-white/[0.02] last:border-0">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-black text-text-dim w-4">{sIdx + 1}</span>
+                          <div className="flex gap-1">
+                            {set.type === 'warmup' && (
+                              <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-500 text-[8px] font-black uppercase rounded">W</span>
+                            )}
+                            {set.type === 'failure' && (
+                              <span className="px-1.5 py-0.5 bg-red-500/20 text-red-500 text-[8px] font-black uppercase rounded">F</span>
+                            )}
+                            {set.type === 'drop' && (
+                              <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-500 text-[8px] font-black uppercase rounded">D</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-4">
+                          <div className="text-right">
+                            <span className="text-sm font-black italic text-white">{set.weight}</span>
+                            <span className="text-[9px] font-bold text-text-dim uppercase ml-1">kg</span>
+                          </div>
+                          <div className="text-right min-w-[40px]">
+                            <span className="text-sm font-black italic text-white">{set.reps}</span>
+                            <span className="text-[9px] font-bold text-text-dim uppercase ml-1">reps</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Anteckningar om de finns */}
+                    {item.notes && (
+                      <div className="mt-3 p-3 bg-white/5 rounded-2xl border border-white/5">
+                        <div className="flex items-center gap-2 mb-1">
+                          <MessageSquare size={10} className="text-accent-blue" />
+                          <span className="text-[8px] font-black uppercase text-accent-blue tracking-widest">Anteckning</span>
+                        </div>
+                        <p className="text-[10px] font-medium text-white/70 italic leading-relaxed">{item.notes}</p>
                       </div>
                     )}
-                 </div>
-               ))
-             ) : ( <div className="py-12 text-center opacity-40"><History size={48} className="mx-auto mb-4" strokeWidth={1} /><p className="text-xs font-bold uppercase tracking-widest">Ingen historik än</p></div>)}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="py-12 text-center opacity-40">
+                <History size={48} className="mx-auto mb-4" strokeWidth={1} />
+                <p className="text-xs font-bold uppercase tracking-widest">Ingen historik hittades</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -298,6 +352,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [showSummary, setShowSummary] = useState(false);
   const [showZonePicker, setShowZonePicker] = useState(false);
   const [showNoSetsInfo, setShowNoSetsInfo] = useState(false);
+  const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null);
 
   useEffect(() => {
     setLocalSession(session);
@@ -449,14 +504,15 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         }
     
         if (updates.completed && exercise.supersetId) {
-            const supersetGroup = updatedExercises
+            const allExercises = updatedExercises;
+            const supersetGroup = allExercises
               .map((ex, idx) => ({ ...ex, originalIdx: idx }))
               .filter(ex => ex.supersetId === exercise.supersetId);
-
+        
             if (supersetGroup.length > 1) {
               const currentInGroupIdx = supersetGroup.findIndex(g => g.originalIdx === exIdx);
               let nextTargetIdx = -1;
-
+        
               for (let i = 1; i <= supersetGroup.length; i++) {
                 const checkIdx = (currentInGroupIdx + i) % supersetGroup.length;
                 const candidate = supersetGroup[checkIdx];
@@ -466,14 +522,16 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   break;
                 }
               }
-
+        
               if (nextTargetIdx !== -1 && nextTargetIdx !== exIdx) {
                 setTimeout(() => {
                   const element = document.getElementById(`exercise-row-${nextTargetIdx}`);
                   if (element) {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    setHighlightedExIdx(nextTargetIdx);
+                    setTimeout(() => setHighlightedExIdx(null), 1200);
                   }
-                }, 300);
+                }, 150);
               }
             }
         }
@@ -778,6 +836,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   onAddSet={() => addSetToExercise(exIdx)} 
                   onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} 
                   onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })} 
+                  isHighlighted={highlightedExIdx === exIdx}
                 />
               </div>
             );

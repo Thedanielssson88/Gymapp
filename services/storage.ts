@@ -3,7 +3,7 @@ import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, 
 import { DEFAULT_PROFILE } from '../constants';
 import { BackupData } from './googleDrive';
 
-let saveTimeout: ReturnType<typeof setTimeout>;
+const ACTIVE_SESSION_KEY = 'morphfit_active_session';
 
 export const storage = {
   init: async () => {
@@ -58,33 +58,25 @@ export const storage = {
   },
 
   getActiveSession: async (): Promise<WorkoutSession | undefined> => {
-    const sess = await db.activeSession.get('current');
-    if (sess) {
-      return { ...sess, id: (sess as any).originalId || sess.id };
+    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (raw) {
+        try {
+            return JSON.parse(raw) as WorkoutSession;
+        } catch (e) {
+            console.error("Failed to parse active session from localStorage", e);
+            localStorage.removeItem(ACTIVE_SESSION_KEY);
+            return undefined;
+        }
     }
     return undefined;
   },
   
   setActiveSession: (session: WorkoutSession | null): void => {
-    clearTimeout(saveTimeout);
-
-    if (!session) {
-      db.activeSession.clear().catch(err => console.error("Failed to clear active session:", err));
-      return;
+    if (session) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
     }
-
-    saveTimeout = setTimeout(async () => {
-      try {
-        const sessionToStore = { 
-          ...session, 
-          originalId: session.id, 
-          id: 'current' 
-        };
-        await db.activeSession.put(sessionToStore as any);
-      } catch (err) {
-        console.error("Failed to save debounced active session:", err);
-      }
-    }, 500);
   },
 
   getAllExercises: async (): Promise<Exercise[]> => await db.exercises.toArray(),

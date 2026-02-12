@@ -30,6 +30,7 @@ interface ExerciseCardProps {
   onMoveDown: () => void;
   onToggleSuperset: () => void;
   onUpdateConfig?: (updates: Partial<PlannedExercise>) => void;
+  isHighlighted?: boolean;
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({ 
@@ -37,7 +38,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   isFirst, isLast, isInSuperset, isSupersetStart, isSupersetEnd,
   onUpdateSet, onAddSet, onRemove, 
   onToggleNotes, isNotesOpen, onUpdateNotes, onShowInfo,
-  onMoveUp, onMoveDown, onToggleSuperset
+  onMoveUp, onMoveDown, onToggleSuperset, isHighlighted
 }) => {
   const imageSrc = useExerciseImage(exData);
   const [showMenu, setShowMenu] = useState(false);
@@ -82,6 +83,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     ? 'border-green-500/30' 
     : (isInSuperset ? 'border-white/5 border-y-0' : 'border-white/5');
 
+  const shadowClass = isHighlighted ? 'shadow-glow' : 'shadow-xl';
+
   // --- RENDERING ---
   
   // KOLLAPSAT LÄGE
@@ -89,7 +92,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
       return (
         <div 
             onClick={handleToggleCollapse}
-            className={`bg-[#1a1721] overflow-hidden border ${borderClass} shadow-lg relative transition-all cursor-pointer group ${supersetClass} ${roundingClass} p-4 flex justify-between items-center animate-in fade-in slide-in-from-bottom-1`}
+            className={`bg-[#1a1721] overflow-hidden border ${borderClass} ${shadowClass} relative transition-all cursor-pointer group ${supersetClass} ${roundingClass} p-4 flex justify-between items-center animate-in fade-in slide-in-from-bottom-1`}
         >
             <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-green-500 text-black flex items-center justify-center shadow-[0_0_10px_rgba(34,197,94,0.5)]">
@@ -114,7 +117,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
   // STANDARD LÄGE
   return (
-    <div className={`bg-[#1a1721] overflow-hidden border ${borderClass} shadow-xl relative transition-all ${supersetClass} ${roundingClass}`}>
+    <div className={`bg-[#1a1721] overflow-hidden border ${borderClass} ${shadowClass} relative transition-all ${supersetClass} ${roundingClass}`}>
       
       {/* HEADER */}
       <div className="p-5 pb-2 flex flex-col gap-4">
