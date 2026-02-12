@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale } from 'lucide-react';
+import { getAccessToken, uploadBackup, findBackupFile, BackupData } from '../services/googleDrive';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -11,6 +12,8 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdate }) => {
   const [localProfile, setLocalProfile] = useState<UserProfile>(userProfile);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
@@ -20,6 +23,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             includeWarmupInStats: prev.settings?.includeWarmupInStats ?? false,
             bodyViewMode: prev.settings?.bodyViewMode ?? 'list',
             vibrateOnRestEnd: prev.settings?.vibrateOnRestEnd ?? true,
+            googleDriveLinked: prev.settings?.googleDriveLinked ?? false,
             ...prev.settings,
             [key]: value
         }
@@ -32,14 +36,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     alert("Inställningar sparade!");
   };
 
+  const handleCloudSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus('idle');
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        alert("Kunde inte ansluta till Google Drive. Kontrollera din inloggning.");
+        setIsSyncing(false);
+        return;
+      }
+
+      const backupData = await storage.getFullBackupData();
+      const existingFileId = await findBackupFile(token);
+      await uploadBackup(token, backupData, existingFileId);
+      
+      const updatedProfile = {
+        ...localProfile,
+        settings: {
+          ...localProfile.settings!,
+          googleDriveLinked: true,
+          lastCloudSync: new Date().toISOString()
+        }
+      };
+      await storage.setUserProfile(updatedProfile);
+      setLocalProfile(updatedProfile);
+      setSyncStatus('success');
+      onUpdate();
+    } catch (error) {
+      console.error("Cloud sync failed:", error);
+      setSyncStatus('error');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleExport = async () => {
-    const allData = {
-      profile: await db.userProfile.toArray(),
-      history: await db.workoutHistory.toArray(),
-      zones: await db.zones.toArray(),
-      exercises: await db.exercises.toArray(),
-      exportedAt: new Date().toISOString()
-    };
+    const allData = await storage.getFullBackupData();
     const blob = new Blob([JSON.stringify(allData)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -108,6 +141,75 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                </div>
             </div>
          </div>
+      </section>
+
+      {/* CLOUD SYNC SECTION */}
+      <section className="bg-gradient-to-br from-[#1a1721] to-[#1c1a26] p-6 rounded-[32px] border border-white/10 space-y-6">
+        <div className="flex justify-between items-start">
+          <div className="flex items-center gap-3">
+             <Cloud className="text-accent-blue" size={24} />
+             <div>
+                <h3 className="text-xl font-black italic uppercase text-white leading-none">Cloud Sync</h3>
+                <p className="text-[10px] text-text-dim uppercase tracking-widest mt-1">Google Drive Backup</p>
+             </div>
+          </div>
+          <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border ${localProfile.settings?.googleDriveLinked ? 'bg-accent-green/10 border-accent-green text-accent-green' : 'bg-white/5 border-white/10 text-text-dim'}`}>
+            {localProfile.settings?.googleDriveLinked ? 'Ansluten' : 'Ej Ansluten'}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <button 
+            onClick={handleCloudSync}
+            disabled={isSyncing}
+            className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs transition-all active:scale-95 ${isSyncing ? 'bg-white/5 text-white/20' : 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20'}`}
+          >
+            {isSyncing ? <RefreshCw className="animate-spin" size={18} /> : <Cloud size={18} />}
+            {localProfile.settings?.googleDriveLinked ? 'Synka Nu' : 'Anslut till Google Drive'}
+          </button>
+
+          {localProfile.settings?.lastCloudSync && (
+            <p className="text-[9px] text-center text-text-dim uppercase font-bold">
+              Senaste synk: {new Date(localProfile.settings.lastCloudSync).toLocaleString('sv-SE')}
+            </p>
+          )}
+
+          {localProfile.settings?.googleDriveLinked && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between py-2 border-t border-white/5">
+                <div className="flex items-center gap-3">
+                  <RefreshCw size={16} className="text-text-dim" />
+                  <div>
+                    <p className="text-sm font-bold text-white">Auto-synk efter pass</p>
+                    <p className="text-[9px] text-text-dim uppercase">Ladda upp automatiskt</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleSettingChange('autoSyncMode', localProfile.settings?.autoSyncMode === 'after_workout' ? 'manual' : 'after_workout')}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${localProfile.settings?.autoSyncMode === 'after_workout' ? 'bg-accent-blue' : 'bg-white/10'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${localProfile.settings?.autoSyncMode === 'after_workout' ? 'left-5.5' : 'left-0.5'}`} />
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between py-2 border-t border-white/5">
+                <div className="flex items-center gap-3">
+                  <RefreshCw size={16} className="text-text-dim" />
+                  <div>
+                    <p className="text-sm font-bold text-white">Återställ vid start</p>
+                    <p className="text-[9px] text-text-dim uppercase">Kolla efter nyare data</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleSettingChange('restoreOnStartup', !(localProfile.settings?.restoreOnStartup ?? false))}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${(localProfile.settings?.restoreOnStartup ?? false) ? 'bg-accent-blue' : 'bg-white/10'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.restoreOnStartup ?? false) ? 'left-5.5' : 'left-0.5'}`} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-6">

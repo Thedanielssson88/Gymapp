@@ -157,7 +157,11 @@ export interface UserSettings {
   bodyViewMode?: 'list' | 'map';
   barbellWeight?: number; 
   dumbbellBaseWeight?: number; 
-  vibrateOnRestEnd?: boolean; 
+  vibrateOnRestEnd?: boolean;
+  googleDriveLinked?: boolean;
+  autoSyncMode?: 'after_workout' | 'manual' | 'startup';
+  restoreOnStartup?: boolean;
+  lastCloudSync?: string;
 }
 
 export interface UserProfile {

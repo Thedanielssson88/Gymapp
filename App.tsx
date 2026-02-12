@@ -12,8 +12,8 @@ import { storage } from './services/storage';
 import { db } from './services/db'; 
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
-// Fix: Added missing 'BookOpen' icon to the lucide-react import
-import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen } from 'lucide-react';
+import { getAccessToken, findBackupFile, downloadBackup, uploadBackup } from './services/googleDrive';
+import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -39,7 +39,6 @@ export default function App() {
   const [selectedZoneForStart, setSelectedZoneForStart] = useState<Zone | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   
-  // NEW: Store manual date and flag temporarily before session creation
   const [pendingManualDate, setPendingManualDate] = useState<string | null>(null);
 
   const globalStyles = `
@@ -134,6 +133,31 @@ export default function App() {
         setLoadingStatus('Ansluter till databas...');
         await storage.init();
         
+        setLoadingStatus('Kollar molnsynkronisering...');
+        const initialProfile = await storage.getUserProfile();
+        
+        // CHECK FOR STARTUP RESTORE
+        if (initialProfile.settings?.googleDriveLinked && initialProfile.settings?.restoreOnStartup) {
+           try {
+             const token = await getAccessToken();
+             if (token) {
+               const fileId = await findBackupFile(token);
+               if (fileId) {
+                 const backup = await downloadBackup(token, fileId);
+                 if (backup) {
+                    const localExportedAt = initialProfile.settings.lastCloudSync || "0";
+                    if (new Date(backup.exportedAt) > new Date(localExportedAt)) {
+                       await storage.importFullBackup(backup);
+                       console.log("Cloud data restored on startup.");
+                    }
+                 }
+               }
+             }
+           } catch (e) {
+             console.warn("Startup cloud restore failed:", e);
+           }
+        }
+
         setLoadingStatus('Synkroniserar övningsbibliotek...');
         try {
           await db.syncExercises(); 
@@ -221,6 +245,31 @@ export default function App() {
         locationName: activeZone.name 
       });
       await storage.setActiveSession(null);
+      
+      // AUTO SYNC AFTER WORKOUT
+      if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
+          try {
+            const token = await getAccessToken();
+            if (token) {
+              const backupData = await storage.getFullBackupData();
+              const existingFileId = await findBackupFile(token);
+              await uploadBackup(token, backupData, existingFileId);
+              
+              const updatedProfile = {
+                ...user,
+                settings: {
+                  ...user.settings!,
+                  lastCloudSync: new Date().toISOString()
+                }
+              };
+              await storage.setUserProfile(updatedProfile);
+              console.log("Cloud sync completed after workout.");
+            }
+          } catch (e) {
+            console.warn("Post-workout sync failed:", e);
+          }
+      }
+
       await refreshData(); 
       setActiveTab('log');
     } catch (error) {

@@ -1,15 +1,13 @@
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
+import { BackupData } from './googleDrive';
 
 let saveTimeout: ReturnType<typeof setTimeout>;
 
 export const storage = {
   init: async () => {
     await migrateFromLocalStorage();
-    // Database population is now handled by the on('populate') event in db.ts.
-    // This function's only responsibility is now migration from old storage.
-    // Any DB operation will automatically open and populate it if needed.
   },
 
   getUserProfile: async (): Promise<UserProfile> => {
@@ -48,7 +46,6 @@ export const storage = {
     };
     await db.workoutHistory.put(completedSession);
     
-    // Check if we can mark a scheduled activity as completed
     const dateStr = completedSession.date.split('T')[0];
     const scheduled = await db.scheduledActivities.where('date').equals(dateStr).and(a => !a.isCompleted).first();
     if (scheduled) {
@@ -84,7 +81,6 @@ export const storage = {
           id: 'current' 
         };
         await db.activeSession.put(sessionToStore as any);
-        console.log("Session saved to IndexedDB after 500ms debounce.");
       } catch (err) {
         console.error("Failed to save debounced active session:", err);
       }
@@ -137,7 +133,6 @@ export const storage = {
     await db.images.delete(id);
   },
 
-  // --- PLANNING METHODS ---
   getScheduledActivities: async (): Promise<ScheduledActivity[]> => {
     await storage.generateRecurringActivities();
     return await db.scheduledActivities.toArray();
@@ -168,7 +163,6 @@ export const storage = {
   deleteRecurringPlan: async (id: string) => {
     await db.recurringPlans.delete(id);
     const today = new Date().toISOString().split('T')[0];
-    // Delete future uncompleted activities from this plan
     await db.scheduledActivities
       .where('recurrenceId').equals(id)
       .filter(act => act.date >= today && !act.isCompleted)
@@ -181,7 +175,7 @@ export const storage = {
     today.setHours(0,0,0,0);
     
     const generateUntil = new Date(today);
-    generateUntil.setDate(today.getDate() + 30); // Generate 1 month ahead
+    generateUntil.setDate(today.getDate() + 30);
 
     for (const plan of plans) {
       let loopDate = new Date(Math.max(new Date(plan.startDate).getTime(), today.getTime()));
@@ -213,13 +207,47 @@ export const storage = {
     }
   },
 
-  // --- NEW: USER MISSIONS (Gamified Goals) ---
   getUserMissions: async (): Promise<UserMission[]> => await db.userMissions.toArray(),
   addUserMission: async (mission: UserMission) => await db.userMissions.put(mission),
   updateUserMission: async (mission: UserMission) => {
     await db.userMissions.update(mission.id, mission);
   },
   deleteUserMission: async (id: string) => await db.userMissions.delete(id),
+
+  getFullBackupData: async (): Promise<BackupData> => {
+    return {
+      profile: await storage.getUserProfile(),
+      history: await db.workoutHistory.toArray(),
+      zones: await db.zones.toArray(),
+      exercises: await db.exercises.toArray(),
+      routines: await db.workoutRoutines.toArray(),
+      biometricLogs: await db.biometricLogs.toArray(),
+      missions: await db.userMissions.toArray(),
+      goalTargets: await db.goalTargets.toArray(),
+      exportedAt: new Date().toISOString()
+    };
+  },
+
+  importFullBackup: async (data: BackupData) => {
+    // Fix: Cast db to any to avoid "Property 'transaction' does not exist on type 'GymDatabase'" error
+    await (db as any).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.workoutRoutines, db.userMissions, db.goalTargets], async () => {
+      await db.userProfile.put(data.profile);
+      await db.zones.clear();
+      await db.zones.bulkPut(data.zones);
+      await db.exercises.clear();
+      await db.exercises.bulkPut(data.exercises);
+      await db.workoutHistory.clear();
+      await db.workoutHistory.bulkPut(data.history);
+      await db.biometricLogs.clear();
+      await db.biometricLogs.bulkPut(data.biometricLogs);
+      await db.workoutRoutines.clear();
+      await db.workoutRoutines.bulkPut(data.routines);
+      await db.userMissions.clear();
+      await db.userMissions.bulkPut(data.missions);
+      await db.goalTargets.clear();
+      await db.goalTargets.bulkPut(data.goalTargets);
+    });
+  }
 };
 
 export const exportExerciseLibrary = async () => {
@@ -263,8 +291,6 @@ export const importExerciseLibrary = async (file: File): Promise<number> => {
           throw new Error("Felaktigt filformat. Detta är inte en giltig biblioteksfil.");
         }
 
-        // Vi använder bulkPut för att uppdatera existerande övningar (matchar på ID)
-        // och lägga till nya.
         await db.exercises.bulkPut(content.exercises);
         resolve(content.exercises.length);
       } catch (error) {
