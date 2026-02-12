@@ -117,8 +117,8 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises, 
   const handleSave = async (exercise: Exercise) => {
     const updatedExercise = { ...exercise, muscleGroups: Array.from(new Set([...(exercise.primaryMuscles || []), ...(exercise.secondaryMuscles || [])])) };
     await storage.saveExercise(updatedExercise);
+    await onUpdate();
     setEditingExercise(null);
-    onUpdate();
   };
 
   const handleDelete = async (id: string) => {

@@ -78,7 +78,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         }
       };
       await storage.importFullBackup(restoredBackup);
-      onComplete();
+      alert("Återställning klar! Appen startas om.");
+      window.location.reload();
     }
   };
 

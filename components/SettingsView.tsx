@@ -80,6 +80,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     a.download = `morphfit_backup.json`;
     a.click();
   };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm("Är du säker? Detta kommer att skriva över all din nuvarande data.")) {
+        if(e.target) e.target.value = ''; // Reset file input
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const content = event.target?.result as string;
+            const data = JSON.parse(content) as BackupData;
+            if (!data.profile || !data.history) {
+              throw new Error("Filen verkar inte vara en giltig backup.");
+            }
+            await storage.importFullBackup(data);
+            alert("Återställning klar! Appen startas om.");
+            window.location.reload();
+        } catch (error) {
+            alert("Kunde inte läsa backup-filen: " + (error as Error).message);
+            console.error("Import failed:", error);
+        } finally {
+            if(e.target) e.target.value = ''; // Reset file input
+        }
+    };
+    reader.readAsText(file);
+  };
   
   const handleExportLibrary = async () => {
     const success = await exportExerciseLibrary();
@@ -361,7 +391,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
           <span className="text-[10px] font-black uppercase tracking-widest">Återställ Allt</span>
         </button>
       </div>
-      <input type="file" ref={fileInputRef} className="hidden" />
+      <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
 
       <button 
         onClick={handleSave} 
