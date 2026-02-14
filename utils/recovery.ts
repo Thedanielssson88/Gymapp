@@ -112,3 +112,68 @@ export const getRecoveryStatus = (score: number): string => {
   if (score >= 30) return 'Sliten';
   return 'Utmattad';
 };
+
+export interface WorkloadDetail {
+  date: string;
+  exerciseName: string;
+  sets: WorkoutSet[];
+  role: 'Primär' | 'Sekundär';
+  impactScore: number;
+}
+
+export const getMuscleWorkloadDetails = (
+  muscle: MuscleGroup, 
+  history: WorkoutSession[],
+  allExercises: Exercise[]
+): WorkloadDetail[] => {
+  const details: WorkloadDetail[] = [];
+  const now = new Date();
+  const RECOVERY_WINDOW_HOURS = 96; // 4 dagar
+
+  const recentHistory = history.filter(h => {
+      const diff = now.getTime() - new Date(h.date).getTime();
+      return diff < (1000 * 60 * 60 * RECOVERY_WINDOW_HOURS); 
+  });
+
+  recentHistory.forEach(session => {
+    session.exercises.forEach(sessionEx => {
+      const exDef = allExercises.find(e => e.id === sessionEx.exerciseId);
+      if (!exDef) return;
+
+      const hitsPrimary = exDef.primaryMuscles?.includes(muscle);
+      const hitsSecondary = exDef.secondaryMuscles?.includes(muscle);
+
+      if (hitsPrimary || hitsSecondary) {
+        const completedSets = sessionEx.sets.filter(s => s.completed);
+        if (completedSets.length === 0) return;
+        
+        const hoursSince = (now.getTime() - new Date(session.date).getTime()) / 3600000;
+        
+        const rawScore = completedSets.length * (exDef.difficultyMultiplier || 1) * (hitsPrimary ? 10 : 5);
+        const decayedScore = Math.max(0, rawScore * (1 - hoursSince / RECOVERY_WINDOW_HOURS));
+
+        if (decayedScore > 0.5) {
+          details.push({
+            date: session.date,
+            exerciseName: exDef.name,
+            sets: completedSets,
+            role: hitsPrimary ? 'Primär' : 'Sekundär',
+            impactScore: decayedScore
+          });
+        }
+      }
+    });
+  });
+  
+  const groupedDetails = details.reduce((acc, curr) => {
+    const key = `${curr.date}-${curr.exerciseName}`;
+    if (!acc[key]) {
+      acc[key] = { ...curr, impactScore: 0, sets: [] };
+    }
+    acc[key].impactScore += curr.impactScore;
+    acc[key].sets.push(...curr.sets);
+    return acc;
+  }, {} as Record<string, WorkloadDetail>);
+
+  return Object.values(groupedDetails).sort((a, b) => b.impactScore - a.impactScore);
+};
