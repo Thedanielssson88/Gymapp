@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise, UserMission } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, calculate1RM } from '../utils/fitness';
@@ -356,7 +357,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [restTimer, setRestTimer] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
-  const [isLoadMapOpen, setIsLoadMapOpen] = useState(false);
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoModalData, setInfoModalData] = useState<{ exercise: Exercise; index: number } | null>(null);
   const [showSummary, setShowSummary] = useState(false);
@@ -609,7 +609,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     });
   }, []);
 
-  const addNewExercise = async (ex: Exercise) => {
+  const addNewExercise = useCallback(async (ex: Exercise) => {
     const smartGoal = userMissions.find(
       m => m.type === 'smart_goal' && !m.isCompleted && m.smartConfig?.exerciseId === ex.id
     );
@@ -655,7 +655,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     const newScore = Math.min(10, (ex.score || 5) + 1);
     await storage.saveExercise({ ...ex, score: newScore });
     onUpdate();
-  };
+  }, [history, userMissions, onUpdate]);
 
   const handleGenerateResults = (generated: PlannedExercise[]) => {
      setLocalSession(prev => {
@@ -702,21 +702,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       return updated;
     });
   };
-
-  const muscleStats = useMemo(() => {
-    const load: Record<string, number> = {};
-    let totalLoadPoints = 0;
-    (localSession?.exercises || []).forEach(item => {
-      const ex = (allExercises || []).find(e => e.id === item.exerciseId);
-      if (!ex) return;
-      const impact = calculateExerciseImpact(ex, item.sets || [], userProfile?.weight || 80);
-      const primaries = (ex.primaryMuscles && ex.primaryMuscles.length > 0) ? ex.primaryMuscles : (ex.muscleGroups || []);
-      primaries.forEach(m => { load[m] = (load[m] || 0) + impact; totalLoadPoints += impact; });
-      ex.secondaryMuscles?.forEach(m => { const secondaryImpact = impact * 0.5; load[m] = (load[m] || 0) + secondaryImpact; totalLoadPoints += secondaryImpact; });
-    });
-    const results = Object.entries(load).map(([name, score]) => ({ name, percentage: totalLoadPoints > 0 ? Math.round((score / totalLoadPoints) * 100) : 0, count: score })).sort((a, b) => b.count - a.count);
-    return { results, loadMap: load };
-  }, [localSession?.exercises, allExercises, userProfile?.weight]);
 
   const todaysPlans = useMemo(() => {
     const now = new Date();
@@ -839,7 +824,14 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           isManual={isManualMode}
         />
 
-        <div className="px-4 space-y-4"><WorkoutStats results={muscleStats.results} loadMap={muscleStats.loadMap} isLoadMapOpen={isLoadMapOpen} onToggleLoadMap={() => setIsLoadMapOpen(!isLoadMapOpen)} /></div>
+        <div className="px-4 space-y-4">
+          <WorkoutStats 
+            session={localSession} 
+            allExercises={allExercises} 
+            onAddExercise={addNewExercise}
+            userProfile={userProfile}
+          />
+        </div>
         <div className="px-4">
           <button onClick={() => setShowZonePicker(true)} className="w-full py-4 bg-[#1a1721] border border-white/5 rounded-2xl flex items-center justify-between px-6 shadow-sm active:scale-[0.98] transition-all">
             <div className="flex items-center gap-4">

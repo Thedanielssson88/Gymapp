@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { 
   WorkoutSession, 
@@ -13,7 +14,7 @@ import {
   Trophy, Target as TargetIcon, TrendingUp, Plus, Zap, Star, Flame, Award, X, Check, Dumbbell,
   Sunrise, Moon, CalendarDays, Link, CalendarCheck, Crown, Weight, Globe, Gem, Timer, Wind,
   RotateCcw, Hourglass, Layers, Compass, MapPin, ArrowUp, ArrowDown, Anchor, Shield, Swords, MessageSquare,
-  Medal, Lock
+  Medal, Lock, AlertTriangle, Trash2, Calendar
 } from 'lucide-react';
 import { 
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer 
@@ -74,11 +75,78 @@ const getMuscleGroupsTrainedInPeriod = (
   return trainedMuscles;
 };
 
+const getProgressStats = (mission: UserMission, currentValues: Record<string, number>) => {
+    if (mission.type !== 'smart_goal' || !mission.smartConfig) {
+        const percent = mission.total > 0 ? Math.min(100, Math.max(0, Math.round((mission.progress / mission.total) * 100))) : 0;
+        return { percent, isBehind: false, timePercent: 0 };
+    }
+
+    const config = mission.smartConfig;
+    const current = currentValues[mission.id] || config.startValue;
+    
+    let percent = 0;
+    const totalDist = Math.abs(config.targetValue - config.startValue);
+    if (totalDist > 0) {
+        if (config.targetValue > config.startValue) {
+            // Increasing goal
+            percent = ((current - config.startValue) / totalDist) * 100;
+        } else {
+            // Decreasing goal
+            percent = ((config.startValue - current) / totalDist) * 100;
+        }
+    }
+    percent = Math.min(100, Math.max(0, Math.round(percent)));
+
+    let timePercent = 0;
+    let isBehind = false;
+
+    if (config.deadline) {
+        const start = new Date(mission.createdAt!).getTime();
+        const end = new Date(config.deadline).getTime();
+        const now = new Date().getTime();
+        const totalTime = end - start;
+        
+        if (totalTime > 0) {
+            timePercent = Math.min(100, Math.max(0, ((now - start) / totalTime) * 100));
+        }
+
+        // Warning if time progress is more than goal progress (with a 10% margin)
+        if (timePercent > (percent + 10) && percent < 100) {
+            isBehind = true;
+        }
+    }
+
+    return { percent, isBehind, timePercent };
+};
+
 export const TargetsView: React.FC<TargetsViewProps> = ({
   userMissions, history, exercises, userProfile, biometricLogs, onAddMission, onDeleteMission
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<UserMission | null>(null);
+
+  const currentValues = useMemo(() => {
+    const newValues: Record<string, number> = {};
+    if (!userMissions || !userProfile) return newValues;
+
+    for (const m of userMissions) {
+      if (m.type === 'smart_goal' && m.smartConfig) {
+        if (m.smartConfig.targetType === 'exercise' && m.smartConfig.exerciseId) {
+          const lastPerf = getLastPerformance(m.smartConfig.exerciseId, history);
+          const max = lastPerf ? Math.max(...lastPerf.map(s => calculate1RM(s.weight, s.reps))) : 0;
+          newValues[m.id] = max > 0 ? max : m.smartConfig.startValue;
+        } else if (m.smartConfig.targetType === 'body_weight') {
+          const latestLog = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+          newValues[m.id] = latestLog?.weight || userProfile.weight || m.smartConfig.startValue;
+        } else if (m.smartConfig.targetType === 'body_measurement' && m.smartConfig.measurementKey) {
+          const key = m.smartConfig.measurementKey;
+          const latestLog = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).find(l => l.measurements?.[key as keyof BodyMeasurements]);
+          newValues[m.id] = latestLog?.measurements?.[key as keyof BodyMeasurements] || userProfile.measurements?.[key as keyof BodyMeasurements] || m.smartConfig.startValue;
+        }
+      }
+    }
+    return newValues;
+  }, [userMissions, history, biometricLogs, userProfile]);
 
   const stats = useMemo(() => {
       const totalWorkouts = (history || []).length;
@@ -262,9 +330,18 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
               <span className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-0.5">{stats.currentLevelXP} / {stats.xpToNextLevel} XP</span>
             </div>
             <div className="pt-1">
-              <div className="h-3 bg-white/5 rounded-full overflow-hidden border border-white/5 p-[2px]">
-                <div className="h-full bg-accent-pink rounded-full transition-all duration-1000" style={{ width: `${stats.xpProgress}%` }} />
+               <div className="h-4 bg-black/50 rounded-full overflow-hidden border border-white/5 relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12 animate-pulse" style={{ animationDuration: '3s' }} />
+                  <div 
+                      className="h-full bg-gradient-to-r from-accent-blue to-purple-500 transition-all duration-1000 ease-out relative"
+                      style={{ width: `${stats.xpProgress}%` }}
+                  >
+                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-white/50" />
+                  </div>
               </div>
+              <p className="text-[10px] text-text-dim mt-2 text-right">
+                {stats.xpToNextLevel - stats.currentLevelXP} XP kvar till nästa nivå
+              </p>
             </div>
           </div>
         </div>
@@ -332,52 +409,77 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
           <button onClick={() => setShowAddModal(true)} className="p-2 bg-accent-blue/10 text-accent-blue rounded-xl hover:bg-accent-blue/20 transition-colors"><Plus size={20} /></button>
         </div>
         <div className="grid gap-4">
-          {(userMissions || []).length === 0 ? (
+          {userMissions.length === 0 ? (
             <div className="py-8 text-center bg-white/5 rounded-[32px] border border-dashed border-white/10 opacity-50"><p className="text-[10px] font-black uppercase tracking-widest">Inga aktiva uppdrag</p></div>
           ) : (
-            (userMissions || []).map(mission => {
-              if (mission.type === 'smart_goal' && mission.smartConfig) {
-                 const progress = calculateSmartProgression(mission, 0); // temp value
-                 const percentage = Math.round((progress?.progressRatio || 0) * 100);
-                 const isCompleted = mission.isCompleted;
-
-                 return (
-                    <div key={mission.id} onClick={() => setViewingMission(mission)} className={`group bg-[#1a1721] border rounded-[32px] p-5 active:scale-[0.98] transition-all cursor-pointer ${isCompleted ? 'border-green-500/30' : 'border-white/5 hover:border-accent-blue/30'}`}>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex gap-4">
-                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${isCompleted ? 'bg-green-500/20 text-green-500 border-green-500/30' : 'bg-white/5 border-white/5'}`}>
-                            {isCompleted ? <Check size={24} /> : <TrendingUp size={24} className="text-text-dim" />}
-                          </div>
-                          <div>
-                            <h4 className="text-base font-black italic uppercase text-white leading-tight">{mission.title}</h4>
-                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isCompleted ? 'text-green-500/70' : 'text-accent-blue'}`}>
-                              {new Date(mission.smartConfig.deadline).toLocaleDateString('sv-SE')}
-                            </p>
-                          </div>
-                        </div>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteMission(mission.id); }} className="p-2 text-text-dim opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"><X size={16} /></button>
-                      </div>
-                       <div className="space-y-2">
-                         <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
-                           <span className="text-text-dim">Tidslinje</span>
-                           <span className={`${isCompleted ? 'text-green-500' : 'text-accent-blue'}`}>{percentage}%</span>
-                         </div>
-                         <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px]">
-                           <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-green-500' : 'bg-accent-blue'}`} style={{ width: `${percentage}%` }} />
-                         </div>
-                       </div>
-                    </div>
-                 );
-              }
-
-              // Fallback for quests
-              const percentage = mission.total > 0 ? Math.round((mission.progress / mission.total) * 100) : 0;
+            userMissions.map(mission => {
+              const { percent, isBehind, timePercent } = getProgressStats(mission, currentValues);
+              const isSmart = mission.type === 'smart_goal';
+              
               return (
-                  <div key={mission.id} className="group bg-[#1a1721] border rounded-[32px] p-5 border-white/5 opacity-80">
-                      <h4 className="text-base font-black italic uppercase text-white leading-tight">{mission.title}</h4>
-                      <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px] mt-2">
-                        <div className="h-full bg-accent-pink rounded-full" style={{ width: `${percentage}%` }} />
+                  <div 
+                      key={mission.id} 
+                      onClick={() => isSmart && setViewingMission(mission)}
+                      className="bg-[#1a1721] p-5 rounded-2xl border border-white/5 relative group active:scale-[0.98] transition-all"
+                  >
+                      <div className="flex justify-between items-start mb-4">
+                          <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSmart ? 'bg-accent-blue/10 text-accent-blue' : 'bg-purple-500/10 text-purple-500'}`}>
+                                  {isSmart ? <TrendingUp size={20} /> : <Trophy size={20} />}
+                              </div>
+                              <div>
+                                  <h3 className="text-white font-bold text-lg leading-tight">{mission.title}</h3>
+                                  {isSmart && mission.smartConfig?.deadline ? (
+                                      <p className="text-xs text-text-dim flex items-center gap-1 mt-1">
+                                          <Calendar size={10} /> Deadline: {mission.smartConfig.deadline}
+                                      </p>
+                                  ) : (
+                                      <p className="text-xs text-text-dim mt-1">Inget slutdatum</p>
+                                  )}
+                              </div>
+                          </div>
+                          
+                          <button 
+                              onClick={(e) => {e.stopPropagation(); onDeleteMission(mission.id);}}
+                              className="p-2 text-text-dim hover:text-red-500 hover:bg-white/5 rounded-full transition-colors"
+                          >
+                              <Trash2 size={18} />
+                          </button>
                       </div>
+
+                      <div className="space-y-1 mb-2">
+                          <div className="flex justify-between text-xs font-bold uppercase">
+                              <span className="text-white">Måluppfyllelse</span>
+                              <span className={percent >= 100 ? 'text-accent-green' : 'text-accent-blue'}>{percent}%</span>
+                          </div>
+                          <div className="h-3 bg-white/10 rounded-full overflow-hidden">
+                              <div 
+                                  className={`h-full rounded-full transition-all duration-1000 ${percent >= 100 ? 'bg-accent-green' : 'bg-accent-blue'}`} 
+                                  style={{ width: `${percent}%` }}
+                              />
+                          </div>
+                      </div>
+
+                      {isSmart && mission.smartConfig?.deadline && (
+                           <div className="space-y-1 mt-3">
+                              <div className="flex justify-between text-[10px] font-bold uppercase text-text-dim">
+                                  <span className="flex items-center gap-1">
+                                      Tidslinje
+                                      {isBehind && <AlertTriangle size={10} className="text-red-500" />}
+                                  </span>
+                                  <span>{Math.round(timePercent)}% av tiden</span>
+                              </div>
+                              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                  <div 
+                                      className={`h-full rounded-full transition-all duration-1000 ${isBehind ? 'bg-red-500' : 'bg-white/30'}`} 
+                                      style={{ width: `${timePercent}%` }}
+                                  />
+                              </div>
+                              {isBehind && (
+                                  <p className="text-[9px] text-red-500 font-bold mt-1 text-right">Du ligger efter planen!</p>
+                              )}
+                          </div>
+                      )}
                   </div>
               );
             })
