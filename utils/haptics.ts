@@ -28,7 +28,7 @@ export const triggerHaptic = {
   },
   
   tick: async (user: UserProfile | null) => {
-    if (!user?.settings?.vibrateOnRestEnd || !(await isHapticsAvailable)) return;
+    if (!user?.settings?.vibrateButtons || !(await isHapticsAvailable)) return;
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
     } catch (e) {
@@ -37,7 +37,7 @@ export const triggerHaptic = {
   },
 
   success: async (user: UserProfile | null) => {
-    if (!user?.settings?.vibrateOnRestEnd || !(await isHapticsAvailable)) return;
+    if (!user?.settings?.vibrateButtons || !(await isHapticsAvailable)) return;
     try {
       await Haptics.notification({ type: NotificationType.Success });
     } catch (e) {
@@ -46,7 +46,7 @@ export const triggerHaptic = {
   },
 
   double: async (user: UserProfile | null) => {
-    if (!user?.settings?.vibrateOnRestEnd || !(await isHapticsAvailable)) return;
+    if (!user?.settings?.vibrateButtons || !(await isHapticsAvailable)) return;
     try {
         await Haptics.notification({ type: NotificationType.Success });
         setTimeout(async () => {

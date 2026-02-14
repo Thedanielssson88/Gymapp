@@ -17,7 +17,7 @@ import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRig
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { triggerHaptic } from './utils/haptics';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -81,24 +81,25 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [activeTab]);
 
-  // --- GLOBAL KNAPP-VIBRATION ---
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
-      const isVibrationEnabled = user?.settings?.vibrateOnRestEnd ?? true; 
+      // Kontrollera inställningen
+      const isVibrationEnabled = user?.settings?.vibrateButtons ?? true;
       if (!isVibrationEnabled) return;
-
+  
+      // Hitta närmaste knapp eller länk från det man klickade på
       const target = e.target as HTMLElement;
       const button = target.closest('button, a, [role="button"]');
-      
+  
       if (button) {
-          triggerHaptic.light(); 
+        // Utlös en lätt vibration (samma 'tick' som i timern)
+        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
       }
     };
-
+  
     window.addEventListener('click', handleGlobalClick);
-
     return () => window.removeEventListener('click', handleGlobalClick);
-  }, [user?.settings?.vibrateOnRestEnd]);
+  }, [user?.settings?.vibrateButtons]);
 
   const refreshData = async () => {
     const [p, z, h, logs, sess, ex, gt, r, scheduled, recurring, missions] = await Promise.all([

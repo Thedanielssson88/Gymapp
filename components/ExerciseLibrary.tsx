@@ -55,6 +55,19 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
     }
   }, [initialExercises, exercises.length]);
 
+  useEffect(() => {
+    // A modal is open if this component is a selector, or if it has an editor/importer open inside.
+    const isModalOpen = isSelectorMode || !!editingExercise || showImporter;
+    
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+      // Return a cleanup function to restore scrolling when the modal condition is no longer met.
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [isSelectorMode, editingExercise, showImporter]);
+
   const handleRate = async (ex: Exercise, rating: 'up' | 'down') => {
     const newRating = ex.userRating === rating ? null : rating;
     
@@ -303,7 +316,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
   const toggleList = (list: string[], item: string) => (list || []).includes(item) ? list.filter(i => i !== item) : [...(list || []), item];
 
   return (
-    <div className="fixed inset-0 bg-[#0f0d15] z-[250] flex flex-col animate-in slide-in-from-bottom-10">
+    <div className="fixed inset-0 bg-[#0f0d15] z-[250] flex flex-col animate-in slide-in-from-bottom-10 overscroll-y-contain">
       <header className="flex justify-between items-center p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] border-b border-white/5 bg-[#0f0d15]"><h3 className="text-2xl font-black italic uppercase">Redigera Övning</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
       <div className="flex p-4 gap-2 border-b border-white/5">
           {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'muscles', label: 'Muskler', icon: Layers }, { id: 'progression', label: 'Progression', icon: TrendingUp }, { id: 'settings', label: 'Data', icon: Scale }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}><tab.icon size={16} /> {tab.label}</button>))}

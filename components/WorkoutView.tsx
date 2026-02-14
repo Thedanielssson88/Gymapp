@@ -56,6 +56,13 @@ const InfoModal = ({
   const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
   const imageSrc = useExerciseImage(exercise); // Hämta bilden
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
   // Beräkna statistik för Progression
   const stats = useMemo(() => {
     const exerciseHistory = history
@@ -106,7 +113,7 @@ const InfoModal = ({
   }, [allExercises, exercise]);
 
   return (
-    <div className="fixed inset-0 bg-[#0f0d15] z-[9999] flex flex-col animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-[#0f0d15] z-[9999] flex flex-col animate-in fade-in duration-200 overscroll-y-contain">
       <header className="flex justify-between items-center p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] border-b border-white/5 bg-[#0f0d15]">
         <h3 className="text-2xl font-black italic uppercase text-white truncate pr-4">{exercise.name}</h3>
         <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl active:scale-95 transition-transform"><X size={24} className="text-white"/></button>
@@ -389,13 +396,13 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     if (restTimer !== null && restTimer > 0) {
       interval = setInterval(() => setRestTimer(r => (r !== null ? r - 1 : 0)), 1000);
     } else if (restTimer === 0) {
-      if (!isManualMode && (userProfile.settings?.vibrateOnRestEnd ?? true)) {
+      if (!isManualMode && (userProfile.settings?.vibrateTimer ?? true)) {
         triggerRestEndHaptics();
       }
       setRestTimer(null);
     }
     return () => clearInterval(interval);
-  }, [restTimer, userProfile.settings?.vibrateOnRestEnd, isManualMode]);
+  }, [restTimer, userProfile.settings?.vibrateTimer, isManualMode]);
 
   const canFinishWorkout = useMemo(() => {
     if (!localSession) return false;
@@ -901,6 +908,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           title="Ta bort övning?"
           message={`Är du säker på att du vill ta bort "${localSession?.exercises[exerciseToDelete] ? allExercises.find(e => e.id === localSession.exercises[exerciseToDelete].exerciseId)?.name : 'övningen'}" från passet?`}
           confirmLabel="Ja, ta bort"
+          cancelLabel="Avbryt"
           isDestructive={true}
           onConfirm={confirmDeleteExercise}
           onCancel={() => setExerciseToDelete(null)}
@@ -911,7 +919,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       {showGenerator && <WorkoutGenerator activeZone={activeZone} allExercises={allExercises} userProfile={userProfile} history={history} onGenerate={handleGenerateResults} onClose={() => setShowGenerator(false)} />}
       
       {showAddModal && (
-        <div className="fixed inset-0 bg-[#0f0d15] z-[9999] flex flex-col animate-in slide-in-from-bottom-10 duration-500">
+        <div className="fixed inset-0 bg-[#0f0d15] z-[9999] flex flex-col animate-in slide-in-from-bottom-10 duration-500 overscroll-y-contain">
           <ExerciseLibrary allExercises={allExercises} history={history} onSelect={addNewExercise} onClose={() => setShowAddModal(false)} onUpdate={onUpdate} activeZone={activeZone} userProfile={userProfile} />
         </div>
       )}

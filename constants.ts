@@ -27,7 +27,8 @@ export const DEFAULT_PROFILE: UserProfile = {
     barbellWeight: 20,
     dumbbellBaseWeight: 2,
     bodyViewMode: 'list',
-    vibrateOnRestEnd: true
+    vibrateButtons: true,
+    vibrateTimer: true
   }
 };
 

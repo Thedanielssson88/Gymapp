@@ -157,7 +157,8 @@ export interface UserSettings {
   bodyViewMode?: 'list' | 'map';
   barbellWeight?: number; 
   dumbbellBaseWeight?: number; 
-  vibrateOnRestEnd?: boolean;
+  vibrateButtons?: boolean;
+  vibrateTimer?: boolean;
   googleDriveLinked?: boolean;
   autoSyncMode?: 'after_workout' | 'manual' | 'startup';
   restoreOnStartup?: boolean;

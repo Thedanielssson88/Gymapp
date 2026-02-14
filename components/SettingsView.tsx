@@ -3,7 +3,7 @@ import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
 import { getAccessToken, uploadBackup, findBackupFile, BackupData, isTokenValid } from '../services/googleDrive';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2, Timer } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -34,7 +34,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
         settings: {
             includeWarmupInStats: prev.settings?.includeWarmupInStats ?? false,
             bodyViewMode: prev.settings?.bodyViewMode ?? 'list',
-            vibrateOnRestEnd: prev.settings?.vibrateOnRestEnd ?? true,
+            vibrateButtons: prev.settings?.vibrateButtons ?? true,
+            vibrateTimer: prev.settings?.vibrateTimer ?? true,
             googleDriveLinked: prev.settings?.googleDriveLinked ?? false,
             ...prev.settings,
             [key]: value
@@ -331,20 +332,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
          </div>
          
          <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <Smartphone size={18} className={localProfile.settings?.vibrateOnRestEnd ?? true ? "text-accent-blue" : "text-text-dim"} />
-              <div>
-                <p className="text-sm font-bold text-white">Vibrera vid vilans slut</p>
-                <p className="text-[10px] text-text-dim">Haptisk feedback när timern är klar</p>
-              </div>
+          <div className="flex items-center gap-3">
+            <Smartphone size={18} className={localProfile.settings?.vibrateButtons ? "text-accent-blue" : "text-text-dim"} />
+            <div>
+              <p className="text-sm font-bold text-white">Vibrera vid tryck</p>
+              <p className="text-[10px] text-text-dim">Känn haptisk feedback när du trycker på knappar</p>
             </div>
-            <button 
-              onClick={() => handleSettingChange('vibrateOnRestEnd', !(localProfile.settings?.vibrateOnRestEnd ?? true))}
-              className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.vibrateOnRestEnd ?? true) ? 'bg-accent-blue' : 'bg-white/10'}`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateOnRestEnd ?? true) ? 'left-7' : 'left-1'}`} />
-            </button>
-         </div>
+          </div>
+          <button 
+            onClick={() => handleSettingChange('vibrateButtons', !(localProfile.settings?.vibrateButtons ?? true))}
+            className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.vibrateButtons ?? true) ? 'bg-accent-blue' : 'bg-white/10'}`}
+          >
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateButtons ?? true) ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between py-2 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <Timer size={18} className={localProfile.settings?.vibrateTimer ? "text-accent-green" : "text-text-dim"} />
+            <div>
+              <p className="text-sm font-bold text-white">Vibrera vid timer slut</p>
+              <p className="text-[10px] text-text-dim">Kraftig vibration när vilan är över</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => handleSettingChange('vibrateTimer', !(localProfile.settings?.vibrateTimer ?? true))}
+            className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.vibrateTimer ?? true) ? 'bg-accent-green' : 'bg-white/10'}`}
+          >
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateTimer ?? true) ? 'left-7' : 'left-1'}`} />
+          </button>
+        </div>
       </section>
 
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/10 space-y-6">

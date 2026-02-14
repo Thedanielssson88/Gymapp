@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Exercise, WorkoutRoutine, PlannedExercise, WorkoutSet, WorkoutSession } from '../types';
 import { ExerciseLibrary } from './ExerciseLibrary';
 import { Save, Plus, Trash2, X } from 'lucide-react';
@@ -17,6 +17,13 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
   const [routineName, setRoutineName] = useState(initialRoutine?.name || '');
   const [plannedExercises, setPlannedExercises] = useState<PlannedExercise[]>(initialRoutine?.exercises || []);
   const [showLibrary, setShowLibrary] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
   const handleAddExercise = (ex: Exercise) => {
     const newPlanned: PlannedExercise = {
@@ -89,7 +96,7 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[250] bg-[#0f0d15] flex flex-col animate-in slide-in-from-bottom-10">
+    <div className="fixed inset-0 z-[250] bg-[#0f0d15] flex flex-col animate-in slide-in-from-bottom-10 overscroll-y-contain">
       <div className="p-4 pt-[calc(env(safe-area-inset-top)+1rem)] border-b border-white/10 flex justify-between items-center bg-[#1a1721] sticky top-0 z-10">
         <div>
           <h3 className="text-xl font-black italic uppercase text-white">{initialRoutine?.id ? 'Redigera' : 'Skapa'} Rutin</h3>

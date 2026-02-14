@@ -33,7 +33,7 @@ export const ExerciseImporter: React.FC<ExerciseImporterProps> = ({ onImport, on
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0f0d15] animate-in slide-in-from-bottom-10 duration-300">
+    <div className="flex flex-col h-full bg-[#0f0d15] animate-in slide-in-from-bottom-10 duration-300 overscroll-y-contain">
       <header className="flex justify-between items-center p-6 pb-2">
         <div>
           <span className="text-[10px] font-black text-accent-pink uppercase tracking-[0.3em] block mb-1">Global Import</span>
