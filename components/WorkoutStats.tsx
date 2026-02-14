@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutSession, Exercise, MuscleGroup, UserProfile } from '../types';
 import { calculateExerciseImpact } from '../utils/recovery';
 import { X, Dumbbell, Activity, Plus, ChevronDown, ChevronUp } from 'lucide-react';
@@ -83,6 +82,18 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Lås scroll på bakgrunden när modalen är öppen
+  useEffect(() => {
+    if (selectedMuscle) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedMuscle]);
+
   // --- AVANCERAD BELASTNINGSBERÄKNING ---
   const stats = useMemo(() => {
     if (!session) return { muscleLoad: {}, totalLoadScore: 0 };
@@ -160,8 +171,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
             ex.primaryMuscles?.includes(selectedMuscle) && 
             !session.exercises.some(sessEx => sessEx.exerciseId === ex.id)
         )
-        // FIX: Sort recommended exercises by their score to provide better suggestions.
-        // FIX: Explicitly type 'a' and 'b' as Exercise to fix 'Property 'score' does not exist on type 'unknown'' error.
+        // FIX: Explicitly type sort parameters to resolve incorrect type inference.
         .sort((a: Exercise, b: Exercise) => (b.score || 5) - (a.score || 5))
         .slice(0, 5);
   }, [selectedMuscle, allExercises, session]);
@@ -246,8 +256,8 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
         )}
 
         {selectedMuscle && (
-          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setSelectedMuscle(null); }}>
-              <div className="bg-[#1a1721] w-full max-w-md max-h-[80vh] flex flex-col rounded-3xl border border-white/10 shadow-2xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-start justify-center pt-16 p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setSelectedMuscle(null); }}>
+              <div className="bg-[#1a1721] w-full max-w-md max-h-[85vh] flex flex-col rounded-3xl border border-white/10 shadow-2xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
                   <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#1a1721] rounded-t-3xl shrink-0">
                       <div>
                           <p className="text-[10px] text-text-dim uppercase tracking-widest">Analys</p>
@@ -255,7 +265,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
                       </div>
                       <button onClick={() => setSelectedMuscle(null)} className="p-2 bg-white/5 rounded-full"><X className="text-white" size={20} /></button>
                   </div>
-                  <div className="p-6 overflow-y-auto space-y-8">
+                  <div className="p-6 overflow-y-auto flex-1 space-y-8 overscroll-contain">
                       <div>
                           <h4 className="text-xs font-black text-text-dim uppercase mb-3 flex items-center gap-2"><Activity size={14} /> Bidragande Övningar</h4>
                           <div className="space-y-2">

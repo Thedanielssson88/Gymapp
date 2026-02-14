@@ -221,7 +221,6 @@ export const storage = {
   },
 
   importFullBackup: async (data: BackupData) => {
-    // Fix: Cast db to any to avoid "Property 'transaction' does not exist on type 'GymDatabase'" error
     await (db as any).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.workoutRoutines, db.userMissions, db.goalTargets], async () => {
       await db.userProfile.put(data.profile);
       await db.zones.clear();

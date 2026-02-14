@@ -210,6 +210,7 @@ export interface WorkoutRoutine {
   name: string;
   exercises: PlannedExercise[];
   category?: string;
+  isAiGenerated?: boolean;
 }
 
 export interface WorkoutSession {

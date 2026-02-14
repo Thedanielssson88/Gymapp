@@ -50,10 +50,18 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
   useEffect(() => {
+    // Sync with props, but avoid re-syncing if only an item's content changed
     if (initialExercises.length !== exercises.length) {
       setExercises(initialExercises);
+    } else {
+       // A more robust check in case items are swapped but length is the same
+       const initialIds = initialExercises.map(e => e.id).join(',');
+       const currentIds = exercises.map(e => e.id).join(',');
+       if(initialIds !== currentIds) {
+          setExercises(initialExercises);
+       }
     }
-  }, [initialExercises, exercises.length]);
+  }, [initialExercises]);
 
   useEffect(() => {
     // A modal is open if this component is a selector, or if it has an editor/importer open inside.
@@ -75,8 +83,20 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
     if (newRating === 'up') newScore = 10;
     if (newRating === 'down') newScore = 1;
 
-    await storage.updateExercise(ex.id, { userRating: newRating, score: newScore });
-    onUpdate();
+    const updatedExercise = { ...ex, userRating: newRating, score: newScore };
+
+    // Optimistic UI update
+    setExercises(prev => prev.map(exercise => exercise.id === ex.id ? updatedExercise : exercise));
+
+    try {
+      // Update database in background
+      await storage.updateExercise(ex.id, { userRating: newRating, score: newScore });
+    } catch (error) {
+      console.error("Failed to rate exercise, reverting UI", error);
+      // Revert on failure
+      setExercises(prev => prev.map(exercise => exercise.id === ex.id ? ex : exercise));
+      alert("Kunde inte spara betyget.");
+    }
   };
   
   const getLastUsed = (exerciseId: string) => {
@@ -141,34 +161,42 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
             muscleGroups: Array.from(new Set([...(exerciseData.primaryMuscles || []), ...(exerciseData.secondaryMuscles || [])])) 
         };
 
-        await storage.saveExercise(exerciseToSave);
-
+        // Optimistic update for save/edit
         setExercises(prev => {
-            const exists = prev.find(ex => ex.id === exerciseToSave.id);
+            const exists = prev.some(ex => ex.id === exerciseToSave.id);
             if (exists) {
                 return prev.map(ex => ex.id === exerciseToSave.id ? exerciseToSave : ex);
             }
             return [exerciseToSave, ...prev];
         });
-
         setEditingExercise(null);
         
-        if (onUpdate) {
-            onUpdate(); 
-        }
+        await storage.saveExercise(exerciseToSave);
+        // Full refresh might be needed if other parts of the app depend on a global state,
+        // but for local changes this is faster. We can call onUpdate for robustness.
+        onUpdate(); 
 
     } catch (error) {
         console.error("Fel vid sparning:", error);
+        // Optional: Revert UI on save failure
     }
   };
 
 
   const handleDelete = async (id: string) => {
     if(confirm("Är du säker på att du vill ta bort denna övning?")) {
-        await storage.deleteExercise(id);
+        // Optimistic delete
+        const originalExercises = exercises;
         setExercises(prev => prev.filter(ex => ex.id !== id));
         setEditingExercise(null);
-        onUpdate();
+
+        try {
+            await storage.deleteExercise(id);
+            onUpdate();
+        } catch (error) {
+            console.error("Failed to delete, reverting", error);
+            setExercises(originalExercises); // Revert on failure
+        }
     }
   }
 

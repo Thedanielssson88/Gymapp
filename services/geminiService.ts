@@ -128,3 +128,114 @@ export const generateExerciseDetailsFromGemini = async (
     throw new Error("AI-genereringen misslyckades. Kontrollera din anslutning och försök igen.");
   }
 };
+
+export interface AIPlanResponse {
+  motivation: string;
+  smartGoals: {
+    title: string;
+    targetValue: number;
+    targetType: 'exercise' | 'body_weight' | 'body_measurement';
+    exerciseId?: string;
+    deadline: string;
+    strategy: 'linear' | 'undulating' | 'peaking';
+  }[];
+  routines: {
+    name: string;
+    description: string;
+    exercises: { id: string; targetSets: number; targetReps: string }[];
+    scheduledDay: number; // 1-7 (Måndag-Söndag)
+  }[];
+}
+
+export const generateProfessionalPlan = async (
+  userRequest: string,
+  userHistory: WorkoutSession[],
+  availableExercises: Exercise[],
+  currentProfile: UserProfile
+): Promise<AIPlanResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  const exerciseBankString = availableExercises.map(e => `id: "${e.id}", name: "${e.name}", primaryMuscles: [${e.primaryMuscles.join(', ')}], pattern: "${e.pattern}"`).join('\n');
+
+  const contents = `
+    You are a world-leading personal trainer and rehabilitation expert. Your task is to create a weekly training plan based on the user's request: "${userRequest}".
+
+    AVAILABLE DATA:
+    - User Profile: ${JSON.stringify(currentProfile)}
+    - Recent Workout History (last 10 sessions): ${JSON.stringify(userHistory.slice(-10).map(s => ({name: s.name, date: s.date, exercises: s.exercises.length})))}
+    - Available Exercise Bank (use ONLY these IDs):
+    ${exerciseBankString}
+
+    RULES:
+    1.  **Strictly use exercise IDs from the provided Exercise Bank.** Do not invent exercises or IDs.
+    2.  If the user's goal is rehabilitation (e.g., mentions "posture", "pain", "rehab"), prioritize exercises with the 'Rehab / Prehab' or 'Mobility / Stretch' movement pattern.
+    3.  If the goal is strength, use linear periodization principles (e.g., lower rep ranges for main lifts).
+    4.  Create a balanced weekly plan. Distribute the routines across the week (Monday=1, Sunday=7).
+    5.  The response MUST be a single, valid JSON object matching the provided schema. Do not include any markdown formatting like \`\`\`json.
+
+    Analyze all the data and generate a professional, motivating, and effective plan.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            motivation: { type: Type.STRING, description: "A short, motivating explanation of why this program is suitable for the user's goal." },
+            smartGoals: {
+              type: Type.ARRAY,
+              description: "A list of 1-2 suggested 'smart goals' for the user to add to their TargetsView.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING, description: "Example: 'Reach 100kg Bench Press'" },
+                  targetValue: { type: Type.NUMBER, description: "The target value for the goal." },
+                  targetType: { type: Type.STRING, enum: ['exercise', 'body_weight', 'body_measurement'] },
+                  exerciseId: { type: Type.STRING, description: "The exercise ID from the bank if targetType is 'exercise'." },
+                  deadline: { type: Type.STRING, description: "Suggested deadline in YYYY-MM-DD format, usually 3 months from now." },
+                  strategy: { type: Type.STRING, enum: ['linear', 'undulating', 'peaking'], description: "The progression strategy."}
+                }
+              }
+            },
+            routines: {
+              type: Type.ARRAY,
+              description: "A list of workout routines for the week.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING, description: "Name of the workout, e.g., 'Push Day'." },
+                  description: { type: Type.STRING, description: "Focus for the workout." },
+                  scheduledDay: { type: Type.NUMBER, description: "Day of the week (1=Monday, 7=Sunday)." },
+                  exercises: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING, description: "The exact exercise ID from the provided bank." },
+                        targetSets: { type: Type.NUMBER, description: "Number of sets." },
+                        targetReps: { type: Type.STRING, description: "Target rep range, e.g., '8-10'." }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) {
+      throw new Error("AI plan generation returned an empty response.");
+    }
+    return JSON.parse(jsonText.trim()) as AIPlanResponse;
+  } catch (error) {
+      console.error("AI plan generation failed:", error);
+      throw new Error("AI-assistenten kunde inte skapa en plan. Kontrollera din anslutning eller försök omformulera din förfrågan.");
+  }
+};

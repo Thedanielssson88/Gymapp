@@ -12,9 +12,9 @@ import { storage } from './services/storage';
 import { db } from './services/db'; 
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
-// @FIX: import 'uploadBackup' to fix 'Cannot find name' error
+import { AIArchitect } from './components/AIArchitect';
 import { getAccessToken, findBackupFile, downloadBackup, uploadBackup } from './services/googleDrive';
-import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud } from 'lucide-react';
+import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud, Sparkles } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -23,7 +23,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>('Initierar...');
-  const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms'>('workout');
+  const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms' | 'ai'>('workout');
   const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'analytics' | 'settings'>('recovery');
   
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -549,6 +549,7 @@ export default function App() {
                               />;
       case 'library': return <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} userProfile={user} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
+      case 'ai': return <AIArchitect onPlanApplied={refreshData} />;
       default: return null;
     }
   };
@@ -601,6 +602,13 @@ export default function App() {
             >
               <User2 size={20} />
               <span className="text-[10px] font-black uppercase tracking-widest">Kropp</span>
+            </button>
+             <button 
+              onClick={() => setActiveTab('ai')}
+              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'ai' ? 'bg-white text-black' : 'text-text-dim'}`}
+            >
+              <Sparkles size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">AI PT</span>
             </button>
             <button 
               onClick={() => setActiveTab('targets')}

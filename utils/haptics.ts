@@ -3,9 +3,7 @@ import { UserProfile } from '../types';
 
 const canVibrate = async () => {
   try {
-    // FIX: Property 'checkPermissions' does not exist on type 'HapticsPlugin'. Cast to any to allow for runtime check.
     if ((Haptics as any).checkPermissions) { // checkPermissions might not exist in all environments
-      // FIX: Property 'checkPermissions' does not exist on type 'HapticsPlugin'. Cast to any to allow for runtime check.
       const permissions = await (Haptics as any).checkPermissions();
       return permissions.receive === 'granted';
     }
