@@ -20,6 +20,8 @@ import {
 } from 'recharts';
 import { calculate1RM, getLastPerformance } from '../utils/fitness';
 import { AddMissionModal } from './AddMissionModal';
+import { MissionStatusModal } from './MissionStatusModal';
+import { calculateSmartProgression } from '../utils/progression';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 
 interface TargetsViewProps {
@@ -38,7 +40,7 @@ const REF_MAX = { PUSH: 120, PULL: 220, LEGS: 180 };
 // Hjälpfunktion för att sortera in övningar i PPL
 const getPPLCategory = (ex: Exercise): 'Push' | 'Pull' | 'Legs' | 'Other' => {
   if (ex.pattern === MovementPattern.HORIZONTAL_PUSH || ex.pattern === MovementPattern.VERTICAL_PUSH) return 'Push';
-  if (ex.pattern === MovementPattern.HORIZONTAL_PULL || ex.pattern === MovementPattern.VERTICAL_PULL || ex.pattern === MovementPattern.HINGE) return 'Pull';
+  if (ex.pattern === MovementPattern.HORIZONTAL_PULL || ex.pattern === MovementPattern.HINGE) return 'Pull';
   if (ex.pattern === MovementPattern.SQUAT || ex.pattern === MovementPattern.LUNGE) return 'Legs';
   
   const p = ex.primaryMuscles || [];
@@ -72,110 +74,11 @@ const getMuscleGroupsTrainedInPeriod = (
   return trainedMuscles;
 };
 
-const getTargetProgress = (
-  mission: UserMission,
-  history: WorkoutSession[],
-  exercises: Exercise[],
-  userProfile: UserProfile,
-  biometricLogs: BiometricLog[]
-): { current: number; start: number; target: number; unit: string; percentage: number; isIncrease: boolean; colorClass: string; } => {
-  let currentVal = mission.startValue;
-  const start = mission.startValue;
-  const target = mission.targetValue;
-  let unit = '';
-
-  if (mission.type === 'weight' && mission.exerciseId) {
-    const exData = (exercises || []).find(e => e.id === mission.exerciseId);
-    const lastPerf = getLastPerformance(mission.exerciseId, history || []);
-    let calculatedVal = start;
-
-    if (lastPerf) {
-      switch (exData?.trackingType) {
-        case 'time_distance':
-          unit = 'm';
-          calculatedVal = Math.max(...lastPerf.map(s => s.distance || 0));
-          break;
-        case 'reps_only':
-          unit = 'reps';
-          calculatedVal = Math.max(...lastPerf.map(s => s.reps || 0));
-          break;
-        case 'time_only':
-          unit = 'sek';
-          calculatedVal = Math.max(...lastPerf.map(s => s.duration || 0));
-          break;
-        case 'reps_weight':
-        default:
-          unit = 'kg';
-          calculatedVal = Math.round(Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0)), 0));
-          break;
-      }
-    } else {
-        switch (exData?.trackingType) {
-            case 'time_distance': unit = 'm'; break;
-            case 'reps_only': unit = 'reps'; break;
-            case 'time_only': unit = 'sek'; break;
-            default: unit = 'kg'; break;
-        }
-    }
-    currentVal = calculatedVal;
-  } else if (mission.type === 'frequency') {
-    unit = 'pass';
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const uniqueWorkoutDays = new Set((history || []).filter(s => new Date(s.date) > thirtyDaysAgo).map(s => s.date.split('T')[0])).size;
-    currentVal = uniqueWorkoutDays;
-  } else if (mission.type === 'measurement' && mission.measurementKey) {
-    const measurementKey = mission.measurementKey;
-    if (measurementKey === 'weight') {
-      const sortedBiometricLogs = [...(biometricLogs || [])].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const latestWeightLog = sortedBiometricLogs.find(log => log.weight !== undefined);
-      currentVal = latestWeightLog?.weight || userProfile.weight || 0;
-    } else {
-      const sortedBiometricLogs = [...(biometricLogs || [])].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const latestMeasurementLog = sortedBiometricLogs.find(log => log.measurements && log.measurements[measurementKey as keyof BodyMeasurements]);
-      currentVal = (latestMeasurementLog?.measurements && latestMeasurementLog.measurements[measurementKey as keyof BodyMeasurements]) || (userProfile.measurements && userProfile.measurements[measurementKey as keyof BodyMeasurements]) || 0;
-    }
-    if (['neck', 'shoulders', 'chest', 'waist', 'hips', 'bicepsL', 'bicepsR', 'thighL', 'thighR', 'calves'].includes(measurementKey as string)) {
-      unit = 'cm';
-    } else if (measurementKey === 'bodyFat') {
-      unit = '%';
-    } else if (measurementKey === 'weight') { 
-      unit = 'kg';
-    }
-  }
-
-  let percentage = 0;
-  let isIncrease = target > start;
-  if (start === target) {
-    percentage = (currentVal >= target) ? 100 : 0;
-  } else if (isIncrease) {
-    percentage = ((currentVal - start) / (target - start)) * 100;
-  } else {
-    percentage = ((start - currentVal) / (start - target)) * 100;
-  }
-
-  const finalPercentage = Math.max(0, Math.min(100, Math.round(percentage)));
-
-  let colorClass = "bg-accent-pink";
-  if (finalPercentage >= 90) colorClass = "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
-  else if (finalPercentage >= 50) colorClass = "bg-orange-500";
-
-  return { 
-    current: currentVal, 
-    start, 
-    target, 
-    unit, 
-    percentage: finalPercentage, 
-    isIncrease,
-    colorClass
-  };
-};
-
 export const TargetsView: React.FC<TargetsViewProps> = ({
   userMissions, history, exercises, userProfile, biometricLogs, onAddMission, onDeleteMission
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editingMission, setEditingMission] = useState<UserMission | null>(null);
+  const [viewingMission, setViewingMission] = useState<UserMission | null>(null);
 
   const stats = useMemo(() => {
       const totalWorkouts = (history || []).length;
@@ -433,34 +336,49 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
             <div className="py-8 text-center bg-white/5 rounded-[32px] border border-dashed border-white/10 opacity-50"><p className="text-[10px] font-black uppercase tracking-widest">Inga aktiva uppdrag</p></div>
           ) : (
             (userMissions || []).map(mission => {
-              const { current, start, target, unit, percentage, isIncrease, colorClass } = getTargetProgress(mission, history || [], exercises || [], userProfile, biometricLogs || []);
+              if (mission.type === 'smart_goal' && mission.smartConfig) {
+                 const progress = calculateSmartProgression(mission, 0); // temp value
+                 const percentage = Math.round((progress?.progressRatio || 0) * 100);
+                 const isCompleted = mission.isCompleted;
+
+                 return (
+                    <div key={mission.id} onClick={() => setViewingMission(mission)} className={`group bg-[#1a1721] border rounded-[32px] p-5 active:scale-[0.98] transition-all cursor-pointer ${isCompleted ? 'border-green-500/30' : 'border-white/5 hover:border-accent-blue/30'}`}>
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${isCompleted ? 'bg-green-500/20 text-green-500 border-green-500/30' : 'bg-white/5 border-white/5'}`}>
+                            {isCompleted ? <Check size={24} /> : <TrendingUp size={24} className="text-text-dim" />}
+                          </div>
+                          <div>
+                            <h4 className="text-base font-black italic uppercase text-white leading-tight">{mission.title}</h4>
+                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isCompleted ? 'text-green-500/70' : 'text-accent-blue'}`}>
+                              {new Date(mission.smartConfig.deadline).toLocaleDateString('sv-SE')}
+                            </p>
+                          </div>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteMission(mission.id); }} className="p-2 text-text-dim opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"><X size={16} /></button>
+                      </div>
+                       <div className="space-y-2">
+                         <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
+                           <span className="text-text-dim">Tidslinje</span>
+                           <span className={`${isCompleted ? 'text-green-500' : 'text-accent-blue'}`}>{percentage}%</span>
+                         </div>
+                         <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px]">
+                           <div className={`h-full rounded-full transition-all duration-1000 ${isCompleted ? 'bg-green-500' : 'bg-accent-blue'}`} style={{ width: `${percentage}%` }} />
+                         </div>
+                       </div>
+                    </div>
+                 );
+              }
+
+              // Fallback for quests
+              const percentage = mission.total > 0 ? Math.round((mission.progress / mission.total) * 100) : 0;
               return (
-                <div key={mission.id} onClick={() => setEditingMission(mission)} className={`group bg-[#1a1721] border rounded-[32px] p-5 active:scale-[0.98] transition-all cursor-pointer ${percentage === 100 ? 'border-green-500/30' : 'border-white/5 hover:border-accent-blue/30'}`}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex gap-4">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${percentage === 100 ? 'bg-green-500/20 text-green-500 border-green-500/30' : 'bg-white/5 border-white/5'}`}>
-                        {percentage === 100 ? <Check size={24} className="text-green-500" /> : <TargetIcon size={24} className="text-text-dim" />}
+                  <div key={mission.id} className="group bg-[#1a1721] border rounded-[32px] p-5 border-white/5 opacity-80">
+                      <h4 className="text-base font-black italic uppercase text-white leading-tight">{mission.title}</h4>
+                      <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px] mt-2">
+                        <div className="h-full bg-accent-pink rounded-full" style={{ width: `${percentage}%` }} />
                       </div>
-                      <div>
-                        <h4 className="text-base font-black italic uppercase text-white leading-tight">{mission.name}</h4>
-                        <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${percentage === 100 ? 'text-green-500/70' : 'text-accent-blue'}`}>{isIncrease ? 'Öka' : 'Minska'} mot {mission.targetValue} {unit}</p>
-                      </div>
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); onDeleteMission(mission.id); }} className="p-2 text-text-dim opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"><X size={16} /></button>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
-                      <span className="text-text-dim">Start: {start} {unit} • Nu: {current} {unit}</span>
-                      <span className={`${percentage === 100 ? 'text-green-500' : 'text-accent-blue'}`}>{percentage}% Slutfört</span>
-                    </div>
-                    <div className="h-3 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 p-[1px]">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-1000 ${colorClass}`} 
-                        style={{ width: `${percentage}%` }} 
-                      />
-                    </div>
-                  </div>
-                </div>
               );
             })
           )}
@@ -484,16 +402,17 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
         )}
       </section>
 
-      {(showAddModal || editingMission) && (
+      {showAddModal && (
         <AddMissionModal
           allExercises={exercises}
           userProfile={userProfile}
           history={history}
-          biometricLogs={biometricLogs}
-          initialMission={editingMission || undefined} 
-          onSave={(mission) => { onAddMission(mission); setShowAddModal(false); setEditingMission(null); }}
-          onClose={() => { setShowAddModal(false); setEditingMission(null); }}
+          onSave={(mission) => { onAddMission(mission); setShowAddModal(false); }}
+          onClose={() => setShowAddModal(false)}
         />
+      )}
+      {viewingMission && (
+         <MissionStatusModal mission={viewingMission} onClose={() => setViewingMission(null)} />
       )}
     </div>
   );

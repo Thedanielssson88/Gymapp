@@ -40,7 +40,7 @@ export class GymDatabase extends Dexie {
       images: 'id',
       scheduledActivities: 'id, date, type, recurrenceId',
       recurringPlans: 'id',
-      userMissions: 'id, type, isCompleted'
+      userMissions: 'id, type, isCompleted, exerciseId'
     });
 
     (this as Dexie).on('populate', async () => {

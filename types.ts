@@ -262,19 +262,54 @@ export interface RecurringPlanForDisplay extends RecurringPlan {
 
 export type PlannedActivityForLogDisplay = ScheduledActivity | RecurringPlanForDisplay;
 
+// Strategier för hur målet ska nås
+export type ProgressionStrategy = 'linear' | 'undulating' | 'peaking';
+
+// Vad målet gäller
+export type SmartGoalTarget = 'exercise' | 'body_weight' | 'body_measurement';
+
+// Konfiguration för det smarta målet
+export interface SmartGoalConfig {
+  targetType: SmartGoalTarget;
+  
+  // Om det gäller en övning
+  exerciseId?: string;
+  
+  // Om det gäller kroppsmått (t.ex. 'waist', 'bicepsL')
+  measurementKey?: keyof BodyMeasurements | 'weight'; 
+
+  startValue: number;    // Vikt (kg)
+  targetValue: number;   // Målvikt (kg)
+  
+  // För progressionsmål med övningar
+  startReps?: number;    // T.ex. 8
+  targetReps?: number;   // T.ex. 5
+  
+  deadline: string;      // ISO datum
+  strategy: ProgressionStrategy;
+}
+
+// Uppdaterad UserMission (Bakåtkompatibel)
 export interface UserMission {
   id: string;
-  name: string; 
-  type: 'weight' | 'frequency' | 'measurement'; 
-  startValue: number; 
-  targetValue: number; 
-  exerciseId?: string; 
-  muscleGroup?: MuscleGroup; 
-  measurementKey?: keyof BodyMeasurements | 'weight'; 
+  title: string;
+  // Vi lägger till 'smart_goal' som en giltig typ
+  type: 'quest' | 'habit' | 'smart_goal'; 
+  
+  // Detta fält finns bara om type === 'smart_goal'
+  smartConfig?: SmartGoalConfig;
+  
+  // Behålls för quests/habits
   isCompleted: boolean;
+  progress: number;
+  total: number;
+  
+  // Viktigt för grafer
   createdAt: string;
   completedAt?: string;
+  exerciseId?: string; // För snabb åtkomst
 }
+
 
 export interface Plate {
   weight: number;

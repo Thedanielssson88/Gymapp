@@ -1,262 +1,221 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Exercise, UserMission, UserProfile, BodyMeasurements, WorkoutSession, BiometricLog } from '../types';
-import { Search, X, Check, Ruler, Activity, CheckCircle2, Dumbbell, Calendar, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { UserMission, Exercise, ProgressionStrategy, SmartGoalTarget, WorkoutSession, UserProfile, BodyMeasurements } from '../types';
+import { storage } from '../services/storage';
+import { X, Trophy, TrendingUp, Calendar, Dumbbell, Scale, Ruler } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from '../utils/fitness';
 
 interface AddMissionModalProps {
+  onClose: () => void;
+  onSave: (mission: UserMission) => void;
   allExercises: Exercise[];
   userProfile: UserProfile;
   history: WorkoutSession[];
-  biometricLogs: BiometricLog[];
-  initialMission?: UserMission;
-  onSave: (mission: UserMission) => void;
-  onClose: () => void;
 }
 
-export const AddMissionModal: React.FC<AddMissionModalProps> = ({ 
-  allExercises, userProfile, history, biometricLogs, initialMission, onSave, onClose 
-}) => {
-  const [name, setName] = useState(initialMission?.name || '');
-  const [type, setType] = useState<'weight' | 'frequency' | 'measurement'>(initialMission?.type || 'weight');
-  const [targetValue, setTargetValue] = useState<string>(initialMission?.targetValue?.toString() || '');
-  const [selectedExId, setSelectedExId] = useState(initialMission?.exerciseId || '');
-  const [selectedMeasure, setSelectedMeasure] = useState<keyof BodyMeasurements | 'weight' | ''>(initialMission?.measurementKey || '');
-  const [searchQuery, setSearchQuery] = useState('');
+export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSave, allExercises, userProfile, history }) => {
+  const [missionType, setMissionType] = useState<'quest' | 'smart_goal'>('smart_goal');
+  
+  // Data för Quest
+  const [title, setTitle] = useState('');
+  const [targetCount, setTargetCount] = useState(10);
 
+  // Data för Smart Goal
+  const [targetType, setTargetType] = useState<SmartGoalTarget>('exercise');
+  const [selectedExerciseId, setSelectedExerciseId] = useState('');
+  const [measurementKey, setMeasurementKey] = useState<keyof BodyMeasurements | 'weight'>('waist');
+  const [startValue, setStartValue] = useState(0);
+  const [targetValue, setTargetValue] = useState(0);
+  const [startReps, setStartReps] = useState(8);
+  const [targetReps, setTargetReps] = useState(5);
+  const [deadline, setDeadline] = useState('');
+  const [strategy, setStrategy] = useState<ProgressionStrategy>('linear');
+  
+
+  // Autofyll Startvärde baserat på historik när man väljer övning/typ
   useEffect(() => {
-    setName(initialMission?.name || '');
-    setType(initialMission?.type || 'weight');
-    setTargetValue(initialMission?.targetValue?.toString() || '');
-    setSelectedExId(initialMission?.exerciseId || '');
-    setSelectedMeasure(initialMission?.measurementKey || '');
-    setSearchQuery('');
-  }, [initialMission]);
-  
-  const exerciseData = useMemo(() => 
-    allExercises.find(e => e.id === selectedExId), 
-  [selectedExId, allExercises]);
-
-  const typeDescription = useMemo(() => {
-    switch (type) {
-      case 'weight':
-        if (!selectedExId) return "Välj en övning för att se måldetaljer.";
-        if (exerciseData?.trackingType === 'time_distance') 
-          return "Sätt ett mål för distans. Appen spårar din längsta sträcka i ett set.";
-        if (exerciseData?.trackingType === 'reps_only') 
-          return "Sätt ett mål för antal repetitioner. Appen spårar ditt uthållighetsrekord.";
-        if (exerciseData?.trackingType === 'time_only')
-          return "Sätt ett mål för tid. Appen spårar din längsta tid i ett set.";
-        return "Sätt ett mål för din maxstyrka. För styrkeövningar beräknas ditt 1RM (Maxlyft).";
-      case 'frequency':
-        return "Sätt ett mål för hur många pass du ska genomföra under en rullande 30-dagarsperiod för att bibehålla din vana.";
-      case 'measurement':
-        return "Sätt ett mål för ett specifikt kroppsmått. Appen känner automatiskt av om du vill öka eller minska baserat på ditt startvärde.";
-      default:
-        return "";
-    }
-  }, [type, selectedExId, exerciseData]);
-
-  const currentValue = useMemo(() => {
-    if (type === 'weight' && exerciseData) {
-      const lastPerf = getLastPerformance(exerciseData.id, history);
-      if (!lastPerf) return 0;
-      switch (exerciseData.trackingType) {
-        case 'time_distance': return Math.max(...lastPerf.map(s => s.distance || 0));
-        case 'reps_only': return Math.max(...lastPerf.map(s => s.reps || 0));
-        case 'time_only': return Math.max(...lastPerf.map(s => s.duration || 0));
-        default: return Math.round(Math.max(...lastPerf.map(s => calculate1RM(s.weight, s.reps))));
-      }
-    }
-    if (type === 'measurement' && selectedMeasure) {
-      if (selectedMeasure === 'weight') {
-          const sortedLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          const latestLog = sortedLogs.find(log => log.weight !== undefined);
-          return latestLog?.weight || userProfile.weight || 0;
-      }
-      const sortedLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const latestLog = sortedLogs.find(log => log.measurements[selectedMeasure as keyof BodyMeasurements]);
-      return latestLog?.measurements[selectedMeasure as keyof BodyMeasurements] || userProfile.measurements?.[selectedMeasure as keyof BodyMeasurements] || 0;
-    }
-    if (type === 'frequency') {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      return new Set(history.filter(s => new Date(s.date) > thirtyDaysAgo).map(s => s.date.split('T')[0])).size;
-    }
-    return 0;
-  }, [type, exerciseData, history, userProfile, biometricLogs, selectedMeasure, selectedExId]);
-
-  const filteredExercises = useMemo(() => {
-    return allExercises.filter(ex => 
-      ex.name.toLowerCase().includes(searchQuery.toLowerCase())
-    ).slice(0, 50);
-  }, [allExercises, searchQuery]);
-  
-  const availableMeasurements = useMemo(() => {
-    const bodyKeys = Object.keys(userProfile.measurements || {}) as (keyof BodyMeasurements)[];
-    const allKeys: (keyof BodyMeasurements | 'weight')[] = ['weight', ...bodyKeys];
-    return Array.from(new Set(allKeys));
-  }, [userProfile.measurements]);
-
-  const getUnit = () => {
-    if (type === 'weight' && exerciseData) {
-        switch (exerciseData.trackingType) {
-            case 'time_distance': return 'm';
-            case 'reps_only': return 'reps';
-            case 'time_only': return 'sek';
-            default: return 'kg';
+    const fetchCurrent = async () => {
+      if (targetType === 'exercise' && selectedExerciseId) {
+        const lastPerf = getLastPerformance(selectedExerciseId, history);
+        let max = 0;
+        if(lastPerf){
+           max = Math.max(...lastPerf.map(s => calculate1RM(s.weight, s.reps)));
         }
-    }
-    if (type === 'frequency') return 'pass';
-    if (type === 'measurement') {
-        if (!selectedMeasure) return '';
-        if (selectedMeasure === 'weight') return 'kg';
-        if (selectedMeasure === 'bodyFat') return '%';
-        return 'cm';
-    }
-    return 'st';
-  };
+        if (max > 0) setStartValue(max);
+      } else if (targetType === 'body_weight') {
+        if (userProfile.weight) setStartValue(userProfile.weight);
+      }
+    };
+    fetchCurrent();
+  }, [targetType, selectedExerciseId, history, userProfile]);
 
   const handleSave = () => {
-    const target = parseFloat(targetValue);
-    if (isNaN(target)) {
-      alert("Ange ett giltigt målvärde");
-      return;
+    const isSmart = missionType === 'smart_goal';
+    
+    // Generera titel om den saknas för smart goal
+    let finalTitle = title;
+    if (isSmart && !finalTitle) {
+        if (targetType === 'exercise') {
+            const exName = allExercises.find(e => e.id === selectedExerciseId)?.name || 'Övning';
+            finalTitle = `Öka ${exName} till ${targetValue}kg`;
+        } else if (targetType === 'body_weight') {
+            finalTitle = `Nå ${targetValue}kg kroppsvikt`;
+        } else {
+            finalTitle = `Mål för ${measurementKey}`;
+        }
     }
 
-    const finalName = name || (type === 'weight' ? allExercises.find(e => e.id === selectedExId)?.name : selectedMeasure) || 'Nytt Uppdrag';
-
-    if (!finalName || (type === 'weight' && !selectedExId) || (type === 'measurement' && !selectedMeasure)) {
-        alert("Vänligen välj en övning eller ett mått för ditt uppdrag.");
-        return;
-    }
-
-    onSave({
-      id: initialMission?.id || `mission-${Date.now()}`,
-      name: finalName,
-      type,
-      startValue: initialMission?.startValue !== undefined ? initialMission.startValue : currentValue,
-      targetValue: target,
-      exerciseId: type === 'weight' ? selectedExId : undefined,
-      measurementKey: type === 'measurement' && selectedMeasure ? selectedMeasure : undefined,
-      isCompleted: initialMission?.isCompleted || false,
-      createdAt: initialMission?.createdAt || new Date().toISOString(),
-      completedAt: initialMission?.completedAt
-    });
+    const newMission: UserMission = {
+      id: `m-${Date.now()}`,
+      title: finalTitle || 'Nytt uppdrag',
+      type: missionType,
+      isCompleted: false,
+      progress: 0,
+      total: isSmart ? targetValue : targetCount,
+      createdAt: new Date().toISOString(),
+      
+      ...(isSmart && {
+        exerciseId: selectedExerciseId, // Bra för sökning
+        smartConfig: {
+          targetType,
+          exerciseId: targetType === 'exercise' ? selectedExerciseId : undefined,
+          measurementKey: targetType === 'body_measurement' ? measurementKey : (targetType === 'body_weight' ? 'weight' : undefined),
+          startValue,
+          targetValue,
+          startReps: targetType === 'exercise' ? startReps : undefined,
+          targetReps: targetType === 'exercise' ? targetReps : undefined,
+          deadline,
+          strategy,
+        }
+      })
+    };
+    
+    onSave(newMission);
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-[#0f0d15]/95 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#1a1721] w-full max-w-md rounded-[40px] border border-white/10 p-8 shadow-2xl relative animate-in zoom-in-95">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black italic uppercase text-white tracking-tighter">
-            {initialMission ? 'Redigera Uppdrag' : 'Starta Nytt Uppdrag'}
-          </h3>
-          <button onClick={onClose} className="p-2 bg-white/5 rounded-full text-text-dim hover:text-white"><X size={20}/></button>
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+      <div className="bg-[#1a1721] w-full max-w-lg rounded-3xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center">
+          <h3 className="text-xl font-black italic uppercase text-white">Nytt Mål</h3>
+          <button onClick={onClose}><X className="text-text-dim" /></button>
         </div>
 
-        <div className="space-y-6">
-          <input 
-            type="text" 
-            placeholder="Ge uppdraget ett namn..." 
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 text-white font-bold outline-none focus:border-accent-pink/50"
-          />
-          <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5">
-            {(['weight', 'frequency', 'measurement'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setType(t)}
-                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${type === t ? 'bg-white text-black shadow-lg' : 'text-text-dim'}`}
-              >
-                {t === 'weight' ? 'Prestation' : t === 'frequency' ? 'Vana' : 'Mått'}
-              </button>
-            ))}
-          </div>
-          
-          <div className="bg-accent-blue/5 border border-accent-blue/10 rounded-2xl p-4 flex gap-3">
-            <Info size={18} className="text-accent-blue shrink-0 mt-0.5" />
-            <p className="text-[11px] leading-relaxed text-text-dim font-medium italic">
-              {typeDescription}
-            </p>
+        <div className="p-6 overflow-y-auto space-y-6">
+          {/* Huvudflikar */}
+          <div className="flex bg-white/5 p-1 rounded-xl">
+             <button onClick={() => setMissionType('smart_goal')} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 ${missionType === 'smart_goal' ? 'bg-accent-blue text-white' : 'text-text-dim'}`}>
+                <TrendingUp size={16} /> Progression
+             </button>
+             <button onClick={() => setMissionType('quest')} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 ${missionType === 'quest' ? 'bg-accent-blue text-white' : 'text-text-dim'}`}>
+                <Trophy size={16} /> Uppdrag
+             </button>
           </div>
 
-          {type === 'weight' && (
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} />
-                <input 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Sök övning..."
-                  className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 text-white font-bold outline-none focus:border-accent-blue/50"
-                />
-              </div>
-              <div className="h-32 overflow-y-auto bg-black/20 rounded-2xl border border-white/5 p-2 space-y-1">
-                {filteredExercises.map(ex => {
-                  const isSelected = selectedExId === ex.id;
-                  return (
-                    <button
-                      key={ex.id}
-                      onClick={() => setSelectedExId(ex.id)}
-                      className={`w-full text-left p-3 rounded-xl text-xs font-bold transition-all flex justify-between items-center ${
-                        isSelected ? 'bg-accent-blue text-white shadow-lg' : 'text-text-dim hover:bg-white/5'
-                      }`}
-                    >
-                      <span className="truncate pr-2">{ex.name}</span>
-                      {isSelected && <CheckCircle2 size={16} className="text-white shrink-0 animate-in zoom-in" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {type === 'measurement' && (
-            <div className="grid grid-cols-3 gap-2">
-              {availableMeasurements.map(m => {
-                const isSelected = selectedMeasure === m;
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setSelectedMeasure(m as any)}
-                    className={`p-3 rounded-xl border text-[10px] font-black uppercase transition-all flex justify-center items-center ${
-                      isSelected ? 'bg-accent-blue border-accent-blue text-white shadow-lg' : 'bg-black/40 border-white/5 text-text-dim'
-                    }`}
-                  >
-                    {m.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+          {missionType === 'smart_goal' ? (
+            <div className="space-y-4 animate-in fade-in">
+              {/* Måltyp-väljare */}
+              <div className="flex gap-2">
+                {[
+                  { id: 'exercise', icon: Dumbbell, label: 'Övning' },
+                  { id: 'body_weight', icon: Scale, label: 'Vikt' },
+                  { id: 'body_measurement', icon: Ruler, label: 'Mått' }
+                ].map(t => (
+                  <button key={t.id} onClick={() => setTargetType(t.id as any)} className={`flex-1 py-3 border border-white/10 rounded-xl flex flex-col items-center gap-1 ${targetType === t.id ? 'bg-white/10 border-accent-blue text-white' : 'text-text-dim'}`}>
+                    <t.icon size={18} />
+                    <span className="text-[9px] font-black uppercase">{t.label}</span>
                   </button>
-                );
-              })}
-            </div>
-          )}
+                ))}
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Nuvarande</label>
-              <div className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-accent-blue font-black text-xl text-center">
-                {currentValue} <span className="text-[10px] opacity-40 uppercase">{getUnit()}</span>
+              {/* Innehåll beroende på måltyp */}
+              {targetType === 'exercise' && (
+                 <div className="space-y-4">
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-text-dim">Välj Övning</label>
+                       <select value={selectedExerciseId} onChange={e => setSelectedExerciseId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold outline-none">
+                          <option value="">-- Välj --</option>
+                          {allExercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+                       </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-text-dim">Start Reps</label>
+                            <input 
+                                type="number" 
+                                value={startReps} 
+                                onChange={e => setStartReps(Number(e.target.value))} 
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" 
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-text-dim">Mål Reps</label>
+                            <input 
+                                type="number" 
+                                value={targetReps} 
+                                onChange={e => setTargetReps(Number(e.target.value))} 
+                                className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" 
+                            />
+                        </div>
+                    </div>
+                 </div>
+              )}
+              
+              {targetType === 'body_measurement' && (
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-text-dim">Mätpunkt</label>
+                    <select value={measurementKey} onChange={e => setMeasurementKey(e.target.value as any)} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold outline-none">
+                       <option value="waist">Midja</option>
+                       <option value="bicepsL">Biceps</option>
+                       <option value="chest">Bröst</option>
+                       <option value="thighL">Lår</option>
+                    </select>
+                 </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-text-dim">Start ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
+                    <input type="number" value={startValue} onChange={e => setStartValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-text-dim">Mål ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
+                    <input type="number" value={targetValue} onChange={e => setTargetValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
+                 </div>
+              </div>
+
+              <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-text-dim">Deadline</label>
+                  <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
+              </div>
+
+              <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-text-dim">Strategi</label>
+                  <div className="flex gap-2">
+                      <button onClick={() => setStrategy('linear')} className={`flex-1 p-2 rounded-lg text-[10px] font-black uppercase border ${strategy === 'linear' ? 'bg-white text-black' : 'border-white/10 text-text-dim'}`}>Linjär</button>
+                      <button onClick={() => setStrategy('undulating')} className={`flex-1 p-2 rounded-lg text-[10px] font-black uppercase border ${strategy === 'undulating' ? 'bg-white text-black' : 'border-white/10 text-text-dim'}`}>Vågform</button>
+                      <button onClick={() => setStrategy('peaking')} className={`flex-1 p-2 rounded-lg text-[10px] font-black uppercase border ${strategy === 'peaking' ? 'bg-white text-black' : 'border-white/10 text-text-dim'}`}>Toppning</button>
+                  </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Ditt Mål</label>
-              <input 
-                type="number"
-                value={targetValue}
-                onChange={(e) => setTargetValue(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                placeholder="0"
-                className="w-full bg-black/40 border border-accent-blue/30 rounded-2xl p-4 text-white font-black text-xl text-center outline-none focus:border-accent-blue transition-colors"
-              />
+          ) : (
+            // Classic Quest Form
+            <div className="space-y-4 animate-in fade-in">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-text-dim">Uppdragets namn</label>
+                  <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" placeholder="T.ex. 100 Pullups" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-text-dim">Mål-antal</label>
+                  <input type="number" value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
+                </div>
             </div>
-          </div>
+          )}
+        </div>
 
-          <button 
-            onClick={handleSave}
-            className="w-full py-5 bg-white text-black rounded-3xl font-black italic uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
-          >
-            {initialMission ? 'Spara Ändringar' : 'Starta Uppdrag'}
-          </button>
+        <div className="p-6 border-t border-white/5">
+            <button onClick={handleSave} className="w-full py-4 bg-white text-black rounded-xl font-black uppercase tracking-widest hover:bg-gray-200">
+                Spara Mål
+            </button>
         </div>
       </div>
     </div>

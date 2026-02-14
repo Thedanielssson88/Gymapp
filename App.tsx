@@ -12,6 +12,7 @@ import { storage } from './services/storage';
 import { db } from './services/db'; 
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
+// @FIX: import 'uploadBackup' to fix 'Cannot find name' error
 import { getAccessToken, findBackupFile, downloadBackup, uploadBackup } from './services/googleDrive';
 import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
@@ -209,58 +210,65 @@ export default function App() {
 
   useEffect(() => {
     const checkMissions = async () => {
-      if (!history.length || !userMissions.length || !user) return;
+        if (!history.length || !userMissions.length || !user) return;
 
-      let missionsUpdated = false;
-      
-      const updatedMissions = await Promise.all(userMissions.map(async (mission) => {
-        if (mission.isCompleted) return mission; 
+        let missionsUpdated = false;
 
-        let currentProgress = 0;
-        if (mission.type === 'weight' && mission.exerciseId) {
-          const lastPerf = getLastPerformance(mission.exerciseId, history);
-          currentProgress = lastPerf ? Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0)), 0) : mission.startValue;
-        } else if (mission.type === 'frequency') {
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          const uniqueWorkoutDays = new Set(history.filter(s => new Date(s.date) > thirtyDaysAgo).map(s => s.date.split('T')[0])).size;
-          currentProgress = uniqueWorkoutDays;
-        } else if (mission.type === 'measurement' && mission.measurementKey) {
-          if (mission.measurementKey === 'weight') {
-            const sortedBiometricLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            const latestWeightLog = sortedBiometricLogs.find(log => log.weight !== undefined);
-            currentProgress = latestWeightLog?.weight || user.weight || 0;
-          } else {
-            const sortedBiometricLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            const latestMeasurementLog = sortedBiometricLogs.find(log => log.measurements[mission.measurementKey!]);
-            currentProgress = latestMeasurementLog?.measurements[mission.measurementKey!] || user.measurements[mission.measurementKey!] || 0;
-          }
+        const updatedMissions = await Promise.all(userMissions.map(async (mission) => {
+            if (mission.isCompleted || mission.type !== 'smart_goal' || !mission.smartConfig) return mission;
+
+            const { targetType, exerciseId, measurementKey, startValue, targetValue } = mission.smartConfig;
+
+            let currentProgress = startValue;
+
+            if (targetType === 'exercise' && exerciseId) {
+                const exData = allExercises.find(e => e.id === exerciseId);
+                const lastPerf = getLastPerformance(exerciseId, history);
+                if (lastPerf) {
+                    switch (exData?.trackingType) {
+                        case 'time_distance': currentProgress = Math.max(...lastPerf.map(s => s.distance || 0)); break;
+                        case 'reps_only': currentProgress = Math.max(...lastPerf.map(s => s.reps || 0)); break;
+                        case 'time_only': currentProgress = Math.max(...lastPerf.map(s => s.duration || 0)); break;
+                        default: currentProgress = Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0)), 0); break;
+                    }
+                }
+            } else if (targetType === 'body_weight' || (targetType === 'body_measurement' && measurementKey)) {
+                 const key = targetType === 'body_weight' ? 'weight' : measurementKey;
+                 if (key === 'weight') {
+                     const sortedLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                     const latestLog = sortedLogs.find(log => log.weight !== undefined);
+                     currentProgress = latestLog?.weight || user.weight || 0;
+                 } else if (key) {
+                     const sortedLogs = [...biometricLogs].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                     const latestLog = sortedLogs.find(log => log.measurements[key as keyof BodyMeasurements]);
+                     currentProgress = latestLog?.measurements[key as keyof BodyMeasurements] || user.measurements[key as keyof BodyMeasurements] || 0;
+                 }
+            }
+            
+            const isGoalMet = targetValue > startValue
+              ? currentProgress >= targetValue 
+              : currentProgress <= targetValue;
+
+            if (isGoalMet) {
+                missionsUpdated = true;
+                return { ...mission, isCompleted: true, completedAt: new Date().toISOString() };
+            }
+            return mission;
+        }));
+
+        if (missionsUpdated) {
+            const missionsToUpdateInDb = updatedMissions.filter(m => m.isCompleted && !userMissions.find(oldM => oldM.id === m.id && oldM.isCompleted));
+            for (const mission of missionsToUpdateInDb) {
+                await storage.updateUserMission(mission);
+            }
+            setUserMissions(updatedMissions);
         }
-        
-        const isGoalMet = mission.targetValue > mission.startValue
-          ? currentProgress >= mission.targetValue 
-          : currentProgress <= mission.targetValue; 
-
-        if (isGoalMet) {
-          missionsUpdated = true;
-          return { ...mission, isCompleted: true, completedAt: new Date().toISOString() };
-        }
-        return mission;
-      }));
-
-      if (missionsUpdated) {
-        const missionsToUpdateInDb = updatedMissions.filter(m => m.isCompleted && !userMissions.find(oldM => oldM.id === m.id && oldM.isCompleted));
-        for (const mission of missionsToUpdateInDb) {
-            await storage.updateUserMission(mission);
-        }
-        setUserMissions(updatedMissions);
-      }
     };
 
     if (isReady && user) {
-      checkMissions();
+        checkMissions();
     }
-  }, [history, userMissions, user, biometricLogs, isReady]); 
+}, [history, userMissions, user, biometricLogs, isReady, allExercises]); 
 
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
@@ -472,6 +480,7 @@ export default function App() {
                   onStartEmptyWorkout={handleStartEmptyWorkout}
                   onUpdate={refreshData}
                   isManualMode={currentSession?.isManual}
+                  userMissions={userMissions}
                />;
       case 'body':
         return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise, UserMission } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, calculate1RM } from '../utils/fitness';
 import { storage } from '../services/storage';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -14,6 +14,7 @@ import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDow
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { triggerHaptic } from '../utils/haptics';
 import { ConfirmModal } from './ConfirmModal';
+import { calculateSmartProgression } from '../utils/progression';
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -31,7 +32,8 @@ interface WorkoutViewProps {
   onStartActivity: (activity: ScheduledActivity) => void;
   onStartEmptyWorkout: () => void;
   onUpdate: () => void;
-  isManualMode?: boolean; 
+  isManualMode?: boolean;
+  userMissions: UserMission[];
 }
 
 const InfoModal = ({ 
@@ -346,7 +348,7 @@ const InfoModal = ({
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session, allExercises, userProfile, allZones, history, activeZone, 
   onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout, onUpdate,
-  isManualMode = false
+  userMissions, isManualMode = false
 }) => {
   const [localSession, setLocalSession] = useState<WorkoutSession | null>(session);
   const [timer, setTimer] = useState(0);
@@ -608,14 +610,47 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   }, []);
 
   const addNewExercise = async (ex: Exercise) => {
-    const lastSetData = getLastPerformance(ex.id, history || []);
-    const newSets: WorkoutSet[] = lastSetData && lastSetData.length > 0 ? createSmartSets(lastSetData, true) : [{ reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }];
+    const smartGoal = userMissions.find(
+      m => m.type === 'smart_goal' && !m.isCompleted && m.smartConfig?.exerciseId === ex.id
+    );
+
+    let newSets: WorkoutSet[] = [];
+    let notes = '';
+
+    if (smartGoal && smartGoal.smartConfig) {
+      const progression = calculateSmartProgression(smartGoal, 0);
+
+      if (progression) {
+        newSets = Array(3).fill(null).map(() => ({
+          reps: progression.expectedReps,
+          weight: progression.expectedValue,
+          completed: false,
+          type: 'normal'
+        }));
+        notes = `Anpassat efter mål: ${smartGoal.title.substring(0, 20)}...`;
+      }
+    }
+    
+    if (newSets.length === 0) {
+      const lastSetData = getLastPerformance(ex.id, history || []);
+      newSets = lastSetData && lastSetData.length > 0 
+        ? createSmartSets(lastSetData, true) 
+        : [{ reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }];
+      notes = lastSetData ? 'Smart laddat från historik' : '';
+    }
+    
     setLocalSession(prev => {
       if (!prev) return null;
-      const updatedSession = { ...prev, exercises: [...(prev.exercises || []), { exerciseId: ex.id, sets: newSets, notes: lastSetData ? 'Smart laddat från historik' : '' }] };
+      const newPlannedExercise: PlannedExercise = {
+        exerciseId: ex.id,
+        sets: newSets,
+        notes: notes
+      };
+      const updatedSession = { ...prev, exercises: [...(prev.exercises || []), newPlannedExercise] };
       storage.setActiveSession(updatedSession);
       return updatedSession;
     });
+
     setShowAddModal(false);
     const newScore = Math.min(10, (ex.score || 5) + 1);
     await storage.saveExercise({ ...ex, score: newScore });
@@ -827,6 +862,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             const isInSuperset = !!currentId && (currentId === prevId || currentId === nextId);
             const isSupersetStart = isInSuperset && currentId !== prevId;
             const isSupersetEnd = isInSuperset && currentId !== nextId;
+            const hasActiveGoal = userMissions.some(m => m.type === 'smart_goal' && !m.isCompleted && m.smartConfig?.exerciseId === item.exerciseId);
+
             return (
               <div id={`exercise-row-${exIdx}`} key={`${item.exerciseId}-${exIdx}`} className="block mb-2 scroll-mt-24">
                 <ExerciseCard 
@@ -840,6 +877,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   isInSuperset={isInSuperset}
                   isSupersetStart={isSupersetStart}
                   isSupersetEnd={isSupersetEnd}
+                  hasActiveGoal={hasActiveGoal}
                   onMoveUp={() => moveExercise(exIdx, 'up')}
                   onMoveDown={() => moveExercise(exIdx, 'down')}
                   onToggleSuperset={() => toggleSupersetWithPrevious(exIdx)}

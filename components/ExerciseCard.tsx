@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PlannedExercise, Exercise, WorkoutSet, UserProfile, Zone } from '../types';
 import { SetRow } from './SetRow';
-import { MoreVertical, MessageSquare, Info, Trash2, Plus, ArrowUp, ArrowDown, Link, Unlink, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { MoreVertical, MessageSquare, Info, Trash2, Plus, ArrowUp, ArrowDown, Link, Unlink, CheckCircle2, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 
 interface ExerciseCardProps {
@@ -17,6 +17,7 @@ interface ExerciseCardProps {
   isInSuperset: boolean;
   isSupersetStart: boolean;
   isSupersetEnd: boolean;
+  hasActiveGoal?: boolean;
   
   // Actions
   onUpdateSet: (setIdx: number, updates: Partial<WorkoutSet>) => void;
@@ -35,7 +36,7 @@ interface ExerciseCardProps {
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({ 
   item, exData, exIdx, userProfile, activeZone,
-  isFirst, isLast, isInSuperset, isSupersetStart, isSupersetEnd,
+  isFirst, isLast, isInSuperset, isSupersetStart, isSupersetEnd, hasActiveGoal,
   onUpdateSet, onAddSet, onRemove, 
   onToggleNotes, isNotesOpen, onUpdateNotes, onShowInfo,
   onMoveUp, onMoveDown, onToggleSuperset, isHighlighted
@@ -138,9 +139,17 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-start">
               <div className="min-w-0">
-                <h3 onClick={handleToggleCollapse} className={`text-xl font-black italic uppercase leading-none truncate pr-2 ${allSetsCompleted ? 'text-green-500 cursor-pointer hover:underline' : 'text-white'}`}>
-                    {exData.name} {allSetsCompleted && <span className="inline-block align-middle ml-1"><ChevronUp size={14}/></span>}
-                </h3>
+                <div className="flex items-center gap-2">
+                    <h3 onClick={handleToggleCollapse} className={`text-xl font-black italic uppercase leading-none truncate pr-2 ${allSetsCompleted ? 'text-green-500 cursor-pointer hover:underline' : 'text-white'}`}>
+                        {exData.name} {allSetsCompleted && <span className="inline-block align-middle ml-1"><ChevronUp size={14}/></span>}
+                    </h3>
+                    {hasActiveGoal && (
+                        <div className="flex items-center gap-1 bg-accent-blue/20 px-2 py-1 rounded-lg text-[9px] text-accent-blue font-bold uppercase shrink-0">
+                            <TrendingUp size={12} />
+                            <span>MÅL</span>
+                        </div>
+                    )}
+                </div>
                 <button onClick={onToggleNotes} className={`mt-2 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${item.notes ? 'text-accent-blue' : 'text-text-dim hover:text-white'}`}>
                   <MessageSquare size={12} /> {item.notes ? 'Visa Notering' : 'Lägg till anteckning'}
                 </button>
