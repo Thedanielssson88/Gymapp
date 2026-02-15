@@ -7,8 +7,9 @@ import { registerBackHandler } from '../utils/backHandler';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 
 interface AIExerciseRecommenderProps {
-  onEditExercise: (exerciseId: string) => void;
-  onStartSession: (activity: ScheduledActivity) => void;
+  onEditExercise?: (exerciseId: string) => void;
+  onStartSession?: (activity: ScheduledActivity) => void;
+  onClose?: () => void;
 }
 
 const HISTORY_KEY = 'gym_ai_scout_history_v3';
@@ -58,7 +59,7 @@ const ScoutExerciseDetailModal: React.FC<{ exercise: Exercise, onClose: () => vo
 };
 
 
-export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession }) => {
+export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession, onClose }) => {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentResult, setCurrentResult] = useState<ExerciseSearchResponse | null>(null);
@@ -192,7 +193,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   };
 
   const handleStartWorkout = () => {
-    if (!currentResult) return;
+    if (!currentResult || !onStartSession) return;
 
     // 1. Filtrera fram övningar som FINNS i biblioteket
     const availableExercises = currentResult.recommendations
@@ -292,6 +293,11 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+        {onClose && (
+            <div className="p-4 flex justify-end">
+                <button onClick={onClose} className="p-2 bg-white/5 rounded-full text-white"><X size={20}/></button>
+            </div>
+        )}
         <div className="bg-gradient-to-br from-[#1a1721] to-[#2a2435] p-6 rounded-[32px] border border-accent-blue/20 shadow-xl">
             <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-accent-blue/10 rounded-full">
@@ -321,7 +327,6 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                 )}
             </div>
 
-            {/* UPPDATERAD KNAPP: HITTA ÖVNINGAR */}
             <button 
                 onClick={handleSearch}
                 disabled={loading || !request}
@@ -347,25 +352,28 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                     
                     <p className="text-sm text-white italic leading-relaxed">"{currentResult.motivation}"</p>
                     
-                    {/* UPPDATERAD KNAPP: STARTA PASS */}
-                    <button 
-                        onClick={handleStartWorkout}
-                        disabled={readyCount === 0}
-                        className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-lg transition-all active:scale-95 ${
-                            readyCount > 0 
-                            ? 'bg-[#2ed573] hover:bg-white text-black shadow-green-500/20' 
-                            : 'bg-white/5 text-text-dim cursor-not-allowed opacity-50'
-                        }`}
-                    >
-                        <Play size={20} fill={readyCount > 0 ? "black" : "transparent"} strokeWidth={3} /> 
-                        {readyCount > 0 ? `Starta pass (${Math.min(readyCount, 15)} övn)` : 'Inga sparade övningar'}
-                    </button>
-                    
-                    {readyCount === 0 && (
-                        <div className="flex items-center gap-2 text-yellow-500/80 text-[9px] font-bold uppercase justify-center">
-                            <AlertTriangle size={12} />
-                            <span>Lägg till övningar i biblioteket först (Plus-knappen nedan)</span>
-                        </div>
+                    {onStartSession && (
+                      <>
+                        <button 
+                            onClick={handleStartWorkout}
+                            disabled={readyCount === 0}
+                            className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-lg transition-all active:scale-95 ${
+                                readyCount > 0 
+                                ? 'bg-[#2ed573] hover:bg-white text-black shadow-green-500/20' 
+                                : 'bg-white/5 text-text-dim cursor-not-allowed opacity-50'
+                            }`}
+                        >
+                            <Play size={20} fill={readyCount > 0 ? "black" : "transparent"} strokeWidth={3} /> 
+                            {readyCount > 0 ? `Starta pass (${Math.min(readyCount, 15)} övn)` : 'Inga sparade övningar'}
+                        </button>
+                        
+                        {readyCount === 0 && (
+                            <div className="flex items-center gap-2 text-yellow-500/80 text-[9px] font-bold uppercase justify-center">
+                                <AlertTriangle size={12} />
+                                <span>Lägg till övningar i biblioteket först (Plus-knappen nedan)</span>
+                            </div>
+                        )}
+                      </>
                     )}
                 </div>
 

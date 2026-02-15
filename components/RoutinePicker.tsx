@@ -1,9 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { WorkoutRoutine, Zone, Exercise, PlannedExercise, MovementPattern, MuscleGroup, Equipment, UserProfile, WorkoutSession } from '../types';
 import { storage } from '../services/storage';
 import { findReplacement, adaptVolume } from '../utils/fitness';
 import { RoutineCreator } from './RoutineCreator';
-import { Plus, Play, ChevronRight, Bookmark, Trash2, Dumbbell, Edit3, X, Check, Search, Filter } from 'lucide-react';
+import { Plus, Play, ChevronRight, Bookmark, Trash2, Dumbbell, Edit3, X, Check, Search, Filter, Sparkles, Loader2 } from 'lucide-react';
+import { registerBackHandler } from '../utils/backHandler';
+import { generateWorkoutFromPrompt } from '../services/geminiService';
+
 
 interface RoutinePickerProps {
   onStart: (exercises: PlannedExercise[], routineName: string) => void;
@@ -16,7 +19,28 @@ interface RoutinePickerProps {
 }
 
 export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZone, routines, allExercises, userProfile, onUpdate, history }) => {
+  const [showAIScout, setShowAIScout] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<Partial<WorkoutRoutine> | null>(null);
+
+  // Hantera Android Back
+  useEffect(() => {
+    if (showAIScout) return registerBackHandler(() => setShowAIScout(false));
+  }, [showAIScout]);
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    try {
+      const workout = await generateWorkoutFromPrompt(prompt, allExercises, activeZone, history);
+      onStart(workout, `AI Scout: ${prompt}`);
+    } catch (e) {
+      alert("Kunde inte generera pass. Försök igen.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
 
   const handleSelectRoutine = (routine: WorkoutRoutine) => {
     const morphedExercises = routine.exercises.map(pe => {
@@ -58,24 +82,66 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
       />
     );
   }
+  
+  if (showAIScout) {
+    return (
+      <div className="animate-in slide-in-from-right duration-300 h-full flex flex-col">
+        <header className="mb-6 flex items-center justify-between">
+          <h3 className="text-2xl font-black italic uppercase">AI Scout</h3>
+          <button onClick={() => setShowAIScout(false)} className="p-2"><X /></button>
+        </header>
+        <div className="bg-white/5 p-6 rounded-[32px] border border-white/10 mb-4">
+          <textarea 
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Vad vill du träna? T.ex. Ett pass för bröst och triceps..."
+            className="w-full bg-transparent border-none focus:ring-0 text-white min-h-[100px]"
+          />
+        </div>
+        <button 
+          onClick={handleGenerate}
+          disabled={isGenerating || !prompt}
+          className="w-full py-5 bg-accent-blue text-black rounded-3xl font-black uppercase italic flex items-center justify-center gap-2 disabled:opacity-50"
+        >
+          {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+          Generera & Starta
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-center mb-8">
-        <h3 className="text-2xl font-black uppercase italic tracking-tighter">Mina Rutiner</h3>
-        <button onClick={() => setEditingRoutine({ name: '', exercises: [] })} className="p-2 bg-white/5 rounded-xl text-accent-pink"><Plus size={24} /></button>
-      </div>
-
-      <div className="space-y-4">
-        <button onClick={() => onStart([], "Fri Träning")} className="w-full bg-accent-pink/10 border border-accent-pink/20 p-6 rounded-[32px] flex items-center justify-between group active:scale-95 transition-all">
-          <div className="flex items-center gap-6">
-            <div className="w-14 h-14 bg-accent-pink/20 rounded-2xl flex items-center justify-center"><Plus size={24} className="text-accent-pink" /></div>
-            <div className="text-left"><h4 className="text-lg font-black uppercase italic leading-none text-accent-pink">Fri Träning</h4><p className="text-[10px] font-black text-accent-pink/60 uppercase mt-1 tracking-widest">Bygg passet steg för steg</p></div>
+    <div className="space-y-4 animate-in fade-in">
+      {/* AI SCOUT HÖGST UPP */}
+      <button 
+        onClick={() => setShowAIScout(true)}
+        className="w-full bg-accent-blue/10 border border-accent-blue/30 p-8 rounded-[40px] flex items-center justify-between group active:scale-95 transition-all shadow-lg"
+      >
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 bg-accent-blue/20 rounded-[24px] flex items-center justify-center text-accent-blue">
+            <Sparkles size={32} />
           </div>
-          <ChevronRight size={24} className="text-accent-pink" />
-        </button>
+          <div className="text-left">
+            <span className="text-2xl font-black uppercase italic tracking-tight text-white block">AI Scout</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-accent-blue/80">Generera pass för {activeZone.name}</span>
+          </div>
+        </div>
+        <ChevronRight size={32} className="text-accent-blue" />
+      </button>
 
-        {routines.map(routine => (
+      {/* FRI TRÄNING */}
+      <button 
+        onClick={() => onStart([], "Fri Träning")}
+        className="w-full bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all"
+      >
+        <div className="flex items-center gap-6">
+          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center"><Dumbbell size={24} /></div>
+          <div className="text-left"><h4 className="text-lg font-black uppercase italic leading-none">Fri Träning</h4><p className="text-[10px] font-black text-text-dim uppercase mt-1">Logga fritt</p></div>
+        </div>
+        <ChevronRight size={24} />
+      </button>
+
+      {routines.map(routine => (
           <div key={routine.id} className="relative group flex gap-2">
             <button onClick={() => handleSelectRoutine(routine)} className="flex-1 bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all">
               <div className="flex items-center gap-6">
@@ -90,7 +156,6 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
             </div>
           </div>
         ))}
-      </div>
     </div>
   );
 };

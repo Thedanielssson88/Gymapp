@@ -2,14 +2,14 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession, UserProfile } from '../types';
 import { storage } from '../services/storage';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
-import { ExerciseImporter } from './ExerciseImporter';
+import { AIExerciseRecommender } from './AIExerciseRecommender';
 import { ImageUpload } from './ImageUpload';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { generateExerciseDetailsFromGemini } from '../services/geminiService';
 import { calculate1RM } from '../utils/fitness';
 import { EquipmentBuilder } from './EquipmentBuilder';
 import { registerBackHandler } from '../utils/backHandler';
-import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2, TrendingUp, Trophy, Clock, SortAsc, ChevronRight, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2, TrendingUp, Trophy, Clock, SortAsc, ChevronRight, ThumbsUp, ThumbsDown, Heart, Sparkles } from 'lucide-react';
 
 interface ExerciseLibraryProps {
   allExercises: Exercise[];
@@ -42,7 +42,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'alphabetical' | 'recent'>('recent');
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
-  const [showImporter, setShowImporter] = useState(false);
+  const [showAIScout, setShowAIScout] = useState(false);
   const isSelectorMode = !!onSelect;
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -63,10 +63,10 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   useEffect(() => {
     if (editingExercise) return registerBackHandler(() => setEditingExercise(null));
   }, [editingExercise]);
-
+  
   useEffect(() => {
-    if (showImporter) return registerBackHandler(() => setShowImporter(false));
-  }, [showImporter]);
+    if (showAIScout) return registerBackHandler(() => setShowAIScout(false));
+  }, [showAIScout]);
 
   useEffect(() => {
     if (initialExercises.length !== exercises.length) {
@@ -81,14 +81,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   }, [initialExercises]);
 
   useEffect(() => {
-    const isModalOpen = isSelectorMode || !!editingExercise || showImporter;
+    const isModalOpen = isSelectorMode || !!editingExercise || showAIScout;
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = 'unset';
       };
     }
-  }, [isSelectorMode, editingExercise, showImporter]);
+  }, [isSelectorMode, editingExercise, showAIScout]);
 
   const handleRate = async (ex: Exercise, rating: 'up' | 'down') => {
     const newRating = ex.userRating === rating ? null : rating;
@@ -198,7 +198,18 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
           <h2 className="text-3xl font-black italic uppercase tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2>
           {!isSelectorMode && (<p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{(exercises || []).length} ÖVNINGAR I DATABASEN</p>)}
         </div>
-        {(isSelectorMode || editingExercise) ? (<button onClick={() => { if (editingExercise) setEditingExercise(null); if (onClose) onClose(); }} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (<div className="flex gap-2"><button onClick={() => setShowImporter(true)} className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl"><Plus size={24} /></button><button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [], equipmentRequirements: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button></div>)}
+        {(isSelectorMode || editingExercise) ? (<button onClick={() => { if (editingExercise) setEditingExercise(null); if (onClose) onClose(); }} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setShowAIScout(true)}
+              className="p-4 bg-accent-blue/20 border border-accent-blue/30 text-accent-blue rounded-2xl flex items-center gap-2"
+            >
+              <Sparkles size={24} />
+              <span className="text-[10px] font-black uppercase">Scout</span>
+            </button>
+            <button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [], equipmentRequirements: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button>
+          </div>
+        )}
       </header>
 
       <div className="space-y-4">
@@ -222,7 +233,13 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
       </div>
 
       {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={exercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} userProfile={userProfile} />}
-      {showImporter && !isSelectorMode && <div className="fixed inset-0 z-[200] bg-[#0f0d15] animate-in slide-in-from-bottom-10"><ExerciseImporter onClose={() => setShowImporter(false)} onImport={(data) => { setEditingExercise({ ...editingExercise, ...data } as any); setShowImporter(false); }} /></div>}
+      {showAIScout && (
+        <div className="fixed inset-0 z-[250] bg-[#0f0d15] animate-in slide-in-from-bottom">
+          <AIExerciseRecommender 
+            onClose={() => setShowAIScout(false)} 
+          />
+        </div>
+      )}
     </div>
   );
 };

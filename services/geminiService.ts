@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment } from "../types";
+import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { storage } from './storage';
 
@@ -301,3 +301,74 @@ export const generateNextPhase = async (
     throw new Error("Kunde inte generera nästa fas.");
   }
 };
+
+export async function generateWorkoutFromPrompt(
+  prompt: string,
+  allExercises: Exercise[],
+  activeZone: Zone,
+  history: WorkoutSession[]
+): Promise<PlannedExercise[]> {
+  const equipmentList = activeZone.inventory.join(", ");
+  const exerciseList = JSON.stringify(allExercises.map(e => ({id: e.id, name: e.name, equipment: e.equipment})));
+
+  const systemInstruction = `Du är en expert-PT. Skapa ett träningspass med 4-7 övningar baserat på användarens önskemål och tillgänglig utrustning. Använd ENDAST övningar från den angivna listan. Svara ENDAST med ett JSON-objekt enligt det specificerade formatet.`;
+  const contents = `
+    Önskemål: "${prompt}"
+    Tillgänglig utrustning: ${equipmentList}
+    Tillgängliga övningar: ${exerciseList}
+  `;
+
+  try {
+    const apiKey = await getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: contents,
+      config: {
+        systemInstruction: systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            workout: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  exerciseId: { type: Type.STRING },
+                  sets: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        reps: { type: Type.NUMBER },
+                        weight: { type: Type.NUMBER },
+                        targetRpe: { type: Type.NUMBER },
+                      },
+                      required: ["reps", "weight"]
+                    }
+                  }
+                },
+                required: ["exerciseId", "sets"]
+              }
+            }
+          },
+          required: ["workout"]
+        }
+      }
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) throw new Error("Tomt svar från AI");
+
+    const data = JSON.parse(jsonText.trim());
+    return data.workout as PlannedExercise[];
+  } catch (error) {
+    console.error("AI Workout Generation failed", error);
+    if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+        throw error;
+    }
+    throw new Error("Kunde inte generera ett AI-pass.");
+  }
+}
