@@ -1,9 +1,10 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Send, Loader2, Save, Calendar, Repeat, Clock, Dumbbell } from 'lucide-react';
 import { generateProfessionalPlan } from '../services/geminiService';
 import { storage } from '../services/storage';
-import { UserMission, ScheduledActivity, PlannedExercise, SetType, Exercise, AIProgram, AIPlanResponse } from '../types';
+import { UserMission, ScheduledActivity, PlannedExercise, SetType, Exercise, AIProgram, AIPlanResponse, ProgressionRate } from '../types';
 import { calculatePPLStats, suggestWeightForReps } from '../utils/progression';
 import { calculate1RM, getLastPerformance } from '../utils/fitness';
 
@@ -21,6 +22,7 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
   const [daysPerWeek, setDaysPerWeek] = useState(3);
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [weeksToSchedule, setWeeksToSchedule] = useState(4); // Default 4 veckor
+  const [progressionRate, setProgressionRate] = useState<ProgressionRate>('normal');
 
   useEffect(() => {
       storage.getAllExercises().then(setAllExercises);
@@ -38,7 +40,7 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
       
       const result = await generateProfessionalPlan(
         request, history, exercises, profile, pplStats,
-        { daysPerWeek, durationMinutes, durationWeeks: weeksToSchedule } 
+        { daysPerWeek, durationMinutes, durationWeeks: weeksToSchedule, progressionRate } 
       );
       setPlan(result);
     } catch (error) {
@@ -71,7 +73,9 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
         status: 'active',
         motivation: plan.motivation,
         goalIds: [],
-        weeks: weeksToSchedule
+        weeks: weeksToSchedule,
+        phaseNumber: 1, // Startar alltid på Fas 1
+        longTermGoalDescription: request, // Spara det ursprungliga målet
       };
       
       const newMissions: UserMission[] = [];
@@ -177,6 +181,50 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
                     <select value={durationMinutes} onChange={(e) => setDurationMinutes(Number(e.target.value))} className="w-full bg-transparent text-white font-bold outline-none text-sm"><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>60 min</option><option value={90}>90 min</option></select>
                 </div>
             </div>
+        </div>
+
+        <div className="space-y-4 mt-8 animate-in fade-in slide-in-from-bottom-4 delay-150">
+          <h3 className="text-sm font-black italic uppercase text-white">Välj Ökningstakt</h3>
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => setProgressionRate('conservative')}
+              className={`p-4 rounded-2xl border flex flex-col items-center gap-2 transition-all ${
+                progressionRate === 'conservative' 
+                  ? 'bg-green-500/20 border-green-500 text-green-500' 
+                  : 'bg-white/5 border-transparent text-text-dim grayscale'
+              }`}
+            >
+              <div className="text-2xl">🛡️</div>
+              <div className="text-[10px] font-black uppercase tracking-widest">Lugn</div>
+            </button>
+            <button
+              onClick={() => setProgressionRate('normal')}
+              className={`p-4 rounded-2xl border flex flex-col items-center gap-2 transition-all ${
+                progressionRate === 'normal' 
+                  ? 'bg-accent-blue/20 border-accent-blue text-accent-blue' 
+                  : 'bg-white/5 border-transparent text-text-dim grayscale'
+              }`}
+            >
+              <div className="text-2xl">⚖️</div>
+              <div className="text-[10px] font-black uppercase tracking-widest">Normal</div>
+            </button>
+            <button
+              onClick={() => setProgressionRate('aggressive')}
+              className={`p-4 rounded-2xl border flex flex-col items-center gap-2 transition-all ${
+                progressionRate === 'aggressive' 
+                  ? 'bg-accent-pink/20 border-accent-pink text-accent-pink' 
+                  : 'bg-white/5 border-transparent text-text-dim grayscale'
+              }`}
+            >
+              <div className="text-2xl">🔥</div>
+              <div className="text-[10px] font-black uppercase tracking-widest">Tuff</div>
+            </button>
+          </div>
+          <p className="text-xs text-text-dim text-center mt-2 px-4 h-8">
+            {progressionRate === 'conservative' && "Långsam ökning. Fokus på teknik, rehab eller underhåll."}
+            {progressionRate === 'normal' && "Klassisk progression. Ca +2.5kg per vecka på stora lyft."}
+            {progressionRate === 'aggressive' && "Maximal ökning. Krävande pass för att nå resultat snabbt."}
+          </p>
         </div>
 
         <textarea value={request} onChange={(e) => setRequest(e.target.value)} placeholder="Beskriv ditt mål... (T.ex. 'Jag vill öka 10kg i bänkpress')" className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white text-base min-h-[100px] focus:border-accent-blue outline-none transition-all placeholder:text-white/20 resize-none mb-4"/>

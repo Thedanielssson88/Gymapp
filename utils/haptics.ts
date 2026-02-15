@@ -15,6 +15,26 @@ const canVibrate = async () => {
 
 const isHapticsAvailable = canVibrate();
 
+export const haptics = {
+  impact: async () => {
+    if (!(await isHapticsAvailable)) return;
+    try {
+      // For timer completion, notification is better than impact.
+      await Haptics.notification({ type: NotificationType.Success });
+    } catch (e) {
+      console.warn("Haptics impact/notification failed", e);
+    }
+  },
+  selection: async () => {
+    if (!(await isHapticsAvailable)) return;
+    try {
+      await Haptics.selectionChanged();
+    } catch (e) {
+      console.warn("Haptics selection failed", e);
+    }
+  },
+};
+
 export const triggerHaptic = {
   light: async () => {
     if (!(await isHapticsAvailable)) return;

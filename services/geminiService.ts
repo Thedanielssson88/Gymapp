@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone } from "../types";
+import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone, ProgressionRate } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { storage } from './storage';
 
@@ -207,18 +207,32 @@ export const generateProfessionalPlan = async (
   availableExercises: Exercise[],
   currentProfile: UserProfile,
   pplStats: any,
-  preferences: { daysPerWeek: number; durationMinutes: number; durationWeeks: number }
+  preferences: { daysPerWeek: number; durationMinutes: number; durationWeeks: number; progressionRate: ProgressionRate; }
 ): Promise<AIPlanResponse> => {
   try {
     const apiKey = await getApiKey();
     const ai = new GoogleGenAI({ apiKey });
-    const exerciseBankString = availableExercises.map(e => `id: "${e.id}", name: "${e.name}", primaryMuscles: [${e.primaryMuscles.join(', ')}], pattern: "${e.pattern}"`).join('\n');
-
+    
+    const { daysPerWeek, durationMinutes, durationWeeks, progressionRate } = preferences;
     const contents = `
-      Du är en expertcoach. Skapa ett detaljerat träningsprogram.
+      Du är en expert-PT och träningsfysiolog. Skapa ett detaljerat träningsprogram.
+      
       MÅL: "${userRequest}"
-      TIDSPERSPEKTIV: ${preferences.durationWeeks} veckor, ${preferences.daysPerWeek} pass/vecka, ${preferences.durationMinutes} min/pass.
-      STRENGTH: ${JSON.stringify(pplStats)}
+      TIDSPERSPEKTIV: ${durationWeeks} veckor, ${daysPerWeek} pass/vecka, ${durationMinutes} min/pass.
+      NUVARANDE STYRKA (Uppskattat 1RM): ${JSON.stringify(pplStats)}
+      ÖKNINGSTAKT VALD AV ANVÄNDAREN: ${progressionRate.toUpperCase()}.
+
+      INSTRUKTIONER FÖR VIKTER OCH PROGRESSION:
+      Basera progressionen på den valda ökningstakten:
+      - conservative: Minimal ökning. Fokus på teknik/rehab. (+0.5-1kg/vecka).
+      - normal: Standard linjär progression. (+2.5kg/vecka för överkropp, +5kg/vecka för ben).
+      - aggressive: Utmana användaren. Utnyttja "newbie gains" eller tuff periodisering. Öka snabbare om det är fysiologiskt möjligt (t.ex. +2.5kg per pass istället för per vecka för en nybörjare).
+      
+      VIKTIGT - REALISM:
+      1. Bedöm om målet är fysiologiskt nåbart på ${durationWeeks} veckor med vald takt.
+      2. Även vid 'aggressive', om målet är orealistiskt (t.ex. +60kg på 4v), designa programmet som "Fas 1" av en längre plan.
+      3. Maximera då ökningen under denna fas (t.ex. gå från 40kg -> 55kg istället för 43kg) och skriv i 'motivation' att detta är en ambitiös start på en längre resa.
+      4. Sätt målet (smartGoals) för sista veckan i detta program till en realistisk delvinst.
     `;
 
     const response = await ai.models.generateContent({
@@ -230,7 +244,21 @@ export const generateProfessionalPlan = async (
           type: Type.OBJECT,
           properties: {
             motivation: { type: Type.STRING },
-            smartGoals: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+            smartGoals: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  targetValue: { type: Type.NUMBER },
+                  targetType: { type: Type.STRING, enum: ['exercise', 'body_weight', 'body_measurement'] },
+                  exerciseId: { type: Type.STRING },
+                  deadline: { type: Type.STRING },
+                  strategy: { type: Type.STRING, enum: ['linear', 'undulating', 'peaking'] }
+                },
+                required: ['title', 'targetValue', 'targetType', 'deadline', 'strategy']
+              }
+            },
             routines: {
               type: Type.ARRAY,
               items: {
@@ -277,7 +305,18 @@ export const generateNextPhase = async (
   try {
     const apiKey = await getApiKey();
     const ai = new GoogleGenAI({ apiKey });
-    const contents = `Skapa nästa fas för programmet "${currentProgram.name}".`;
+    const contents = `
+      Skapa nästa fas (Fas ${ (currentProgram.phaseNumber || 1) + 1}) för programmet "${currentProgram.name}".
+      
+      LÅNGSIKTIGT MÅL: "${currentProgram.longTermGoalDescription}"
+      SENASTE FASENS RESULTAT (Nuvarande 1RM): ${JSON.stringify(pplStats)}
+      
+      UPPGIFT:
+      1. Basera progressionen på de nya styrkevärdena.
+      2. Fortsätt arbeta mot det långsiktiga målet med realistiska ökningar (1-2% per vecka för överkropp, 2-3% för underkropp).
+      3. Variera gärna övningsval för att undvika platåer.
+      4. Skriv en motiverande text för nästa fas.
+    `;
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -288,7 +327,30 @@ export const generateNextPhase = async (
           type: Type.OBJECT,
           properties: {
             motivation: { type: Type.STRING },
-            routines: { type: Type.ARRAY, items: { type: Type.OBJECT } }
+            routines: { 
+                type: Type.ARRAY, 
+                items: { 
+                    type: Type.OBJECT,
+                    properties: {
+                      name: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      weekNumber: { type: Type.NUMBER },
+                      scheduledDay: { type: Type.NUMBER },
+                      exercises: {
+                        type: Type.ARRAY,
+                        items: {
+                          type: Type.OBJECT,
+                          properties: {
+                            id: { type: Type.STRING },
+                            targetSets: { type: Type.NUMBER },
+                            targetReps: { type: Type.STRING },
+                            estimatedWeight: { type: Type.NUMBER }
+                          }
+                        }
+                      }
+                    }
+                } 
+            }
           }
         }
       }

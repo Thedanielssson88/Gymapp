@@ -20,6 +20,8 @@ export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps
 
 export type ExerciseTier = 'tier_1' | 'tier_2' | 'tier_3';
 
+export type ProgressionRate = 'conservative' | 'normal' | 'aggressive';
+
 export type MuscleGroup = 
   | 'Mage' 
   | 'Rygg' 
@@ -326,6 +328,8 @@ export interface AIProgram {
   motivation: string; // Analysen från AI
   goalIds: string[]; // Kopplade Smart Goals
   weeks: number; // Hur många veckor som är planerade hittills
+  phaseNumber?: number; // VILKEN fas i ett längre program
+  longTermGoalDescription?: string; // Det ursprungliga, långsiktiga målet
 }
 
 // FIX: Add AIPlanResponse and related types
@@ -356,7 +360,7 @@ export interface AIPlanRoutine {
 
 export interface AIPlanResponse {
   motivation: string;
-  smartGoals: AIPlanSmartGoal[];
+  smartGoals?: AIPlanSmartGoal[];
   routines: AIPlanRoutine[];
 }
 

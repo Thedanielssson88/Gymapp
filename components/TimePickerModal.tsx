@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Check } from 'lucide-react';
+import { haptics } from '../utils/haptics';
 import { registerBackHandler } from '../utils/backHandler';
 
 interface TimePickerModalProps {
@@ -10,95 +11,109 @@ interface TimePickerModalProps {
 }
 
 export const TimePickerModal: React.FC<TimePickerModalProps> = ({ title, totalSeconds, onClose, onSelect }) => {
-  const currentMins = Math.floor(totalSeconds / 60);
-  const currentSecs = totalSeconds % 60;
+  const [currentTotal, setCurrentTotal] = useState(totalSeconds);
+  const [isEditingMins, setIsEditingMins] = useState(false);
+  const [manualMinInput, setManualMinInput] = useState("");
 
   const minScrollRef = useRef<HTMLDivElement>(null);
   const secScrollRef = useRef<HTMLDivElement>(null);
 
-  const minuteOptions = useMemo(() => Array.from({ length: 61 }, (_, i) => i), []); // 0-60 min
-  const secondOptions = useMemo(() => Array.from({ length: 12 }, (_, i) => i * 5), []); // 0, 5, 10... 55 sek
-  
-  const closestSecs = useMemo(() => secondOptions.reduce((prev, curr) => (Math.abs(curr - currentSecs) < Math.abs(prev - currentSecs) ? curr : prev)), [currentSecs, secondOptions]);
+  const mins = Math.floor(currentTotal / 60);
+  const secs = currentTotal % 60;
+
+  const minOptions = Array.from({ length: 61 }, (_, i) => i);
+  const secOptions = Array.from({ length: 12 }, (_, i) => i * 5);
 
   useEffect(() => {
     const unregister = registerBackHandler(onClose);
     
-    // Auto-scroll till nuvarande värden
-    const scrollToValue = (ref: React.RefObject<HTMLDivElement>, val: number) => {
+    const scrollTo = (ref: React.RefObject<HTMLDivElement>, val: number) => {
       if (ref.current) {
         const el = ref.current.querySelector(`[data-value="${val}"]`);
-        if (el) el.scrollIntoView({ inline: 'center', behavior: 'auto' });
+        if (el) el.scrollIntoView({ behavior: 'auto', inline: 'center' });
       }
     };
 
     setTimeout(() => {
-      scrollToValue(minScrollRef, currentMins);
-      scrollToValue(secScrollRef, closestSecs);
+      scrollTo(minScrollRef, mins);
+      scrollTo(secScrollRef, Math.round(secs / 5) * 5);
     }, 50);
 
     return unregister;
-  }, []); // Run only on mount
+  }, []);
 
   const handleSave = () => {
-    // onSelect is called on click, so here we just close
+    onSelect(currentTotal);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[400] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
-      <div className="bg-[#1a1721] w-full max-w-sm rounded-[40px] border border-white/10 shadow-2xl overflow-hidden">
-        <div className="p-6 border-b border-white/5 flex justify-between items-center">
-          <h3 className="text-xl font-black italic uppercase text-white tracking-tighter">{title}</h3>
-          <button onClick={onClose} className="p-2 text-text-dim"><X size={24}/></button>
+    <div className="fixed inset-0 z-[600] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
+      <div className="bg-[#1a1721] w-full max-w-sm rounded-[40px] border border-white/10 shadow-2xl overflow-hidden p-8 flex flex-col items-center">
+        <header className="w-full flex justify-between items-center mb-6">
+          <h3 className="text-xl font-black italic uppercase text-white tracking-tighter">Ange Tid</h3>
+          <button onClick={onClose} className="p-2 text-white/40"><X size={24}/></button>
+        </header>
+
+        {/* Digital display för Ange Tid */}
+        <div className="flex items-baseline gap-2 mb-8">
+          <div className="flex flex-col items-center">
+            {isEditingMins ? (
+              <input
+                type="number"
+                autoFocus
+                className="w-20 bg-transparent text-6xl font-black italic text-accent-blue text-center outline-none border-b-2 border-accent-blue"
+                value={manualMinInput}
+                onChange={(e) => setManualMinInput(e.target.value)}
+                onBlur={() => {
+                  const val = parseInt(manualMinInput);
+                  if (!isNaN(val)) setCurrentTotal((val * 60) + (currentTotal % 60));
+                  setIsEditingMins(false);
+                }}
+              />
+            ) : (
+              <button onClick={() => { setManualMinInput(mins.toString()); setIsEditingMins(true); }} className="text-6xl font-black italic text-white tracking-tighter">
+                {mins}
+              </button>
+            )}
+            <span className="text-[10px] font-black text-text-dim uppercase">MIN</span>
+          </div>
+          <span className="text-4xl font-black text-white/20">:</span>
+          <div className="flex flex-col items-center">
+            <div className="text-6xl font-black italic text-white tracking-tighter">{secs.toString().padStart(2, '0')}</div>
+            <span className="text-[10px] font-black text-text-dim uppercase">SEK</span>
+          </div>
         </div>
 
-        <div className="p-8 space-y-8">
-          {/* MINUTER */}
+        {/* Scroll Väljare */}
+        <div className="w-full space-y-6 mb-8">
           <div>
-            <label className="text-[10px] font-black uppercase text-accent-blue tracking-widest ml-4 mb-2 block">Minuter</label>
-            <div ref={minScrollRef} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory px-[40%]">
-              {minuteOptions.map(m => (
-                <button
-                  key={m}
-                  data-value={m}
-                  onClick={() => onSelect(m * 60 + closestSecs)} // Use closestSecs to keep seconds aligned
-                  className={`flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-black snap-center transition-all ${
-                    m === currentMins ? 'bg-accent-blue text-black scale-110' : 'bg-white/5 text-text-dim'
-                  }`}
-                >
+            <label className="text-[9px] font-black uppercase text-accent-blue tracking-widest mb-2 block text-center">Välj Minuter</label>
+            <div ref={minScrollRef} className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory px-[40%]">
+              {minOptions.map(m => (
+                <button key={m} data-value={m} onClick={() => setCurrentTotal((m * 60) + (currentTotal % 60))} 
+                  className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black snap-center transition-all ${m === mins ? 'bg-accent-blue text-black' : 'bg-white/5 text-text-dim'}`}>
                   {m}
                 </button>
               ))}
             </div>
           </div>
-
-          {/* SEKUNDER */}
           <div>
-            <label className="text-[10px] font-black uppercase text-accent-pink tracking-widest ml-4 mb-2 block">Sekunder</label>
-            <div ref={secScrollRef} className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory px-[40%]">
-              {secondOptions.map(s => (
-                <button
-                  key={s}
-                  data-value={s}
-                  onClick={() => onSelect(currentMins * 60 + s)}
-                  className={`flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-black snap-center transition-all ${
-                    s === closestSecs ? 'bg-accent-pink text-white scale-110' : 'bg-white/5 text-text-dim'
-                  }`}
-                >
+            <label className="text-[9px] font-black uppercase text-accent-pink tracking-widest mb-2 block text-center">Välj Sekunder</label>
+            <div ref={secScrollRef} className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory px-[40%]">
+              {secOptions.map(s => (
+                <button key={s} data-value={s} onClick={() => setCurrentTotal((Math.floor(currentTotal / 60) * 60) + s)} 
+                  className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black snap-center transition-all ${s === secs ? 'bg-accent-pink text-white' : 'bg-white/5 text-text-dim'}`}>
                   {s}
                 </button>
               ))}
             </div>
           </div>
-
-          <button
-            onClick={handleSave}
-            className="w-full py-5 bg-white text-black rounded-[24px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow-xl"
-          >
-            Spara tid
-          </button>
         </div>
+
+        <button onClick={handleSave} className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase italic tracking-widest active:scale-95 transition-all">
+          Spara Tid
+        </button>
       </div>
     </div>
   );

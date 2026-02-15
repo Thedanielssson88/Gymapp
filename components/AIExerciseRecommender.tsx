@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles, Play, AlertTriangle, X } from 'lucide-react';
 import { recommendExercises, ExerciseRecommendation, ExerciseSearchResponse } from '../services/geminiService';
 import { storage } from '../services/storage';
-import { Exercise, ScheduledActivity, SetType, Zone } from '../types';
+import { Exercise, ScheduledActivity, SetType, Zone, WorkoutSession } from '../types';
 import { registerBackHandler } from '../utils/backHandler';
-import { useExerciseImage } from '../hooks/useExerciseImage';
+import { ExerciseInfoModal } from './ExerciseInfoModal';
 
 interface AIExerciseRecommenderProps {
   onEditExercise?: (exerciseId: string) => void;
   onStartSession?: (activity: ScheduledActivity) => void;
   onClose?: () => void;
   allExercises: Exercise[];
+  history: WorkoutSession[];
   onUpdate: () => void;
   activeZone?: Zone;
 }
@@ -24,20 +25,26 @@ interface HistoryItem {
     timestamp: number;
 }
 
-export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession, onClose, allExercises, onUpdate }) => {
+export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession, onClose, allExercises, onUpdate, history: fullHistory }) => {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentResult, setCurrentResult] = useState<ExerciseSearchResponse | null>(null);
   const [currentQuery, setCurrentQuery] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [viewingExercise, setViewingExercise] = useState<Exercise | null>(null);
   
   useEffect(() => {
     loadHistory();
   }, []);
 
   useEffect(() => {
-    if (currentResult) return registerBackHandler(() => setCurrentResult(null));
-  }, [currentResult]);
+    if (currentResult || viewingExercise) {
+      return registerBackHandler(() => {
+        if (viewingExercise) setViewingExercise(null);
+        else if (currentResult) setCurrentResult(null);
+      });
+    }
+  }, [currentResult, viewingExercise]);
   
   const loadHistory = () => {
     try {
@@ -184,8 +191,19 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
             const existingId = getExistingExerciseId(rec);
             const exists = !!existingId;
 
+            const handleCardClick = () => {
+                if (exists) {
+                    const exerciseToShow = allExercises.find(e => e.id === existingId);
+                    if (exerciseToShow) setViewingExercise(exerciseToShow);
+                }
+            };
+
             return (
-                <div key={idx} className={`p-5 rounded-[28px] border flex flex-col gap-4 animate-in slide-in-from-bottom-2 shadow-lg transition-all ${exists ? 'bg-[#1a1721] border-white/5' : 'bg-gradient-to-br from-[#1a1721] to-[#2a2435] border-accent-blue/20'}`}>
+                <div 
+                  key={idx} 
+                  onClick={handleCardClick}
+                  className={`p-5 rounded-[28px] border flex flex-col gap-4 animate-in slide-in-from-bottom-2 shadow-lg transition-all ${exists ? 'bg-[#1a1721] border-white/5 cursor-pointer' : 'bg-gradient-to-br from-[#1a1721] to-[#2a2435] border-accent-blue/20'}`}
+                >
                     <div className="flex justify-between items-start">
                         <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -210,15 +228,12 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
 
                     <div className="pt-2 border-t border-white/5 mt-1">
                         {exists ? (
-                            <button 
-                                onClick={() => existingId && onEditExercise?.(existingId)}
-                                className="w-full py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-white/5"
-                            >
-                                Visa Detaljer <ArrowRight size={14} />
-                            </button>
+                            <div className="w-full py-3.5 rounded-2xl bg-white/5 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-white/5">
+                                <Info size={14} /> Visa Info & Historik
+                            </div>
                         ) : (
                             <button 
-                                onClick={() => handleAddExercise(rec)}
+                                onClick={(e) => { e.stopPropagation(); handleAddExercise(rec); }}
                                 className="w-full py-3.5 rounded-2xl bg-[#2ed573] hover:bg-[#26b963] text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-green-500/10"
                             >
                                 <Plus size={16} strokeWidth={3} /> Lägg till i bibliotek
@@ -382,6 +397,14 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
             </div>
         )}
       </div>
+      {viewingExercise && (
+        <ExerciseInfoModal 
+            exercise={viewingExercise}
+            onClose={() => setViewingExercise(null)}
+            history={fullHistory}
+            allExercises={allExercises}
+        />
+      )}
     </div>
   );
 };

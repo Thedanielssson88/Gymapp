@@ -310,6 +310,9 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
           </>
       ) : (
           <AIExerciseRecommender 
+            allExercises={allExercises}
+            history={history}
+            onUpdate={loadData}
             onEditExercise={onGoToExercise} 
             onStartSession={onStartSession}
           />

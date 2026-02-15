@@ -154,7 +154,6 @@ export const SetRow: React.FC<SetRowProps> = ({
           initialSeconds={set.duration || 60} 
           onClose={() => setShowActiveTimer(false)}
           exerciseName={exData.name}
-          userProfile={userProfile}
           onComplete={(actualSeconds) => {
             onUpdate({ 
               duration: actualSeconds, 
