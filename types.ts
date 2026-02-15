@@ -165,6 +165,7 @@ export interface UserSettings {
   autoSyncMode?: 'after_workout' | 'manual' | 'startup';
   restoreOnStartup?: boolean;
   lastCloudSync?: string;
+  geminiApiKey?: string;
 }
 
 export interface UserProfile {

@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
+import { storage } from './storage';
 
 export interface ExerciseRecommendation {
   existingId?: string;
@@ -8,6 +9,27 @@ export interface ExerciseRecommendation {
   reason: string;
   data: Exercise;
 }
+
+export interface ExerciseSearchResponse {
+  motivation: string;
+  recommendations: ExerciseRecommendation[];
+}
+
+// Hjälpfunktion för att hämta nyckel
+const getApiKey = async (): Promise<string> => {
+  // 1. Kolla inställningar först
+  const profile = await storage.getUserProfile();
+  if (profile.settings?.geminiApiKey) {
+    return profile.settings.geminiApiKey;
+  }
+  
+  // 2. Fallback till .env
+  const envKey = process.env.API_KEY;
+  if (envKey) return envKey;
+
+  throw new Error("Ingen API-nyckel hittad. Gå till Inställningar och lägg in din Gemini API Key.");
+};
+
 
 /**
  * Genererar personliga träningsinsikter med Gemini API.
@@ -18,7 +40,8 @@ export const getWorkoutInsights = async (
   exerciseHistory: string
 ): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = await getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
     
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
@@ -37,6 +60,10 @@ Historik: ${exerciseHistory}`,
     const text = response.text;
     return text || "Fokusera på kontakten i varje repetition idag för maximal muskelaktivering.";
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+        console.error("Gemini API-nyckel saknas:", error);
+        return "Ange API-nyckel i Inställningar för AI-tips.";
+    }
     console.error("Kunde inte hämta insikter från Gemini API:", error);
     return "Fokusera på kontrollerade excentriska faser idag för att maximera muskelkontakten.";
   }
@@ -48,11 +75,12 @@ Historik: ${exerciseHistory}`,
 export const recommendExercises = async (
   userRequest: string,
   existingExercises: Exercise[]
-): Promise<ExerciseRecommendation[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const exerciseIndex = existingExercises.map(e => `${e.id}: ${e.name}`).join('\n');
-
+): Promise<ExerciseSearchResponse> => {
   try {
+    const apiKey = await getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
+    const exerciseIndex = existingExercises.map(e => `${e.id}: ${e.name}`).join('\n');
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Användaren vill ha övningsförslag för: "${userRequest}".
@@ -60,54 +88,64 @@ export const recommendExercises = async (
       NUVARANDE BIBLIOTEK (ID: Namn):
       ${exerciseIndex}`,
       config: {
-        systemInstruction: `Du är en expertcoach. Identifiera de 5-8 bästa övningarna för användarens önskemål.
+        systemInstruction: `Du är en expertcoach. 
         UPPGIFT:
-        1. Sök först i biblioteket. Om en övning finns, använd dess exakta ID.
-        2. Om en viktig övning SAKNAS, skapa den som en ny övning med ALL teknisk data.
+        1. Skriv en kort motivation (max 2 meningar) till varför övningarna valts.
+        2. Identifiera de 5-8 bästa övningarna för användarens önskemål.
+        3. Sök först i biblioteket. Om en övning finns, använd dess exakta ID.
+        4. Om en viktig övning SAKNAS, skapa den som en ny övning med ALL teknisk data.
         
         VIKTIGT FÖR NYA ÖVNINGAR:
         - id: Skapa ett unikt slug-id (t.ex. 'hyrox-sled-push').
+        - description: MÅSTE vara steg-för-steg instruktioner (1. Gör så, 2. Gör så).
         - muscleGroups: Breda kategorier (t.ex. 'Rygg', 'Ben').
         - equipmentRequirements: Array av arrayer. Ex: för Skivstång och Bänk: [["Skivstång"], ["Träningsbänk"]].
         - tier: 'tier_1' (Tung bas), 'tier_2' (Komplement), 'tier_3' (Isolering/Mobilitet).`,
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              isNew: { type: Type.BOOLEAN },
-              existingId: { type: Type.STRING },
-              reason: { type: Type.STRING },
-              data: {
+          type: Type.OBJECT,
+          properties: {
+            motivation: { type: Type.STRING },
+            recommendations: {
+              type: Type.ARRAY,
+              items: {
                 type: Type.OBJECT,
                 properties: {
-                  id: { type: Type.STRING },
-                  name: { type: Type.STRING },
-                  englishName: { type: Type.STRING },
-                  pattern: { type: Type.STRING, enum: Object.values(MovementPattern) },
-                  primaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
-                  secondaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
-                  muscleGroups: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
-                  equipment: { type: Type.ARRAY, items: { type: Type.STRING, enum: Object.values(Equipment) } },
-                  equipmentRequirements: { 
-                    type: Type.ARRAY, 
-                    items: { 
-                      type: Type.ARRAY, 
-                      items: { type: Type.STRING, enum: Object.values(Equipment) } 
-                    } 
-                  },
-                  description: { type: Type.STRING },
-                  tier: { type: Type.STRING, enum: ['tier_1', 'tier_2', 'tier_3'] },
-                  trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only'] },
-                  difficultyMultiplier: { type: Type.NUMBER },
-                  bodyweightCoefficient: { type: Type.NUMBER }
+                  isNew: { type: Type.BOOLEAN },
+                  existingId: { type: Type.STRING },
+                  reason: { type: Type.STRING },
+                  data: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      name: { type: Type.STRING },
+                      englishName: { type: Type.STRING },
+                      pattern: { type: Type.STRING, enum: Object.values(MovementPattern) },
+                      primaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
+                      secondaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
+                      muscleGroups: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
+                      equipment: { type: Type.ARRAY, items: { type: Type.STRING, enum: Object.values(Equipment) } },
+                      equipmentRequirements: { 
+                        type: Type.ARRAY, 
+                        items: { 
+                          type: Type.ARRAY, 
+                          items: { type: Type.STRING, enum: Object.values(Equipment) } 
+                        } 
+                      },
+                      description: { type: Type.STRING },
+                      tier: { type: Type.STRING, enum: ['tier_1', 'tier_2', 'tier_3'] },
+                      trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only'] },
+                      difficultyMultiplier: { type: Type.NUMBER },
+                      bodyweightCoefficient: { type: Type.NUMBER }
+                    },
+                    required: ["id", "name", "pattern", "primaryMuscles", "muscleGroups", "equipment", "tier", "trackingType", "difficultyMultiplier", "bodyweightCoefficient"]
+                  }
                 },
-                required: ["id", "name", "pattern", "primaryMuscles", "muscleGroups", "equipment", "tier", "trackingType", "difficultyMultiplier", "bodyweightCoefficient"]
+                required: ["isNew", "reason", "data"]
               }
-            },
-            required: ["isNew", "reason", "data"]
-          }
+            }
+          },
+          required: ["motivation", "recommendations"]
         }
       }
     });
@@ -117,6 +155,9 @@ export const recommendExercises = async (
     return JSON.parse(jsonText.trim());
   } catch (error) {
     console.error("Gemini Exercise Error:", error);
+    if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+        throw error;
+    }
     throw new Error("Kunde inte hämta förslag från AI.");
   }
 };
@@ -128,7 +169,8 @@ export const generateExerciseDetailsFromGemini = async (
   exerciseName: string
 ): Promise<Partial<Exercise>> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = await getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Analysera övningen "${exerciseName}" och generera JSON-data.`,
@@ -152,6 +194,9 @@ export const generateExerciseDetailsFromGemini = async (
     });
     return JSON.parse(response.text || '{}');
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+        throw error;
+    }
     throw new Error("AI-genereringen misslyckades.");
   }
 };
@@ -164,17 +209,18 @@ export const generateProfessionalPlan = async (
   pplStats: any,
   preferences: { daysPerWeek: number; durationMinutes: number; durationWeeks: number }
 ): Promise<AIPlanResponse> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const exerciseBankString = availableExercises.map(e => `id: "${e.id}", name: "${e.name}", primaryMuscles: [${e.primaryMuscles.join(', ')}], pattern: "${e.pattern}"`).join('\n');
-
-  const contents = `
-    Du är en expertcoach. Skapa ett detaljerat träningsprogram.
-    MÅL: "${userRequest}"
-    TIDSPERSPEKTIV: ${preferences.durationWeeks} veckor, ${preferences.daysPerWeek} pass/vecka, ${preferences.durationMinutes} min/pass.
-    STRENGTH: ${JSON.stringify(pplStats)}
-  `;
-
   try {
+    const apiKey = await getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
+    const exerciseBankString = availableExercises.map(e => `id: "${e.id}", name: "${e.name}", primaryMuscles: [${e.primaryMuscles.join(', ')}], pattern: "${e.pattern}"`).join('\n');
+
+    const contents = `
+      Du är en expertcoach. Skapa ett detaljerat träningsprogram.
+      MÅL: "${userRequest}"
+      TIDSPERSPEKTIV: ${preferences.durationWeeks} veckor, ${preferences.daysPerWeek} pass/vecka, ${preferences.durationMinutes} min/pass.
+      STRENGTH: ${JSON.stringify(pplStats)}
+    `;
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents,
@@ -215,6 +261,9 @@ export const generateProfessionalPlan = async (
     });
     return JSON.parse(response.text || '{}');
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+        throw error;
+    }
     throw new Error("AI-assistenten kunde inte skapa en plan.");
   }
 };
@@ -225,10 +274,11 @@ export const generateNextPhase = async (
   availableExercises: Exercise[],
   pplStats: any
 ): Promise<AIPlanResponse> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const contents = `Skapa nästa fas för programmet "${currentProgram.name}".`;
-  
   try {
+    const apiKey = await getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
+    const contents = `Skapa nästa fas för programmet "${currentProgram.name}".`;
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents,
@@ -245,6 +295,9 @@ export const generateNextPhase = async (
     });
     return JSON.parse(response.text || '{}');
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+        throw error;
+    }
     throw new Error("Kunde inte generera nästa fas.");
   }
 };

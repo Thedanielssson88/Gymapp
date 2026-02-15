@@ -3,7 +3,7 @@ import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db } from '../services/db';
 import { getAccessToken, uploadBackup, findBackupFile, BackupData, isTokenValid } from '../services/googleDrive';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2, Timer } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2, Timer, Key } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -277,6 +277,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
         </div>
       </section>
 
+      {/* AI INSTÄLLNINGAR SEKTION */}
+      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-4">
+        <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
+          <Key size={18} className="text-accent-blue" /> AI Konfiguration
+        </h3>
+        
+        <div>
+          <label className="text-[10px] text-text-dim font-bold uppercase block mb-2">Gemini API Nyckel</label>
+          <input 
+            type="password"
+            value={localProfile.settings?.geminiApiKey || ''}
+            onChange={(e) => handleSettingChange('geminiApiKey', e.target.value)}
+            placeholder="Klistra in din nyckel här..."
+            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-accent-blue outline-none"
+          />
+          <p className="text-[10px] text-text-dim mt-2">
+            Krävs för att använda AI-coachen i appen. 
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-accent-blue underline ml-1">
+              Hämta nyckel här
+            </a>
+          </p>
+        </div>
+      </section>
+
       <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-6">
          <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
             <Smartphone className="text-accent-blue" /> Appupplevelse
@@ -345,9 +369,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
           >
             <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateButtons ?? true) ? 'left-7' : 'left-1'}`} />
           </button>
-        </div>
+         </div>
 
-        <div className="flex items-center justify-between py-2 border-b border-white/5">
+         <div className="flex items-center justify-between py-2 border-b border-white/5">
           <div className="flex items-center gap-3">
             <Timer size={18} className={localProfile.settings?.vibrateTimer ? "text-accent-green" : "text-text-dim"} />
             <div>
