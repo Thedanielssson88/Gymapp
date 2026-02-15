@@ -11,9 +11,10 @@ import { NextPhaseModal } from './NextPhaseModal';
 interface AIProgramDashboardProps {
   onStartSession: (activity: ScheduledActivity) => void;
   onGoToExercise: (exerciseId: string) => void;
+  onUpdate: () => void;
 }
 
-export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartSession, onGoToExercise }) => {
+export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartSession, onGoToExercise, onUpdate }) => {
   const [programs, setPrograms] = useState<AIProgram[]>([]);
   const [scheduled, setScheduled] = useState<ScheduledActivity[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
@@ -71,7 +72,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             <button onClick={() => setShowGenerator(false)} className="px-4 py-4 text-text-dim flex items-center gap-2 font-bold text-xs uppercase hover:text-white transition-colors">
                 <ArrowLeft size={16} /> Avbryt
             </button>
-            <AIArchitect onClose={() => { setShowGenerator(false); loadData(); }} />
+            <AIArchitect onClose={() => { setShowGenerator(false); onUpdate(); }} />
         </div>
     );
   }
@@ -89,7 +90,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
         if(confirm("Är du säker? Detta tar bort alla kommande pass och mål kopplade till programmet.")) {
             await storage.cancelAIProgram(selectedProgram.id);
             setSelectedProgram(null);
-            loadData();
+            onUpdate();
         }
     };
 
@@ -101,7 +102,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
                 allExercises={allExercises}
                 onClose={() => setViewingActivity(null)} 
                 onStart={handleStartActivity} 
-                onUpdate={loadData}
+                onUpdate={onUpdate}
             />
         )}
         
@@ -112,14 +113,9 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             allExercises={allExercises}
             scheduled={scheduled}
             onClose={() => setShowNextPhaseModal(false)}
-            onGenerated={async () => {
+            onGenerated={() => {
               setShowNextPhaseModal(false);
-              await loadData();
-              const updatedPrograms = await storage.getAIPrograms();
-              const updatedProgram = updatedPrograms.find(p => p.id === selectedProgram.id);
-              if (updatedProgram) {
-                  setSelectedProgram(updatedProgram);
-              }
+              onUpdate();
             }}
           />
         )}
@@ -254,7 +250,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
           <AIExerciseRecommender 
             allExercises={allExercises}
             history={history}
-            onUpdate={loadData}
+            onUpdate={onUpdate}
             onEditExercise={onGoToExercise} 
             onStartSession={onStartSession}
           />

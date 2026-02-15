@@ -215,9 +215,15 @@ export const generateProfessionalPlan = async (
     const ai = new GoogleGenAI({ apiKey });
     
     const { daysPerWeek, durationMinutes, durationWeeks, progressionRate } = preferences;
+    const exerciseIndex = availableExercises.map(e => `ID: ${e.id}, Namn: ${e.name}, Utrustning: [${e.equipment.join(', ')}]`).join('\n');
+
     const contents = `
       Du är en expert-PT och träningsfysiolog. Skapa ett detaljerat träningsprogram.
       
+      VIKTIGT: Använd ENDAST övningar från listan nedan. Svara med det exakta ID:t för varje övning.
+      TILLGÄNGLIGA ÖVNINGAR:
+      ${exerciseIndex}
+
       MÅL: "${userRequest}"
       TIDSPERSPEKTIV: ${durationWeeks} veckor, ${daysPerWeek} pass/vecka, ${durationMinutes} min/pass.
       NUVARANDE STYRKA (Uppskattat 1RM): ${JSON.stringify(pplStats)}
@@ -314,10 +320,15 @@ export const generateNextPhase = async (
     const apiKey = await getApiKey();
     const ai = new GoogleGenAI({ apiKey });
     const { daysPerWeek, durationMinutes, weeks, progressionRate } = preferences;
+    const exerciseIndex = availableExercises.map(e => `ID: ${e.id}, Namn: ${e.name}, Utrustning: [${e.equipment.join(', ')}]`).join('\n');
 
     const contents = `
       Skapa nästa fas (Fas ${ (currentProgram.phaseNumber || 1) + 1}) för programmet "${currentProgram.name}".
       
+      VIKTIGT: Använd ENDAST övningar från listan nedan. Svara med det exakta ID:t för varje övning.
+      TILLGÄNGLIGA ÖVNINGAR:
+      ${exerciseIndex}
+
       LÅNGSIKTIGT MÅL: "${currentProgram.longTermGoalDescription}"
       TIDSPERSPEKTIV: ${weeks} veckor, ${daysPerWeek} pass/vecka, ${durationMinutes} min/pass.
       FÖREGÅENDE FAS START-1RM: ${JSON.stringify(pplStats.start)}
