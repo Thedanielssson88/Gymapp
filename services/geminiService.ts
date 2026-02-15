@@ -297,7 +297,6 @@ export const generateProfessionalPlan = async (
   }
 };
 
-// FIX: Updated function signature and implementation to handle additional arguments for generating the next program phase.
 export const generateNextPhase = async (
   currentProgram: AIProgram,
   programHistory: WorkoutSession[],

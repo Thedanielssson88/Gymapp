@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Add UserProfile and WorkoutSession to imports and remove unused storage import
 import { UserMission, Exercise, ProgressionStrategy, SmartGoalTarget, BodyMeasurements, UserProfile, WorkoutSession } from '../types';
 import { X, Trophy, TrendingUp, Dumbbell, Scale, Ruler, Search, Check } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from '../utils/fitness';
 
-// FIX: Add props for data passed from parent component
 interface AddMissionModalProps {
   onClose: () => void;
   onSave: (mission: UserMission) => void;
@@ -13,7 +11,6 @@ interface AddMissionModalProps {
   history: WorkoutSession[];
 }
 
-// FIX: Updated component to accept new props
 export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSave, allExercises, userProfile, history }) => {
   const [missionType, setMissionType] = useState<'quest' | 'smart_goal'>('smart_goal');
   
@@ -34,17 +31,12 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
 
   const [deadline, setDeadline] = useState('');
   const [strategy, setStrategy] = useState<ProgressionStrategy>('linear');
-  // FIX: Removed state for exercises, as it's passed as a prop now
-  // const [allExercises, setAllExercises] = useState<Exercise[]>([]);
-
+  
   // Sök-state
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    // FIX: Removed data fetching from storage
-    // storage.getAllExercises().then(setAllExercises);
-    
     // LÅS BAKGRUNDSSCROLL NÄR MODALEN ÄR ÖPPEN
     document.body.style.overflow = 'hidden';
     return () => {
@@ -53,7 +45,6 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
   }, []);
 
   // Autofyll Startvärde
-  // FIX: Use props for data and add to dependency array. Removed async/await as data is now synchronous.
   useEffect(() => {
     const fetchCurrent = () => {
       if (targetType === 'exercise' && selectedExerciseId) {
