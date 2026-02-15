@@ -1,11 +1,117 @@
-
 // utils/progression.ts
 import { UserMission, SmartGoalConfig, WorkoutSession, BiometricLog, PlannedExercise, Exercise, MuscleGroup } from '../types';
 import { calculate1RM } from './fitness'; // Importera från fitness för att undvika dubbletter
 
-// --- NY KOD FÖR PPL-ANALYS OCH VIKTFÖRSLAG ---
+// --- NYA TYPER OCH MATRIS FÖR ADAPTIV PROGRESSION ---
+export type Aggressiveness = 'conservative' | 'normal' | 'aggressive';
+export type ProgressTrend = 'regression' | 'plateau' | 'moderate' | 'high';
 
-// Kategoriserar muskler för PPL-analys
+export interface ProgressionRules {
+  loadMultiplier: number;
+  volumeAction: 'maintain' | 'increase' | 'decrease';
+  feedback: string;
+}
+
+export const PROGRESSION_MATRIX: Record<Aggressiveness, Record<ProgressTrend, ProgressionRules>> = {
+  aggressive: {
+    high: { 
+      loadMultiplier: 1.05, 
+      volumeAction: 'increase', 
+      feedback: "Du krossade det förra fasen! Vi ökar både vikt och volym för att maxa dina gains." 
+    },
+    moderate: { 
+      loadMultiplier: 1.025, 
+      volumeAction: 'maintain', 
+      feedback: "Bra jobbat! Vi fortsätter öka progressivt, men håller volymen stabil." 
+    },
+    plateau: { 
+      loadMultiplier: 1.0, 
+      volumeAction: 'decrease', 
+      feedback: "Jag ser att du vill köra aggressivt, men din utveckling planade ut lite. Jag har justerat schemat med nya reps-intervall för att bygga upp grundstyrkan igen." 
+    },
+    regression: { 
+      loadMultiplier: 0.95, 
+      volumeAction: 'maintain', 
+      feedback: "Vi backar bandet lite för att återhämta oss och komma tillbaka starkare (Deload)." 
+    }
+  },
+  normal: {
+    high: { 
+      loadMultiplier: 1.025, 
+      volumeAction: 'maintain', 
+      feedback: "Stabilt! Din styrka ökar snabbare än väntat, så jag har lagt på lite extra vikt." 
+    },
+    moderate: {
+      loadMultiplier: 1.01,
+      volumeAction: 'maintain',
+      feedback: "Vi håller kursen med en balanserad ökning."
+    },
+    plateau: { 
+        loadMultiplier: 1.0, 
+        volumeAction: 'maintain', 
+        feedback: "Vi håller vikterna stabila denna fas för att befästa tekniken." 
+    },
+    regression: { 
+        loadMultiplier: 0.95, 
+        volumeAction: 'decrease', 
+        feedback: "Vi sänker tempot lite för att prioritera återhämtning." 
+    }
+  },
+  conservative: {
+     high: { 
+        loadMultiplier: 1.01, 
+        volumeAction: 'maintain', 
+        feedback: "Du blir starkare! Vi ökar försiktigt enligt plan." 
+     },
+     moderate: { 
+        loadMultiplier: 1.0, 
+        volumeAction: 'maintain', 
+        feedback: "Vi fortsätter i din takt." 
+     },
+     plateau: { 
+        loadMultiplier: 1.0, 
+        volumeAction: 'maintain', 
+        feedback: "Ingen stress. Vi fortsätter jobba på rutinen." 
+     },
+     regression: { 
+        loadMultiplier: 0.95, 
+        volumeAction: 'maintain', 
+        feedback: "Vi anpassar oss efter dagsformen." 
+     }
+  }
+};
+
+export const analyzeProgressTrend = (startStats: any, currentStats: any): ProgressTrend => {
+    if (!startStats || !currentStats) return 'plateau';
+
+    const categories = ['push', 'pull', 'legs'];
+    let totalImprovement = 0;
+    let categoryCount = 0;
+
+    for (const cat of categories) {
+        const start = startStats[cat]?.max1RM || 0;
+        const current = currentStats[cat]?.max1RM || 0;
+
+        if (start > 0) {
+            const improvement = (current - start) / start;
+            totalImprovement += improvement;
+            categoryCount++;
+        }
+    }
+
+    if (categoryCount === 0) return 'plateau';
+
+    const avgImprovement = totalImprovement / categoryCount;
+
+    if (avgImprovement > 0.05) return 'high';
+    if (avgImprovement > 0.01) return 'moderate';
+    if (avgImprovement > -0.02) return 'plateau';
+    return 'regression';
+};
+
+
+// --- PPL-ANALYS OCH VIKTFÖRSLAG ---
+
 const MUSCLE_CATS: Record<string, MuscleGroup[]> = {
   push: ['Bröst', 'Axlar', 'Triceps', 'Framsida lår'],
   pull: ['Rygg', 'Biceps', 'Underarmar', 'Trapezius', 'Baksida lår'],
@@ -62,7 +168,6 @@ export const calculatePPLStats = (history: WorkoutSession[], allExercises: Exerc
   return stats;
 };
 
-// Räknar ut vikt baserat på historik. Returnerar 0 om ingen historik finns.
 export const suggestWeightForReps = (
   exerciseId: string, 
   targetReps: number, 
@@ -85,10 +190,8 @@ export const suggestWeightForReps = (
 
   if (max1RM === 0) return 0; 
 
-  // Inverterad Epley: Vikt = 1RM / (1 + Reps/30)
   const suggestedWeight = max1RM / (1 + targetReps / 30);
   
-  // Avrunda till närmaste 2.5kg
   return Math.round(suggestedWeight / 2.5) * 2.5;
 };
 
@@ -96,28 +199,24 @@ export const suggestWeightForReps = (
 // --- BEFINTLIG KOD ---
 
 interface ProgressionResult {
-  expectedValue: number; // Var borde jag vara idag? (Vikt)
-  expectedReps: number;  // Vad är dagens reps-mål?
-  statusDiff: number;    // Positivt = Ligger efter (om man ska öka), Negativt = Ligger före
-  progressRatio: number; // 0.0 till 1.0 (Tid)
+  expectedValue: number;
+  expectedReps: number;
+  statusDiff: number;
+  progressRatio: number;
   unit: string;
 }
 
-// Hjälpfunktion för att hämta historisk data för grafer
 export const getHistoryForGoal = (config: SmartGoalConfig, historyLogs: WorkoutSession[], bioLogs: BiometricLog[]) => {
   if (config.targetType === 'exercise' && config.exerciseId) {
-    // Hitta maxvikt för övningen i varje pass
     return historyLogs
       .filter(h => h.exercises && h.exercises.some((e: PlannedExercise) => e.exerciseId === config.exerciseId))
       .map(h => {
         const ex = h.exercises.find((e: PlannedExercise) => e.exerciseId === config.exerciseId);
-        // Hitta tyngsta setet i passet
         const maxWeight = ex && ex.sets ? Math.max(...ex.sets.map((s: any) => s.weight || 0)) : 0;
         return { date: h.date, value: maxWeight };
       })
       .filter(d => d.value > 0);
   } else {
-    // Hitta kroppsvikt eller mått
     return bioLogs.map(log => ({
       date: log.date,
       value: config.targetType === 'body_weight' 
@@ -140,7 +239,6 @@ export const calculateSmartProgression = (
   const end = new Date(deadline).getTime();
   const totalTime = end - start;
   
-  // Skydd mot division med noll
   const progressRatio = totalTime > 0 ? Math.min(Math.max((now - start) / totalTime, 0), 1) : 0;
 
   let expectedValue = startValue;
@@ -163,12 +261,11 @@ export const calculateSmartProgression = (
       break;
   }
 
-  // Avrundning
   if (targetType === 'exercise') {
-    expectedValue = Math.round(expectedValue / 2.5) * 2.5; // Närmsta 2.5kg
+    expectedValue = Math.round(expectedValue / 2.5) * 2.5;
     expectedReps = Math.round(expectedReps);
   } else {
-    expectedValue = parseFloat(expectedValue.toFixed(1)); // 1 decimal för kropp
+    expectedValue = parseFloat(expectedValue.toFixed(1));
   }
 
   const statusDiff = expectedValue - currentValue;
@@ -179,12 +276,5 @@ export const calculateSmartProgression = (
     else unit = 'cm';
   }
 
-
-  return {
-    expectedValue,
-    expectedReps,
-    statusDiff,
-    progressRatio,
-    unit
-  };
+  return { expectedValue, expectedReps, statusDiff, progressRatio, unit };
 };

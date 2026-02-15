@@ -1,5 +1,4 @@
 
-
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -330,6 +329,7 @@ export interface AIProgram {
   weeks: number; // Hur många veckor som är planerade hittills
   phaseNumber?: number; // VILKEN fas i ett längre program
   longTermGoalDescription?: string; // Det ursprungliga, långsiktiga målet
+  startStats?: any; // Sparar PPL stats vid start
 }
 
 // FIX: Add AIPlanResponse and related types

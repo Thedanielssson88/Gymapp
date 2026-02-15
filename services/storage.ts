@@ -1,4 +1,5 @@
 
+
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
@@ -246,6 +247,19 @@ export const storage = {
     window.dispatchEvent(new Event('storage-update'));
   },
   
+  // FIX: Added missing clearUpcomingProgramActivities function to storage object.
+  clearUpcomingProgramActivities: async (programId: string): Promise<void> => {
+    const today = new Date().toISOString().split('T')[0];
+    const activitiesToDelete = await db.scheduledActivities
+      .where('programId').equals(programId)
+      .filter(act => !act.isCompleted && act.date >= today)
+      .primaryKeys();
+
+    if (activitiesToDelete.length > 0) {
+      await db.scheduledActivities.bulkDelete(activitiesToDelete);
+    }
+  },
+
   cancelAIProgram: async (programId: string): Promise<void> => {
     // 1. Uppdatera programstatus
     const program = await db.aiPrograms.get(programId);

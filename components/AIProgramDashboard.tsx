@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AIProgram, ScheduledActivity, WorkoutSession, Exercise, PlannedExercise, SetType } from '../types';
 import { storage } from '../services/storage';
-import { generateNextPhase } from '../services/geminiService';
-import { calculatePPLStats, suggestWeightForReps } from '../utils/progression';
 import { ChevronRight, Calendar, Activity, XCircle, PlusCircle, TrendingUp, CheckCircle, ArrowLeft, Sparkles, Loader2, Circle, CheckCircle2, Plus, List, Dumbbell } from 'lucide-react';
 import { AIArchitect } from './AIArchitect';
 import { WorkoutDetailsModal } from './WorkoutDetailsModal';
 import { AIExerciseRecommender } from './AIExerciseRecommender';
 import { registerBackHandler } from '../utils/backHandler';
+import { NextPhaseModal } from './NextPhaseModal';
 
 interface AIProgramDashboardProps {
   onStartSession: (activity: ScheduledActivity) => void;
@@ -24,22 +23,24 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
   const [activeTab, setActiveTab] = useState<'programs' | 'exercises'>('programs');
   
   const [viewingActivity, setViewingActivity] = useState<ScheduledActivity | null>(null);
-  const [isGeneratingNext, setIsGeneratingNext] = useState(false);
+  const [showNextPhaseModal, setShowNextPhaseModal] = useState(false);
 
-  // --- NYA BACK HANDLERS ---
   useEffect(() => {
     if (showGenerator) return registerBackHandler(() => setShowGenerator(false));
   }, [showGenerator]);
 
   useEffect(() => {
-    if (selectedProgram && !viewingActivity) return registerBackHandler(() => setSelectedProgram(null));
-  }, [selectedProgram, viewingActivity]);
+    if (selectedProgram && !viewingActivity && !showNextPhaseModal) return registerBackHandler(() => setSelectedProgram(null));
+  }, [selectedProgram, viewingActivity, showNextPhaseModal]);
 
   useEffect(() => {
     if (viewingActivity) return registerBackHandler(() => setViewingActivity(null));
   }, [viewingActivity]);
+  
+  useEffect(() => {
+    if (showNextPhaseModal) return registerBackHandler(() => setShowNextPhaseModal(false));
+  }, [showNextPhaseModal]);
 
-  // Special: Om vi är på fliken 'Exercises' (Scout), backa till 'Programs'
   useEffect(() => {
     if (activeTab === 'exercises' && !showGenerator && !selectedProgram && !viewingActivity) {
       return registerBackHandler(() => setActiveTab('programs'));
@@ -58,85 +59,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
     window.addEventListener('storage-update', loadData);
     return () => window.removeEventListener('storage-update', loadData);
   }, []);
-
-  const handleGenerateNextPhase = async () => {
-    if (!selectedProgram) return;
-    setIsGeneratingNext(true);
-    try {
-      const pplStats = calculatePPLStats(history, allExercises);
-      
-      const completedProgramActivities = scheduled.filter(a => a.programId === selectedProgram.id && a.isCompleted && a.linkedSessionId);
-      const completedSessionIds = completedProgramActivities.map(a => a.linkedSessionId!);
-      const programHistory = history.filter(h => completedSessionIds.includes(h.id)).slice(-10);
-
-      const result = await generateNextPhase(selectedProgram, programHistory, allExercises, pplStats);
-
-      const currentWeeks = selectedProgram.weeks || 4;
-      const lastProgramActivity = scheduled
-        .filter(r => r.programId === selectedProgram.id)
-        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-        .pop();
-        
-      const lastDate = lastProgramActivity ? new Date(lastProgramActivity.date) : new Date();
-      
-      const startOfNewPhase = new Date(lastDate);
-      startOfNewPhase.setDate(lastDate.getDate() + (7 - lastDate.getDay() + 1));
-      startOfNewPhase.setHours(0,0,0,0);
-      
-      for (let week = 0; week < 4; week++) {
-         for (const routineTemplate of result.routines) {
-            const exercisesWithWeights: PlannedExercise[] = routineTemplate.exercises.map((ex: any) => {
-              const parsedReps = parseInt(ex.targetReps.toString().split('-')[0]) || 8;
-              const historyWeight = suggestWeightForReps(ex.id, parsedReps, history);
-              const finalWeight = historyWeight > 0 ? historyWeight : (ex.estimatedWeight || 20);
-              return {
-                  exerciseId: ex.id,
-                  sets: Array(ex.targetSets).fill(null).map(() => ({
-                      reps: parsedReps,
-                      weight: finalWeight,
-                      completed: false,
-                      type: 'normal' as SetType
-                  })),
-                  notes: `AI Est. vikt: ${ex.estimatedWeight || 0}kg`
-              };
-            });
-
-            const dayOffset = (routineTemplate.scheduledDay || 1) - 1; 
-            const sessionDate = new Date(startOfNewPhase);
-            sessionDate.setDate(startOfNewPhase.getDate() + (week * 7) + dayOffset);
-            
-            const activity: ScheduledActivity = {
-                id: `sched-ai-${selectedProgram.id}-w${currentWeeks + week + 1}-${dayOffset}`,
-                date: sessionDate.toISOString().split('T')[0],
-                type: 'gym',
-                title: `${routineTemplate.name} (V.${currentWeeks + week + 1})`,
-                isCompleted: false,
-                exercises: exercisesWithWeights,
-                programId: selectedProgram.id,
-                weekNumber: currentWeeks + week + 1
-            };
-            await storage.addScheduledActivity(activity);
-         }
-      }
-
-      const updatedProgram = { 
-          ...selectedProgram, 
-          weeks: currentWeeks + 4,
-          motivation: result.motivation
-      };
-      await storage.saveAIProgram(updatedProgram);
-      
-      alert("Nästa fas (4 veckor) är genererad och tillagd!");
-      await loadData();
-      setSelectedProgram(updatedProgram);
-    } catch (e) {
-      console.error(e);
-      alert((e as Error).message || "Kunde inte generera nästa fas.");
-    } finally {
-      setIsGeneratingNext(false);
-    }
-  };
-
+  
   const handleStartActivity = (activity: ScheduledActivity) => {
     setViewingActivity(null);
     onStartSession(activity);
@@ -148,7 +71,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             <button onClick={() => setShowGenerator(false)} className="px-4 py-4 text-text-dim flex items-center gap-2 font-bold text-xs uppercase hover:text-white transition-colors">
                 <ArrowLeft size={16} /> Avbryt
             </button>
-            <AIArchitect onClose={() => setShowGenerator(false)} />
+            <AIArchitect onClose={() => { setShowGenerator(false); loadData(); }} />
         </div>
     );
   }
@@ -166,6 +89,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
         if(confirm("Är du säker? Detta tar bort alla kommande pass och mål kopplade till programmet.")) {
             await storage.cancelAIProgram(selectedProgram.id);
             setSelectedProgram(null);
+            loadData();
         }
     };
 
@@ -181,6 +105,25 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             />
         )}
         
+        {showNextPhaseModal && (
+          <NextPhaseModal 
+            program={selectedProgram}
+            history={history}
+            allExercises={allExercises}
+            scheduled={scheduled}
+            onClose={() => setShowNextPhaseModal(false)}
+            onGenerated={async () => {
+              setShowNextPhaseModal(false);
+              await loadData();
+              const updatedPrograms = await storage.getAIPrograms();
+              const updatedProgram = updatedPrograms.find(p => p.id === selectedProgram.id);
+              if (updatedProgram) {
+                  setSelectedProgram(updatedProgram);
+              }
+            }}
+          />
+        )}
+
         <div className="flex items-center gap-2">
             <button onClick={() => setSelectedProgram(null)} className="text-text-dim hover:text-white flex items-center gap-1 bg-white/5 px-3 py-2 rounded-xl text-xs font-bold uppercase transition-colors">
                 <ArrowLeft size={16}/> Tillbaka
@@ -193,11 +136,10 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             {selectedProgram.status === 'active' && (
                 <div className="flex gap-3 mt-4">
                     <button 
-                      onClick={handleGenerateNextPhase} 
-                      disabled={isGeneratingNext} 
-                      className="flex-1 bg-[#2ed573] hover:bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all active:scale-95 shadow-lg shadow-green-500/20"
+                      onClick={() => setShowNextPhaseModal(true)} 
+                      className="flex-1 bg-[#2ed573] hover:bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-green-500/20"
                     >
-                        {isGeneratingNext ? <Loader2 className="animate-spin" size={16}/> : <PlusCircle size={16} strokeWidth={3} />} {isGeneratingNext ? 'Analyserar...' : 'Nästa Fas'}
+                        <PlusCircle size={16} strokeWidth={3} /> Nästa Fas
                     </button>
                     <button onClick={handleCancel} className="bg-red-500/10 text-red-500 font-bold py-3 px-4 rounded-2xl flex items-center justify-center hover:bg-red-500/20 transition-colors"><XCircle size={20} /></button>
                 </div>

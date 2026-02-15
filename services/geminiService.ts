@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone, ProgressionRate } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { storage } from './storage';
+import { ProgressionRules } from "../utils/progression";
 
 export interface ExerciseRecommendation {
   existingId?: string;
@@ -296,26 +297,41 @@ export const generateProfessionalPlan = async (
   }
 };
 
+// FIX: Updated function signature and implementation to handle additional arguments for generating the next program phase.
 export const generateNextPhase = async (
   currentProgram: AIProgram,
   programHistory: WorkoutSession[],
   availableExercises: Exercise[],
-  pplStats: any
+  pplStats: { start: any; current: any },
+  preferences: {
+    daysPerWeek: number;
+    durationMinutes: number;
+    weeks: number;
+    progressionRate: ProgressionRate;
+  },
+  rules: ProgressionRules
 ): Promise<AIPlanResponse> => {
   try {
     const apiKey = await getApiKey();
     const ai = new GoogleGenAI({ apiKey });
+    const { daysPerWeek, durationMinutes, weeks, progressionRate } = preferences;
+
     const contents = `
       Skapa nästa fas (Fas ${ (currentProgram.phaseNumber || 1) + 1}) för programmet "${currentProgram.name}".
       
       LÅNGSIKTIGT MÅL: "${currentProgram.longTermGoalDescription}"
-      SENASTE FASENS RESULTAT (Nuvarande 1RM): ${JSON.stringify(pplStats)}
+      TIDSPERSPEKTIV: ${weeks} veckor, ${daysPerWeek} pass/vecka, ${durationMinutes} min/pass.
+      FÖREGÅENDE FAS START-1RM: ${JSON.stringify(pplStats.start)}
+      NUVARANDE 1RM: ${JSON.stringify(pplStats.current)}
+      ÖKNINGSTAKT VALD AV ANVÄNDAREN: ${progressionRate.toUpperCase()}.
+      COACHENS AUTOMATISKA ANALYS: "${rules.feedback}"
       
       UPPGIFT:
-      1. Basera progressionen på de nya styrkevärdena.
-      2. Fortsätt arbeta mot det långsiktiga målet med realistiska ökningar (1-2% per vecka för överkropp, 2-3% för underkropp).
-      3. Variera gärna övningsval för att undvika platåer.
-      4. Skriv en motiverande text för nästa fas.
+      1. Designa nästa ${weeks}-veckors fas baserat på den nya styrkan (NUVARANDE 1RM) och coach-analysen.
+      2. Använd en belastningsökning på cirka ${Math.round((rules.loadMultiplier - 1) * 100)}% från nuvarande 1RM för huvudlyften.
+      3. ${rules.volumeAction === 'increase' ? 'Öka volymen (fler set/övningar)' : rules.volumeAction === 'decrease' ? 'Minska volymen (färre set/övningar)' : 'Behåll nuvarande volymstruktur'}.
+      4. Variera gärna några assistansövningar för att undvika platåer, men behåll de stora baslyften.
+      5. Skriv en kort, motiverande text för den nya fasen i "motivation"-fältet.
     `;
     
     const response = await ai.models.generateContent({
