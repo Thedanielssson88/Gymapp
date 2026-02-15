@@ -1,6 +1,5 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse } from "../types";
+import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 
 export interface ExerciseRecommendation {
@@ -61,7 +60,16 @@ export const recommendExercises = async (
       NUVARANDE BIBLIOTEK (ID: Namn):
       ${exerciseIndex}`,
       config: {
-        systemInstruction: "Du är en expertcoach. Identifiera de 5-10 bästa övningarna för användarens önskemål. Sök först i biblioteket. Om en övning saknas, skapa den som en ny övning med all teknisk data.",
+        systemInstruction: `Du är en expertcoach. Identifiera de 5-8 bästa övningarna för användarens önskemål.
+        UPPGIFT:
+        1. Sök först i biblioteket. Om en övning finns, använd dess exakta ID.
+        2. Om en viktig övning SAKNAS, skapa den som en ny övning med ALL teknisk data.
+        
+        VIKTIGT FÖR NYA ÖVNINGAR:
+        - id: Skapa ett unikt slug-id (t.ex. 'hyrox-sled-push').
+        - muscleGroups: Breda kategorier (t.ex. 'Rygg', 'Ben').
+        - equipmentRequirements: Array av arrayer. Ex: för Skivstång och Bänk: [["Skivstång"], ["Träningsbänk"]].
+        - tier: 'tier_1' (Tung bas), 'tier_2' (Komplement), 'tier_3' (Isolering/Mobilitet).`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -81,12 +89,12 @@ export const recommendExercises = async (
                   primaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
                   secondaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
                   muscleGroups: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
-                  equipment: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  equipment: { type: Type.ARRAY, items: { type: Type.STRING, enum: Object.values(Equipment) } },
                   equipmentRequirements: { 
                     type: Type.ARRAY, 
                     items: { 
                       type: Type.ARRAY, 
-                      items: { type: Type.STRING } 
+                      items: { type: Type.STRING, enum: Object.values(Equipment) } 
                     } 
                   },
                   description: { type: Type.STRING },
