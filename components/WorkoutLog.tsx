@@ -11,12 +11,11 @@ import {
 } from 'lucide-react';
 import { calculate1RM } from '../utils/fitness';
 import { ConfirmModal } from './ConfirmModal';
-import { CalendarView } from './CalendarView'; // NY IMPORT
-import { HistoryItemModal } from './HistoryItemModal'; // NY IMPORT
-import { WorkoutDetailsModal } from './WorkoutDetailsModal'; // NY IMPORT
+import { CalendarView } from './CalendarView';
+import { HistoryItemModal } from './HistoryItemModal';
+import { WorkoutDetailsModal } from './WorkoutDetailsModal';
 import { registerBackHandler } from '../utils/backHandler';
 
-// --- HJÄLPFUNKTIONER FÖR ANALYS ---
 const formatSeconds = (totalSeconds: number) => {
   if (isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
   const mins = Math.floor(totalSeconds / 60);
@@ -39,71 +38,37 @@ function getWeekNumber(d: Date) {
     return Math.ceil(( ( (date.getTime() - yearStart.getTime()) / 86400000) + 1)/7);
 }
 
-// --- DELKOMPONENT: SET-RADER MED PR-LOGIK ---
-interface LogSetRowProps {
-  set: WorkoutSet;
-  type: TrackingType | undefined;
-  isPR: boolean;
-}
-
-const LogSetRow: React.FC<LogSetRowProps> = ({ set, type, isPR }) => {
+const LogSetRow: React.FC<{ set: WorkoutSet; type: TrackingType | undefined; isPR: boolean; }> = ({ set, type, isPR }) => {
   const oneRM = (type === 'reps_weight' || !type) ? calculate1RM(set.weight, set.reps) : 0;
   
   const renderTypeBadge = () => {
     switch (set.type) {
-      case 'warmup':
-        return <span className="text-[8px] px-1.5 py-0.5 bg-accent-blue/20 text-accent-blue rounded uppercase">Uppvärmning</span>;
-      case 'failure':
-        return <span className="text-[8px] px-1.5 py-0.5 bg-red-500/20 text-red-500 rounded uppercase">To Failure</span>;
-      case 'drop':
-        return <span className="text-[8px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded uppercase">Drop set</span>;
-      default:
-        return null; 
+      case 'warmup': return <span className="text-[8px] px-1.5 py-0.5 bg-accent-blue/20 text-accent-blue rounded uppercase">W</span>;
+      case 'failure': return <span className="text-[8px] px-1.5 py-0.5 bg-red-500/20 text-red-500 rounded uppercase">F</span>;
+      case 'drop': return <span className="text-[8px] px-1.5 py-0.5 bg-orange-500/20 text-orange-500 rounded uppercase">D</span>;
+      default: return null; 
     }
   };
 
   return (
     <div className={`bg-black/20 p-2.5 rounded-xl flex justify-between items-center text-xs font-bold border ${isPR ? 'border-accent-pink/30' : 'border-transparent'}`}>
       <div className="flex items-center gap-2">
-        <span className="text-text-dim opacity-50 font-mono text-[9px]">SET</span>
         {renderTypeBadge()}
-        {isPR && (
-          <div className="flex items-center gap-1 bg-accent-pink/10 text-accent-pink px-1.5 py-0.5 rounded-md animate-pulse">
-            <Trophy size={10} />
-            <span className="text-[8px] uppercase font-black">PR</span>
-          </div>
-        )}
+        {isPR && (<div className="flex items-center gap-1 bg-accent-pink/10 text-accent-pink px-1.5 py-0.5 rounded-md"><Trophy size={10} /><span className="text-[8px] uppercase font-black">PR</span></div>)}
       </div>
-
       <div className="flex items-center gap-4">
-        {oneRM > 0 && (
-          <span className="text-accent-blue/60 uppercase text-[9px] font-black">est. 1RM: {oneRM}kg</span>
-        )}
+        {oneRM > 0 && (<span className="text-accent-blue/60 uppercase text-[9px] font-black">est. 1RM: {oneRM}kg</span>)}
         <div className="text-right">
-          {type === 'reps_weight' || !type ? (
-            <span className="text-white">{set.reps} × {set.weight}kg</span>
-          ) : type === 'time_distance' ? (
-            <div className="text-right">
-               <span className="text-white">{set.distance}m @ {formatSeconds(set.duration || 0)}</span>
-               {calculatePace(set.duration || 0, set.distance || 0) && (
-                 <p className="text-[8px] text-accent-blue uppercase font-black">
-                   {calculatePace(set.duration || 0, set.distance || 0)}
-                 </p>
-               )}
-            </div>
-          ) : type === 'time_only' ? (
-            <span className="text-white">{formatSeconds(set.duration || 0)}</span>
-          ) : (
-            <span className="text-white">{set.reps} reps</span>
-          )}
+          {type === 'reps_weight' || !type ? (<span className="text-white">{set.reps} × {set.weight}kg</span>) : 
+           type === 'time_distance' ? (<div className="text-right"><span className="text-white">{set.distance}m @ {formatSeconds(set.duration || 0)}</span>{calculatePace(set.duration || 0, set.distance || 0) && (<p className="text-[8px] text-accent-blue uppercase font-black">{calculatePace(set.duration || 0, set.distance || 0)}</p>)}</div>) : 
+           type === 'time_only' ? (<span className="text-white">{formatSeconds(set.duration || 0)}</span>) : 
+           (<span className="text-white">{set.reps} reps</span>)}
         </div>
       </div>
     </div>
   );
 };
 
-
-// --- HUVUDKOMPONENT ---
 interface WorkoutLogProps {
   history: WorkoutSession[];
   plannedActivities: PlannedActivityForLogDisplay[];
@@ -116,11 +81,12 @@ interface WorkoutLogProps {
   onStartActivity: (activity: ScheduledActivity) => void;
   onStartManualWorkout: (date: string) => void;
   onStartLiveWorkout: () => void;
+  onUpdate: () => void;
 }
 
 export const WorkoutLog: React.FC<WorkoutLogProps> = ({ 
   history, plannedActivities, routines, allExercises,
-  onAddPlan, onDeletePlan, onDeleteHistory, onMovePlan, onStartActivity, onStartManualWorkout, onStartLiveWorkout
+  onAddPlan, onDeletePlan, onDeleteHistory, onMovePlan, onStartActivity, onStartManualWorkout, onStartLiveWorkout, onUpdate
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -137,7 +103,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
   const [isRecurring, setIsRecurring] = useState(false);
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
-  // NYTT STATE FÖR VY & MODALER
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedItem, setSelectedItem] = useState<WorkoutSession | PlannedActivityForLogDisplay | null>(null);
   
@@ -145,7 +110,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
     if (selectedItem || showDatePicker || showPlanModal || confirmDelete || confirmMove) {
       return registerBackHandler(() => {
         setSelectedItem(null);
-        setShowDatePicker(null);
+        setShowDatePicker(false);
         setShowPlanModal(false);
         setConfirmDelete(null);
         setConfirmMove(null);
@@ -197,9 +162,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
   const handleConfirmDelete = () => { if (confirmDelete) { if (confirmDelete.isHistory) { onDeleteHistory(confirmDelete.id); } else { onDeletePlan(confirmDelete.id, confirmDelete.isTemplate); } setConfirmDelete(null); } };
   const handleStartManual = () => { onStartManualWorkout(manualDate); setShowDatePicker(false); };
 
-  const isHistoryItem = (item: any): item is WorkoutSession => {
-    return 'zoneId' in item;
-  };
+  const isHistoryItem = (item: any): item is WorkoutSession => 'zoneId' in item;
 
   return (
     <div className="pb-32 space-y-6 animate-in fade-in">
@@ -276,7 +239,7 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
       {selectedItem && (isHistoryItem(selectedItem) ? (
         <HistoryItemModal session={selectedItem} allExercises={allExercises} history={history} onClose={() => setSelectedItem(null)} />
       ) : (
-        <WorkoutDetailsModal activity={selectedItem as ScheduledActivity} allExercises={allExercises} onClose={() => setSelectedItem(null)} onStart={onStartActivity} onUpdate={() => {}} />
+        <WorkoutDetailsModal activity={selectedItem as ScheduledActivity} allExercises={allExercises} onClose={() => setSelectedItem(null)} onStart={onStartActivity} onUpdate={onUpdate} />
       ))}
     </div>
   );
