@@ -313,7 +313,7 @@ export const ZonePickerModal: React.FC<ZonePickerModalProps> = ({ onClose, onSel
                 <div className="p-8 border-t border-white/5 bg-black/20 flex flex-col gap-3">
                     <button 
                         onClick={confirmSelection}
-                        className="w-full py-5 bg-accent-blue text-black rounded-3xl font-black italic uppercase tracking-widest shadow-xl shadow-accent-blue/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        className="w-full py-5 bg-green-500 hover:bg-green-400 text-white rounded-3xl font-black italic uppercase tracking-widest shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
                     >
                         Bygg & Starta Pass
                     </button>
