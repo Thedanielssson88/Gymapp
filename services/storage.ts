@@ -1,5 +1,6 @@
+
 import { db, migrateFromLocalStorage } from './db';
-import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission } from '../types';
+import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
 import { BackupData } from './googleDrive';
 
@@ -205,6 +206,40 @@ export const storage = {
     await db.userMissions.update(mission.id, mission);
   },
   deleteUserMission: async (id: string) => await db.userMissions.delete(id),
+  
+  // --- NYA FUNKTIONER FÖR AI-PROGRAM ---
+  getAIPrograms: async (): Promise<AIProgram[]> => await db.aiPrograms.toArray(),
+  
+  saveAIProgram: async (program: AIProgram): Promise<void> => {
+    await db.aiPrograms.put(program);
+    window.dispatchEvent(new Event('storage-update'));
+  },
+  
+  cancelAIProgram: async (programId: string): Promise<void> => {
+    // 1. Uppdatera programstatus
+    const program = await db.aiPrograms.get(programId);
+    if (!program) return;
+    await db.aiPrograms.update(programId, { status: 'cancelled' });
+
+    // 2. Ta bort framtida schemalagda pass kopplade till programmet
+    const today = new Date().toISOString().split('T')[0];
+    const activitiesToDelete = await db.scheduledActivities
+      .where('programId').equals(programId)
+      .filter(act => !act.isCompleted && act.date >= today)
+      .primaryKeys();
+
+    if (activitiesToDelete.length > 0) {
+      await db.scheduledActivities.bulkDelete(activitiesToDelete);
+    }
+    
+    // 3. Ta bort kopplade mål
+    if (program.goalIds && program.goalIds.length > 0) {
+        await db.userMissions.where('id').anyOf(program.goalIds).delete();
+    }
+    
+    window.dispatchEvent(new Event('storage-update'));
+  },
+
 
   getFullBackupData: async (): Promise<BackupData> => {
     return {

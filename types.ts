@@ -1,3 +1,5 @@
+
+
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -211,6 +213,7 @@ export interface WorkoutRoutine {
   exercises: PlannedExercise[];
   category?: string;
   isAiGenerated?: boolean;
+  programId?: string; // NYTT: Länkar rutinen till ett AI-program
 }
 
 export interface WorkoutSession {
@@ -244,7 +247,9 @@ export interface ScheduledActivity {
   isCompleted: boolean;
   linkedSessionId?: string;
   exercises?: PlannedExercise[];
-  recurrenceId?: string; 
+  recurrenceId?: string;
+  programId?: string; // NYTT: Länkar till ett AI-program
+  weekNumber?: number; // NYTT: Vilken vecka i programmet
 }
 
 export interface RecurringPlan {
@@ -311,6 +316,48 @@ export interface UserMission {
   exerciseId?: string; // För snabb åtkomst
 }
 
+// NY DATAMODELL FÖR AI-PROGRAM
+export interface AIProgram {
+  id: string;
+  name: string;
+  createdAt: string;
+  status: 'active' | 'completed' | 'cancelled';
+  motivation: string; // Analysen från AI
+  goalIds: string[]; // Kopplade Smart Goals
+  weeks: number; // Hur många veckor som är planerade hittills
+}
+
+// FIX: Add AIPlanResponse and related types
+// NYTT: DATAMODELLER FÖR AI-PLANERINGS-SVAR
+export interface AIPlanSmartGoal {
+  title: string;
+  targetValue: number;
+  targetType: 'exercise' | 'body_weight' | 'body_measurement';
+  exerciseId?: string;
+  deadline: string;
+  strategy: 'linear' | 'undulating' | 'peaking';
+}
+
+export interface AIPlanExercise {
+  id: string;
+  targetSets: number;
+  targetReps: string;
+  estimatedWeight: number;
+}
+
+export interface AIPlanRoutine {
+  name: string;
+  description: string;
+  scheduledDay: number;
+  exercises: AIPlanExercise[];
+  weekNumber: number;
+}
+
+export interface AIPlanResponse {
+  motivation: string;
+  smartGoals: AIPlanSmartGoal[];
+  routines: AIPlanRoutine[];
+}
 
 export interface Plate {
   weight: number;

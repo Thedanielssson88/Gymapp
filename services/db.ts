@@ -1,7 +1,8 @@
+
 import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
-  GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, UserMission
+  GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, UserMission, AIProgram
 } from '../types';
 import { INITIAL_EXERCISES } from '../data/initialExercises';
 import { INITIAL_ZONES, INITIAL_GOAL_TARGETS, DEFAULT_PROFILE } from '../constants';
@@ -25,11 +26,12 @@ export class GymDatabase extends Dexie {
   scheduledActivities!: Table<ScheduledActivity, string>;
   recurringPlans!: Table<RecurringPlan, string>;
   userMissions!: Table<UserMission, string>;
+  aiPrograms!: Table<AIProgram, string>;
 
   constructor() {
     super('MorphFitDB');
     
-    (this as Dexie).version(5).stores({
+    (this as Dexie).version(6).stores({
       userProfile: 'id',
       zones: 'id',
       exercises: 'id, name, muscleGroups',
@@ -38,9 +40,10 @@ export class GymDatabase extends Dexie {
       goalTargets: 'id',
       workoutRoutines: 'id',
       images: 'id',
-      scheduledActivities: 'id, date, type, recurrenceId',
+      scheduledActivities: 'id, date, type, recurrenceId, programId',
       recurringPlans: 'id',
-      userMissions: 'id, type, isCompleted, exerciseId'
+      userMissions: 'id, type, isCompleted, exerciseId',
+      aiPrograms: 'id, status'
     });
 
     (this as Dexie).on('populate', async () => {

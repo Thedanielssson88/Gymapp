@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup } from "../types";
+import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 
 /**
@@ -28,7 +29,8 @@ Historik: ${exerciseHistory}`,
       },
     });
 
-    return response.text || "Fokusera på kontakten i varje repetition idag för maximal muskelaktivering.";
+    const text = response.text;
+    return text || "Fokusera på kontakten i varje repetition idag för maximal muskelaktivering.";
   } catch (error) {
     console.error("Kunde inte hämta insikter från Gemini API:", error);
     
@@ -129,51 +131,44 @@ export const generateExerciseDetailsFromGemini = async (
   }
 };
 
-export interface AIPlanResponse {
-  motivation: string;
-  smartGoals: {
-    title: string;
-    targetValue: number;
-    targetType: 'exercise' | 'body_weight' | 'body_measurement';
-    exerciseId?: string;
-    deadline: string;
-    strategy: 'linear' | 'undulating' | 'peaking';
-  }[];
-  routines: {
-    name: string;
-    description: string;
-    exercises: { id: string; targetSets: number; targetReps: string }[];
-    scheduledDay: number; // 1-7 (Måndag-Söndag)
-  }[];
-}
-
 export const generateProfessionalPlan = async (
   userRequest: string,
   userHistory: WorkoutSession[],
   availableExercises: Exercise[],
-  currentProfile: UserProfile
+  currentProfile: UserProfile,
+  pplStats: any,
+  preferences: { daysPerWeek: number; durationMinutes: number; durationWeeks: number }
 ): Promise<AIPlanResponse> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const exerciseBankString = availableExercises.map(e => `id: "${e.id}", name: "${e.name}", primaryMuscles: [${e.primaryMuscles.join(', ')}], pattern: "${e.pattern}"`).join('\n');
 
   const contents = `
-    You are a world-leading personal trainer and rehabilitation expert. Your task is to create a weekly training plan based on the user's request: "${userRequest}".
+    Du är en expertcoach. Skapa ett detaljerat träningsprogram.
+    
+    MÅL: "${userRequest}"
+    
+    TIDSPERSPEKTIV:
+    - Längd: ${preferences.durationWeeks} veckor.
+    - Frekvens: ${preferences.daysPerWeek} pass per vecka.
+    - Tid/pass: Ca ${preferences.durationMinutes} min.
+    
+    ANVÄNDARENS STYRKA (PPL):
+    PUSH: ${pplStats.push.level} (${pplStats.push.max1RM}kg), PULL: ${pplStats.pull.level} (${pplStats.pull.max1RM}kg), LEGS: ${pplStats.legs.level} (${pplStats.legs.max1RM}kg).
+    Profil: ${JSON.stringify(currentProfile)}
 
-    AVAILABLE DATA:
-    - User Profile: ${JSON.stringify(currentProfile)}
-    - Recent Workout History (last 10 sessions): ${JSON.stringify(userHistory.slice(-10).map(s => ({name: s.name, date: s.date, exercises: s.exercises.length})))}
-    - Available Exercise Bank (use ONLY these IDs):
-    ${exerciseBankString}
-
-    RULES:
-    1.  **Strictly use exercise IDs from the provided Exercise Bank.** Do not invent exercises or IDs.
-    2.  If the user's goal is rehabilitation (e.g., mentions "posture", "pain", "rehab"), prioritize exercises with the 'Rehab / Prehab' or 'Mobility / Stretch' movement pattern.
-    3.  If the goal is strength, use linear periodization principles (e.g., lower rep ranges for main lifts).
-    4.  Create a balanced weekly plan. Distribute the routines across the week (Monday=1, Sunday=7).
-    5.  The response MUST be a single, valid JSON object matching the provided schema. Do not include any markdown formatting like \`\`\`json.
-
-    Analyze all the data and generate a professional, motivating, and effective plan.
+    UPPGIFT:
+    Skapa UNIKA rutiner för varje vecka (1 till ${preferences.durationWeeks}).
+    Du ska applicera "Progressive Overload" (gradvis ökning) mellan veckorna. 
+    Exempel: Vecka 1 är introduktion, Vecka 2 ökar volym/vikt, Vecka 3 är tyngst.
+    
+    REGLER:
+    1. Använd ENDAST övnings-ID från: ${exerciseBankString}
+    2. Estimera vikter (estimatedWeight) baserat på PPL.
+    3. Returnera JSON med ALLA pass för hela perioden (${preferences.daysPerWeek * preferences.durationWeeks} st totalt).
+    4. Sätt ett unikt namn för varje pass, t.ex. "Vecka 1: Tung Press".
+    5. Inkludera weekNumber för varje pass.
+    6. Returnera ett enda JSON-objekt, utan markdown.
   `;
 
   try {
@@ -185,43 +180,45 @@ export const generateProfessionalPlan = async (
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            motivation: { type: Type.STRING, description: "A short, motivating explanation of why this program is suitable for the user's goal." },
+            motivation: { type: Type.STRING },
             smartGoals: {
               type: Type.ARRAY,
-              description: "A list of 1-2 suggested 'smart goals' for the user to add to their TargetsView.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  title: { type: Type.STRING, description: "Example: 'Reach 100kg Bench Press'" },
-                  targetValue: { type: Type.NUMBER, description: "The target value for the goal." },
+                  title: { type: Type.STRING },
+                  targetValue: { type: Type.NUMBER },
                   targetType: { type: Type.STRING, enum: ['exercise', 'body_weight', 'body_measurement'] },
-                  exerciseId: { type: Type.STRING, description: "The exercise ID from the bank if targetType is 'exercise'." },
-                  deadline: { type: Type.STRING, description: "Suggested deadline in YYYY-MM-DD format, usually 3 months from now." },
-                  strategy: { type: Type.STRING, enum: ['linear', 'undulating', 'peaking'], description: "The progression strategy."}
+                  exerciseId: { type: Type.STRING },
+                  deadline: { type: Type.STRING },
+                  strategy: { type: Type.STRING, enum: ['linear', 'undulating', 'peaking']}
                 }
               }
             },
             routines: {
               type: Type.ARRAY,
-              description: "A list of workout routines for the week.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  name: { type: Type.STRING, description: "Name of the workout, e.g., 'Push Day'." },
-                  description: { type: Type.STRING, description: "Focus for the workout." },
-                  scheduledDay: { type: Type.NUMBER, description: "Day of the week (1=Monday, 7=Sunday)." },
+                  name: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  weekNumber: { type: Type.NUMBER },
+                  scheduledDay: { type: Type.NUMBER },
                   exercises: {
                     type: Type.ARRAY,
                     items: {
                       type: Type.OBJECT,
                       properties: {
-                        id: { type: Type.STRING, description: "The exact exercise ID from the provided bank." },
-                        targetSets: { type: Type.NUMBER, description: "Number of sets." },
-                        targetReps: { type: Type.STRING, description: "Target rep range, e.g., '8-10'." }
-                      }
+                        id: { type: Type.STRING },
+                        targetSets: { type: Type.NUMBER },
+                        targetReps: { type: Type.STRING },
+                        estimatedWeight: { type: Type.NUMBER }
+                      },
+                      required: ["id", "targetSets", "targetReps", "estimatedWeight"]
                     }
                   }
-                }
+                },
+                required: ["name", "description", "weekNumber", "scheduledDay", "exercises"]
               }
             }
           }
@@ -237,5 +234,90 @@ export const generateProfessionalPlan = async (
   } catch (error) {
       console.error("AI plan generation failed:", error);
       throw new Error("AI-assistenten kunde inte skapa en plan. Kontrollera din anslutning eller försök omformulera din förfrågan.");
+  }
+};
+
+export const generateNextPhase = async (
+  currentProgram: AIProgram,
+  programHistory: WorkoutSession[],
+  availableExercises: Exercise[],
+  pplStats: any
+): Promise<AIPlanResponse> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const exerciseList = availableExercises.map((e: any) => `${e.id} (${e.name})`).join(', ');
+
+  const performanceSummary = programHistory.map(h => 
+    `Pass: ${h.name}, Datum: ${h.date}, Antal övningar: ${h.exercises.length}`
+  ).join('\n');
+
+  const contents = `
+    Du är en expertcoach. Användaren har just avslutat en fas i sitt program: "${currentProgram.name}".
+    
+    MÅL MED PROGRAMMET: "${currentProgram.motivation}"
+    
+    UTFÖRDA PASS (HISTORIK):
+    ${performanceSummary || "Ingen historik för detta program ännu."}
+    
+    NUVARANDE STYRKEPROFIL (PPL):
+    PUSH: ${pplStats.push.level}, PULL: ${pplStats.pull.level}, LEGS: ${pplStats.legs.level}
+
+    UPPGIFT:
+    Skapa NÄSTA fas (4 veckor) av programmet. 
+    Princip: Progressive Overload. Öka svårighetsgraden något (fler set, tyngre vikter eller svårare övningar) jämfört med förra fasen. Behåll strukturen om den fungerat bra.
+
+    REGLER:
+    1. Använd ENDAST övnings-ID från: ${exerciseList}
+    2. Estimera vikter (estimatedWeight) baserat på PPL-profilen och historiken.
+    3. Returnera JSON (samma struktur som AIPlanResponse). Skapa inga smartGoals.
+  `;
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            motivation: { type: Type.STRING },
+            smartGoals: { type: Type.ARRAY, items: { type: Type.OBJECT } },
+            routines: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  scheduledDay: { type: Type.NUMBER },
+                  exercises: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        targetSets: { type: Type.NUMBER },
+                        targetReps: { type: Type.STRING },
+                        estimatedWeight: { type: Type.NUMBER }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) {
+      throw new Error("AI plan generation returned an empty response for the next phase.");
+    }
+    return JSON.parse(jsonText.trim()) as AIPlanResponse;
+  } catch (error) {
+    console.error("Gemini Error (generateNextPhase):", error);
+    throw new Error("AI-assistenten kunde inte generera nästa fas. Försök igen.");
   }
 };

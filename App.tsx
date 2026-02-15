@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -12,7 +13,7 @@ import { storage } from './services/storage';
 import { db } from './services/db'; 
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
-import { AIArchitect } from './components/AIArchitect';
+import { AIProgramDashboard } from './components/AIProgramDashboard';
 import { getAccessToken, findBackupFile, downloadBackup, uploadBackup } from './services/googleDrive';
 import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud, Sparkles } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
@@ -374,11 +375,26 @@ export default function App() {
   };
 
   const handleStartPlannedActivity = (activity: ScheduledActivity) => {
-    const cleanExercises = (activity.exercises || []).map(pe => ({
+    const exercisesForSession = (activity.exercises || []).map(pe => ({
       ...pe,
-      sets: pe.sets.map(s => ({...s, completed: false}))
+      sets: pe.sets.map(s => ({...s, completed: false})) // Reset completion status
     }));
-    handleStartWorkout(cleanExercises, activity.title);
+
+    const zoneToUse = activeZone || zones[0];
+
+    const newSess: WorkoutSession = { 
+      id: 'w-' + Date.now(), 
+      date: new Date().toISOString(),
+      name: activity.title, 
+      zoneId: zoneToUse.id, 
+      exercises: exercisesForSession, 
+      isCompleted: false,
+      isManual: false
+    };
+    
+    storage.setActiveSession(newSess);
+    setCurrentSession(newSess);
+    setActiveTab('workout');
   };
 
   const handleAddPlan = async (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => {
@@ -549,7 +565,7 @@ export default function App() {
                               />;
       case 'library': return <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} userProfile={user} />;
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
-      case 'ai': return <AIArchitect onPlanApplied={refreshData} />;
+      case 'ai': return <AIProgramDashboard onStartSession={handleStartPlannedActivity} />;
       default: return null;
     }
   };

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutSession, Exercise, MuscleGroup, UserProfile } from '../types';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -142,7 +143,8 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
     return { muscleLoad, totalLoadScore };
   }, [session, allExercises, userProfile]);
 
-  const maxScoreInSession = useMemo(() => Math.max(...Object.values(stats.muscleLoad).map(m => m.score), 1), [stats]);
+  // FIX: Explicitly typed 'm' to prevent type inference to 'unknown'
+  const maxScoreInSession = useMemo(() => Math.max(...Object.values(stats.muscleLoad).map((m: { score: number }) => m.score), 1), [stats]);
 
   // Färglogik baserat på Score
   const getMuscleColor = (muscleId: MuscleGroup) => {
@@ -171,7 +173,6 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
             ex.primaryMuscles?.includes(selectedMuscle) && 
             !session.exercises.some(sessEx => sessEx.exerciseId === ex.id)
         )
-        // FIX: Explicitly type sort parameters to resolve incorrect type inference.
         .sort((a: Exercise, b: Exercise) => (b.score || 5) - (a.score || 5))
         .slice(0, 5);
   }, [selectedMuscle, allExercises, session]);
