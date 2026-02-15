@@ -24,13 +24,31 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
 }) => {
   const [localVal, setLocalVal] = useState<string>(value.toString());
   const inputRef = useRef<HTMLInputElement>(null);
-  
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const options = useMemo(() => Array.from({ length: 81 }, (_, i) => i * 2.5), []);
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
   }, []);
+  
+  useEffect(() => {
+    if (unit === 'kg' && scrollRef.current) {
+      const currentNum = parseFloat(localVal) || 0;
+      const closestOption = options.reduce((prev, curr) =>
+          Math.abs(curr - currentNum) < Math.abs(prev - currentNum) ? curr : prev
+      );
+      const activeEl = scrollRef.current.querySelector(`[data-value="${closestOption}"]`);
+      if (activeEl) {
+          const behavior = localVal === value.toString() ? 'auto' : 'smooth';
+          setTimeout(() => {
+              activeEl.scrollIntoView({ behavior, inline: 'center', block: 'nearest' });
+          }, 50);
+      }
+    }
+  }, [localVal, unit, value, options]);
 
   const saveValue = (num: number) => {
     if (unit === 'kg' && barWeight > 0 && step === 2.5) {
@@ -158,20 +176,42 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
           {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={currentNumericWeight} barWeight={barWeight} availablePlates={availablePlates} />}
         </div>
 
-        <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
-          <p className="text-center text-[10px] font-black uppercase tracking-widest text-text-dim">Smarta Förslag</p>
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide justify-center">
-            {quickValues.map(val => (
-              <button
-                key={val}
-                onClick={() => handleQuickSelect(val)}
-                className="flex-shrink-0 px-5 py-3 bg-white/5 border border-white/10 rounded-xl text-[11px] font-black text-white hover:bg-accent-blue/20 hover:border-accent-blue/50 transition-colors"
+        {unit === 'kg' ? (
+          <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
+              <div 
+                  ref={scrollRef}
+                  className="w-full flex gap-4 overflow-x-auto pb-8 scrollbar-hide snap-x snap-mandatory px-[40%]"
               >
-                {unit === 'm' && val >= 1000 ? `${val/1000}km` : `${val}${unit !== 'reps' ? 'kg' : ''}`}
-              </button>
-            ))}
+                  {options.map((opt) => (
+                      <button
+                          key={opt}
+                          data-value={opt}
+                          onClick={() => handleQuickSelect(opt)}
+                          className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center text-lg font-black snap-center transition-all ${
+                              Math.abs(opt - (parseFloat(localVal) || 0)) < 0.01 ? 'bg-accent-blue text-black scale-125' : 'bg-white/5 text-text-dim'
+                          }`}
+                      >
+                          {opt}
+                      </button>
+                  ))}
+              </div>
           </div>
-        </div>
+        ) : (
+          <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
+              <p className="text-center text-[10px] font-black uppercase tracking-widest text-text-dim">Smarta Förslag</p>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide justify-center">
+              {quickValues.map(val => (
+                  <button
+                      key={val}
+                      onClick={() => handleQuickSelect(val)}
+                      className="flex-shrink-0 px-5 py-3 bg-white/5 border border-white/10 rounded-xl text-[11px] font-black text-white hover:bg-accent-blue/20 hover:border-accent-blue/50 transition-colors"
+                  >
+                  {unit === 'm' && val >= 1000 ? `${val/1000}km` : `${val}${unit !== 'reps' ? 'kg' : ''}`}
+                  </button>
+              ))}
+              </div>
+          </div>
+        )}
 
         <button 
           onClick={handleFinalSave}
