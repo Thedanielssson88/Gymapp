@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Check, AlertTriangle } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -14,9 +14,20 @@ interface ConfirmModalProps {
 export const ConfirmModal: React.FC<ConfirmModalProps> = ({ 
   title, message, confirmLabel = "Ja, fortsätt", cancelLabel = "Avbryt", isDestructive = false, onConfirm, onCancel 
 }) => {
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-[#1a1721] border border-white/10 rounded-[32px] p-8 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onCancel}>
+      <div 
+        className="bg-[#1a1721] border border-white/10 rounded-[32px] p-8 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         <div className="flex flex-col items-center text-center mb-6">
           <div className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-4 ${isDestructive ? 'bg-red-500/10 text-red-500' : 'bg-accent-blue/10 text-accent-blue'}`}>

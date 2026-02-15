@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Check, Activity, Clock, Flame } from 'lucide-react';
 
 interface WorkoutSummaryModalProps {
@@ -12,6 +12,14 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({ durati
   const [feeling, setFeeling] = useState('stark');
   const [manualDuration, setManualDuration] = useState(Math.max(1, Math.floor(duration / 60)));
 
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   const getRpeDescription = (val: number) => {
     if (val <= 4) return "Lätt återhämtning";
     if (val <= 6) return "Moderat ansträngning";
@@ -22,7 +30,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({ durati
 
   return (
     <div className="fixed inset-0 bg-[#0f0d15]/95 z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-      <div className="w-full max-w-md bg-[#1a1721] border border-white/10 rounded-[40px] p-8 space-y-8 relative shadow-2xl">
+      <div className="w-full max-w-md bg-[#1a1721] border border-white/10 rounded-[40px] p-8 space-y-8 relative shadow-2xl overflow-y-auto max-h-[90vh] scrollbar-hide">
         
         <button onClick={onCancel} className="absolute top-6 right-6 p-2 text-white/30 hover:text-white">
           <X size={24} />

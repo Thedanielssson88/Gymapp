@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise, UserMission } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, calculate1RM } from '../utils/fitness';
@@ -11,6 +10,7 @@ import { WorkoutStats } from './WorkoutStats';
 import { ExerciseCard } from './ExerciseCard';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { ExerciseLibrary } from './ExerciseLibrary';
+import { registerBackHandler } from '../utils/backHandler';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat, MessageSquare } from 'lucide-react';
 import { Haptics, NotificationType } from '@capacitor/haptics';
 import { triggerHaptic } from '../utils/haptics';
@@ -66,6 +66,11 @@ const InfoModal = ({
     };
   }, []);
 
+  // --- NY BACK HANDLER ---
+  useEffect(() => {
+    return registerBackHandler(onClose);
+  }, [onClose]);
+
   // Beräkna statistik för Progression
   const stats = useMemo(() => {
     const exerciseHistory = history
@@ -100,7 +105,7 @@ const InfoModal = ({
           notes: ex?.notes
         };
       })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 5); // Visar de 5 senaste gångerna
   }, [history, exercise.id]);
 
@@ -274,7 +279,7 @@ const InfoModal = ({
                           <span className="text-[10px] font-black text-text-dim w-4">{sIdx + 1}</span>
                           <div className="flex gap-1">
                             {set.type === 'warmup' && (
-                              <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-500 text-[8px] font-black uppercase rounded">W</span>
+                              <span className="px-1.5 py-0.5 bg-accent-blue/20 text-accent-blue text-[8px] font-black uppercase rounded">W</span>
                             )}
                             {set.type === 'failure' && (
                               <span className="px-1.5 py-0.5 bg-red-500/20 text-red-500 text-[8px] font-black uppercase rounded">F</span>
@@ -360,17 +365,36 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [openNotesIdx, setOpenNotesIdx] = useState<number | null>(null);
   const [infoModalData, setInfoModalData] = useState<{ exercise: Exercise; index: number } | null>(null);
   const [showSummary, setShowSummary] = useState(false);
-  const [showZonePicker, setShowZonePicker] = useState(false);
+  const [localShowZonePicker, setLocalShowZonePicker] = useState(false); // Lokalt state för gymbyten inuti pass
   const [showNoSetsInfo, setShowNoSetsInfo] = useState(false);
   const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null);
   const [exerciseToDelete, setExerciseToDelete] = useState<number | null>(null);
 
+  // --- NYA BACK HANDLERS ---
+  useEffect(() => {
+    if (showGenerator) return registerBackHandler(() => setShowGenerator(false));
+  }, [showGenerator]);
+
+  useEffect(() => {
+    if (showAddModal) return registerBackHandler(() => setShowAddModal(false));
+  }, [showAddModal]);
+
+  useEffect(() => {
+    if (localShowZonePicker) return registerBackHandler(() => setLocalShowZonePicker(false));
+  }, [localShowZonePicker]);
+
+  useEffect(() => {
+    if (showSummary) return registerBackHandler(() => setShowSummary(false));
+  }, [showSummary]);
+
+  useEffect(() => {
+    if (exerciseToDelete !== null) return registerBackHandler(() => setExerciseToDelete(null));
+  }, [exerciseToDelete]);
+
   useEffect(() => {
     setLocalSession(session);
     if (session) {
-      // ÄNDRING: Vi startar alltid med timern pausad så användaren får trycka "Starta"
       setIsTimerActive(false);
-      
       if (isManualMode) {
         setTimer(0);
       }
@@ -833,7 +857,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           />
         </div>
         <div className="px-4">
-          <button onClick={() => setShowZonePicker(true)} className="w-full py-4 bg-[#1a1721] border border-white/5 rounded-2xl flex items-center justify-between px-6 shadow-sm active:scale-[0.98] transition-all">
+          <button onClick={() => setLocalShowZonePicker(true)} className="w-full py-4 bg-[#1a1721] border border-white/5 rounded-2xl flex items-center justify-between px-6 shadow-sm active:scale-[0.98] transition-all">
             <div className="flex items-center gap-4">
                <div className="p-3 bg-white/5 rounded-xl text-accent-blue border border-white/5"><MapPin size={20} /></div>
                <div className="text-left"><span className="text-[9px] font-black uppercase tracking-widest text-text-dim block mb-1">Träningsplats</span><span className="text-lg font-black italic uppercase text-white">{activeZone.name}</span></div>
@@ -954,12 +978,12 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
         </div>
       )}
 
-      {showZonePicker && (
+      {localShowZonePicker && (
         <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-sm z-[9999] flex flex-col p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] animate-in fade-in duration-200">
-           <header className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black italic uppercase text-white">Välj Gym</h3><button onClick={() => setShowZonePicker(false)} className="p-3 bg-white/5 rounded-2xl"><X size={24} className="text-white"/></button></header>
+           <header className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black italic uppercase text-white">Välj Gym</h3><button onClick={() => setLocalShowZonePicker(false)} className="p-3 bg-white/5 rounded-2xl"><X size={24} className="text-white"/></button></header>
            <div className="flex-1 overflow-y-auto space-y-3">{(allZones || []).map(z => {
                  const isActive = activeZone.id === z.id;
-                 return (<button key={z.id} onClick={() => { handleSwitchZone(z); setShowZonePicker(false); }} className={`w-full p-5 rounded-3xl border text-left flex items-center justify-between transition-all group ${isActive ? 'bg-white text-black border-white' : 'bg-[#1a1721] border-white/5 text-text-dim'}`}><div className="flex items-center gap-4"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${isActive ? 'bg-black/10 border-transparent text-black' : 'bg-white/5 border-white/5 text-white'}`}><MapPin size={20} /></div><div><span className="text-lg font-black italic uppercase block leading-none mb-1.5">{z.name}</span><span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-black/60' : 'text-white/30'}`}>{z.inventory?.length || 0} Redskap</span></div></div>{isActive && <div className="bg-black text-white p-2 rounded-full"><Check size={16} strokeWidth={4} /></div>}</button>);
+                 return (<button key={z.id} onClick={() => { handleSwitchZone(z); setLocalShowZonePicker(false); }} className={`w-full p-5 rounded-3xl border text-left flex items-center justify-between transition-all group ${isActive ? 'bg-white text-black border-white' : 'bg-[#1a1721] border-white/5 text-text-dim'}`}><div className="flex items-center gap-4"><div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${isActive ? 'bg-black/10 border-transparent text-black' : 'bg-white/5 border-white/5 text-white'}`}><MapPin size={20} /></div><div><span className="text-lg font-black italic uppercase block leading-none mb-1.5">{z.name}</span><span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-black/60' : 'text-white/30'}`}>{z.inventory?.length || 0} Redskap</span></div></div>{isActive && <div className="bg-black text-white p-2 rounded-full"><Check size={16} strokeWidth={4} /></div>}</button>);
               })}</div>
         </div>
       )}

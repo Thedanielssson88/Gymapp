@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles } from 'lucide-react';
+import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles, Play, AlertTriangle } from 'lucide-react';
 import { recommendExercises, ExerciseRecommendation, ExerciseSearchResponse } from '../services/geminiService';
 import { storage } from '../services/storage';
-import { Exercise } from '../types';
+import { Exercise, ScheduledActivity, SetType } from '../types';
+import { registerBackHandler } from '../utils/backHandler';
 
 interface AIExerciseRecommenderProps {
   onEditExercise: (exerciseId: string) => void;
+  onStartSession: (activity: ScheduledActivity) => void;
 }
 
 const HISTORY_KEY = 'gym_ai_scout_history_v3';
@@ -17,17 +19,24 @@ interface HistoryItem {
     timestamp: number;
 }
 
-export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise }) => {
+export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession }) => {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentResult, setCurrentResult] = useState<ExerciseSearchResponse | null>(null);
+  const [currentQuery, setCurrentQuery] = useState('');
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   useEffect(() => {
     loadLibrary();
     loadHistory();
-  }, []);
+  }, [refreshTrigger]);
+
+  // --- NY BACK HANDLER ---
+  useEffect(() => {
+    if (currentResult) return registerBackHandler(() => setCurrentResult(null));
+  }, [currentResult]);
 
   const loadLibrary = async () => {
     const exercises = await storage.getAllExercises();
@@ -66,6 +75,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
     if (!request.trim()) return;
     setLoading(true);
     setCurrentResult(null); 
+    setCurrentQuery(request);
     try {
       const result = await recommendExercises(request, allExercises);
       setCurrentResult(result);
@@ -93,7 +103,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
 
         const exists = allExercises.find(e => e.id === cleanId || e.name.toLowerCase() === rec.data.name.toLowerCase());
         if (exists) {
-            alert(`Övningen "${exists.name}" finns redan.`);
+            setRefreshTrigger(prev => prev + 1);
             return;
         }
 
@@ -108,6 +118,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
         
         // Uppdatera lokalt bibliotek direkt så UI:t ändras
         setAllExercises(prev => [...prev, exerciseToSave]);
+        setRefreshTrigger(prev => prev + 1);
 
     } catch (error) {
         console.error("Fel vid sparande av övning:", error);
@@ -116,15 +127,69 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   };
 
   const getExistingExerciseId = (rec: ExerciseRecommendation): string | null => {
+    const exactMatch = allExercises.find(e => e.id === rec.data.id);
+    if (exactMatch) return exactMatch.id;
+
     const cleanId = sanitizeId(rec.data.id || rec.data.name);
-    const match = allExercises.find(e => 
-        e.id === cleanId || 
-        e.id === rec.data.id || 
-        e.name.toLowerCase() === rec.data.name.toLowerCase() ||
-        (rec.existingId && e.id === rec.existingId)
-    );
-    return match ? match.id : null;
+    const slugMatch = allExercises.find(e => e.id === cleanId);
+    if (slugMatch) return slugMatch.id;
+
+    const nameMatch = allExercises.find(e => e.name.toLowerCase() === rec.data.name.toLowerCase());
+    if (nameMatch) return nameMatch.id;
+
+    if (rec.existingId) {
+        const existingMatch = allExercises.find(e => e.id === rec.existingId);
+        if (existingMatch) return existingMatch.id;
+    }
+
+    return null;
   };
+
+  const handleStartWorkout = () => {
+    if (!currentResult) return;
+
+    // 1. Filtrera fram övningar som FINNS i biblioteket
+    const availableExercises = currentResult.recommendations
+        .map(rec => {
+            const id = getExistingExerciseId(rec);
+            return id ? { id, name: rec.data.name } : null;
+        })
+        .filter((item): item is { id: string, name: string } => item !== null);
+
+    // 2. Validering
+    if (availableExercises.length === 0) {
+        alert("Inga av de föreslagna övningarna finns i ditt bibliotek än. Lägg till dem först genom att klicka på 'Lägg till' i listan.");
+        return;
+    }
+
+    // 3. Begränsa till max 15
+    const exercisesToRun = availableExercises.slice(0, 15);
+
+    // 4. Skapa aktivitets-objektet
+    const activity: ScheduledActivity = {
+        id: `scout-session-${Date.now()}`,
+        date: new Date().toISOString().split('T')[0],
+        type: 'gym',
+        title: `AI Scout: ${currentQuery || 'Övningsscout'}`,
+        isCompleted: false,
+        exercises: exercisesToRun.map(ex => ({
+            exerciseId: ex.id,
+            sets: [
+                { reps: 10, weight: 0, completed: false, type: 'normal' as SetType },
+                { reps: 10, weight: 0, completed: false, type: 'normal' as SetType },
+                { reps: 10, weight: 0, completed: false, type: 'normal' as SetType }
+            ],
+            notes: "Genererat från Övningsscout"
+        }))
+    };
+
+    // 5. Starta!
+    onStartSession(activity);
+  };
+
+  const readyCount = currentResult 
+    ? currentResult.recommendations.filter(r => getExistingExerciseId(r) !== null).length 
+    : 0;
 
   const renderRecommendations = (recs: ExerciseRecommendation[]) => (
     <div className="space-y-3">
@@ -210,10 +275,11 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                 )}
             </div>
 
+            {/* UPPDATERAD KNAPP: HITTA ÖVNINGAR */}
             <button 
                 onClick={handleSearch}
                 disabled={loading || !request}
-                className="w-full bg-accent-blue text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-white transition-all disabled:opacity-50 active:scale-95 shadow-lg shadow-accent-blue/20"
+                className="w-full bg-[#2ed573] hover:bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-widest text-sm"
             >
                 {loading ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} strokeWidth={3} />}
                 {loading ? 'SCANNAR BIBLIOTEKET...' : 'HITTA ÖVNINGAR'}
@@ -222,15 +288,39 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
 
         {currentResult && (
             <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-                <div className="bg-accent-blue/10 border border-accent-blue/20 p-5 rounded-[28px] relative overflow-hidden">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Info size={14} className="text-accent-blue"/>
-                        <span className="text-[10px] font-black uppercase text-accent-blue tracking-widest">Coach Analys</span>
+                <div className="bg-[#1a1721] p-5 rounded-[28px] border border-white/10 flex flex-col gap-4 shadow-xl">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            <Info size={16} className="text-accent-blue" />
+                            <span className="text-[10px] font-black uppercase text-accent-blue tracking-widest">Coach Analys</span>
+                        </div>
+                        <span className="text-[10px] text-text-dim font-black uppercase tracking-widest bg-white/5 px-2 py-1 rounded-lg">
+                            {readyCount} av {currentResult.recommendations.length} i bibblan
+                        </span>
                     </div>
+                    
                     <p className="text-sm text-white italic leading-relaxed">"{currentResult.motivation}"</p>
-                    <div className="absolute -right-4 -bottom-4 opacity-5 rotate-12">
-                        <Sparkles size={80} />
-                    </div>
+                    
+                    {/* UPPDATERAD KNAPP: STARTA PASS */}
+                    <button 
+                        onClick={handleStartWorkout}
+                        disabled={readyCount === 0}
+                        className={`w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 shadow-lg transition-all active:scale-95 ${
+                            readyCount > 0 
+                            ? 'bg-[#2ed573] hover:bg-white text-black shadow-green-500/20' 
+                            : 'bg-white/5 text-text-dim cursor-not-allowed opacity-50'
+                        }`}
+                    >
+                        <Play size={20} fill={readyCount > 0 ? "black" : "transparent"} strokeWidth={3} /> 
+                        {readyCount > 0 ? `Starta pass (${Math.min(readyCount, 15)} övn)` : 'Inga sparade övningar'}
+                    </button>
+                    
+                    {readyCount === 0 && (
+                        <div className="flex items-center gap-2 text-yellow-500/80 text-[9px] font-bold uppercase justify-center">
+                            <AlertTriangle size={12} />
+                            <span>Lägg till övningar i biblioteket först (Plus-knappen nedan)</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center justify-between px-2">
@@ -267,7 +357,10 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                             <div key={idx} className="bg-[#1a1721] rounded-[28px] border border-white/5 overflow-hidden shadow-xl active:scale-[0.98] transition-transform">
                                 <button 
                                     className="w-full p-5 flex justify-between items-center text-left"
-                                    onClick={() => setCurrentResult(item.response)}
+                                    onClick={() => {
+                                        setCurrentResult(item.response);
+                                        setCurrentQuery(item.query);
+                                    }}
                                 >
                                     <div className="min-w-0 flex-1 pr-4">
                                         <p className="text-white font-bold text-sm truncate">"{item.query}"</p>

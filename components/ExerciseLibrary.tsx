@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession, UserProfile } from '../types';
 import { storage } from '../services/storage';
@@ -9,6 +8,7 @@ import { useExerciseImage } from '../hooks/useExerciseImage';
 import { generateExerciseDetailsFromGemini } from '../services/geminiService';
 import { calculate1RM } from '../utils/fitness';
 import { EquipmentBuilder } from './EquipmentBuilder';
+import { registerBackHandler } from '../utils/backHandler';
 import { Plus, Search, Edit3, Trash2, X, Dumbbell, Save, Activity, Layers, Scale, Link as LinkIcon, Check, ArrowRightLeft, Filter, ChevronDown, Zap, Loader2, TrendingUp, Trophy, Clock, SortAsc, ChevronRight, ThumbsUp, ThumbsDown, Heart } from 'lucide-react';
 
 interface ExerciseLibraryProps {
@@ -59,6 +59,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
       }
     }
   }, [initialExerciseId, initialExercises]);
+
+  useEffect(() => {
+    if (editingExercise) return registerBackHandler(() => setEditingExercise(null));
+  }, [editingExercise]);
+
+  useEffect(() => {
+    if (showImporter) return registerBackHandler(() => setShowImporter(false));
+  }, [showImporter]);
 
   useEffect(() => {
     if (initialExercises.length !== exercises.length) {
@@ -219,6 +227,207 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   );
 };
 
+// --- FIX: Implementation of sub-components for ExerciseEditor ---
+
+const InfoTab = ({ formData, setFormData, userProfile }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>>, userProfile?: UserProfile }) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleAiFill = async () => {
+    if (!formData.name) return alert("Ange övningens namn först");
+    setIsGenerating(true);
+    try {
+      const details = await generateExerciseDetailsFromGemini(formData.name);
+      setFormData(prev => ({ ...prev, ...details }));
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in">
+      <div className="flex justify-between items-end mb-2">
+        <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Övningens Namn</label>
+        <button 
+          onClick={handleAiFill} 
+          disabled={isGenerating || !formData.name}
+          className="text-[9px] font-black uppercase bg-accent-blue/10 text-accent-blue px-3 py-1 rounded-lg border border-accent-blue/20 flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+          Fyll i med AI
+        </button>
+      </div>
+      <input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-accent-pink" placeholder="T.ex. Bänkpress" />
+      
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Engelskt Namn</label>
+        <input type="text" value={formData.englishName || ''} onChange={e => setFormData({ ...formData, englishName: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold outline-none focus:border-accent-blue" placeholder="T.ex. Bench Press" />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Instruktioner</label>
+        <textarea value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-medium text-sm outline-none focus:border-accent-blue min-h-[120px]" placeholder="1. Sänk stången... 2. Pressa upp..." />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Bild</label>
+        <ImageUpload currentImageId={formData.imageId} onImageSaved={(id) => setFormData({ ...formData, imageId: id })} />
+      </div>
+    </div>
+  );
+};
+
+const MusclesTab = ({ formData, setFormData, toggleList }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>>, toggleList: (list: string[], item: string) => string[] }) => (
+  <div className="space-y-8 animate-in fade-in">
+    <div className="space-y-4">
+      <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Primära Muskler</label>
+      <div className="grid grid-cols-2 gap-2">
+        {ALL_MUSCLE_GROUPS.map(m => {
+          const isSelected = formData.primaryMuscles.includes(m);
+          return (
+            <button key={m} onClick={() => setFormData({ ...formData, primaryMuscles: toggleList(formData.primaryMuscles, m) as MuscleGroup[] })} className={`p-3 rounded-xl border text-[10px] font-bold uppercase transition-all ${isSelected ? 'bg-white text-black border-white' : 'bg-white/5 border-transparent text-text-dim'}`}>
+              {m}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+    <div className="space-y-4">
+      <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Sekundära Muskler</label>
+      <div className="grid grid-cols-2 gap-2">
+        {ALL_MUSCLE_GROUPS.map(m => {
+          const isSelected = formData.secondaryMuscles?.includes(m);
+          return (
+            <button key={m} onClick={() => setFormData({ ...formData, secondaryMuscles: toggleList(formData.secondaryMuscles || [], m) as MuscleGroup[] })} className={`p-3 rounded-xl border text-[10px] font-bold uppercase transition-all ${isSelected ? 'bg-accent-blue/20 text-accent-blue border-accent-blue/30' : 'bg-white/5 border-transparent text-text-dim'}`}>
+              {m}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+);
+
+const ProgressionTab = ({ stats }: { stats: { history: any[], best1RM: number } }) => (
+  <div className="space-y-6 animate-in fade-in">
+    <div className="bg-gradient-to-br from-[#1a1721] to-[#110f16] p-6 rounded-[32px] border border-white/5">
+      <p className="text-[10px] font-black uppercase text-text-dim tracking-widest mb-1">Beräknat 1RM (PB)</p>
+      <div className="flex items-baseline gap-2">
+        <span className="text-4xl font-black italic text-white">{Math.round(stats.best1RM)}</span>
+        <span className="text-sm font-bold text-text-dim uppercase">kg</span>
+      </div>
+    </div>
+
+    <div className="space-y-3">
+      <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Senaste Utveckling</label>
+      {stats.history.length > 0 ? (
+        [...stats.history].reverse().map((h, i) => (
+          <div key={i} className="bg-white/5 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+            <div>
+              <p className="text-xs font-bold text-white">{new Date(h.date).toLocaleDateString('sv-SE')}</p>
+              <p className="text-[10px] text-text-dim uppercase font-bold">Volym: {Math.round(h.volume)}kg</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-black italic text-accent-blue">{Math.round(h.max1RM)}kg</p>
+              <p className="text-[8px] text-text-dim uppercase font-bold">Est. 1RM</p>
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="py-12 text-center opacity-30">
+          <TrendingUp size={48} className="mx-auto mb-4" />
+          <p className="text-xs font-bold uppercase tracking-widest">Ingen historik för denna övning</p>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+const SettingsTab = ({ formData, setFormData, onDelete, allExercises }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>>, onDelete?: (id: string) => void, allExercises: Exercise[] }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  const filteredAlternatives = allExercises.filter(ex => 
+    ex.id !== formData.id && 
+    ex.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    !formData.alternativeExIds?.includes(ex.id)
+  ).slice(0, 5);
+
+  return (
+    <div className="space-y-8 animate-in fade-in">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Mönster</label>
+          <select value={formData.pattern} onChange={e => setFormData({ ...formData, pattern: e.target.value as MovementPattern })} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold outline-none">
+            {Object.values(MovementPattern).map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Tier</label>
+          <select value={formData.tier} onChange={e => setFormData({ ...formData, tier: e.target.value as ExerciseTier })} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold outline-none">
+            <option value="tier_1">Tier 1 (Bas)</option>
+            <option value="tier_2">Tier 2 (Komp)</option>
+            <option value="tier_3">Tier 3 (Isol)</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Loggning</label>
+          <select value={formData.trackingType} onChange={e => setFormData({ ...formData, trackingType: e.target.value as TrackingType })} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold outline-none">
+            <option value="reps_weight">Vikt & Reps</option>
+            <option value="time_distance">Tid & Distans</option>
+            <option value="reps_only">Endast Reps</option>
+            <option value="time_only">Endast Tid</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Svårighet (Mult)</label>
+          <input type="number" step="0.1" value={formData.difficultyMultiplier} onChange={e => setFormData({ ...formData, difficultyMultiplier: Number(e.target.value) })} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Kroppsvikt (Coeff 0-1)</label>
+        <input type="number" step="0.1" value={formData.bodyweightCoefficient} onChange={e => setFormData({ ...formData, bodyweightCoefficient: Number(e.target.value) })} className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold" />
+      </div>
+
+      <div className="space-y-4">
+        <EquipmentBuilder value={formData.equipmentRequirements || []} onChange={(reqs) => setFormData({ ...formData, equipmentRequirements: reqs })} />
+      </div>
+
+      <div className="space-y-4">
+        <label className="text-[10px] font-black uppercase text-text-dim ml-2 tracking-widest">Alternativa Övningar</label>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {formData.alternativeExIds?.map(altId => (
+            <span key={altId} className="bg-accent-blue/10 text-accent-blue px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2">
+              {allExercises.find(e => e.id === altId)?.name || altId}
+              <button onClick={() => setFormData({ ...formData, alternativeExIds: formData.alternativeExIds?.filter(id => id !== altId) })} className="text-accent-blue/50 hover:text-accent-blue"><X size={12} /></button>
+            </span>
+          ))}
+        </div>
+        <div className="relative">
+          <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Sök för att lägga till..." className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white text-xs" />
+          {searchTerm && filteredAlternatives.length > 0 && (
+            <div className="absolute z-10 w-full bg-[#2a2735] border border-white/10 rounded-xl mt-1 shadow-xl overflow-hidden">
+              {filteredAlternatives.map(ex => (
+                <button key={ex.id} onClick={() => { setFormData({ ...formData, alternativeExIds: [...(formData.alternativeExIds || []), ex.id] }); setSearchTerm(''); }} className="w-full text-left p-3 text-xs text-white hover:bg-white/5 border-b border-white/5 last:border-0">{ex.name}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {onDelete && (
+        <button onClick={() => onDelete(formData.id)} className="w-full py-4 text-red-500 font-bold uppercase text-[10px] tracking-widest hover:bg-red-500/10 rounded-2xl transition-colors mt-8">
+          Ta bort övning helt
+        </button>
+      )}
+    </div>
+  );
+};
+
 const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], allExercises: Exercise[], onClose: () => void, onSave: (ex: Exercise) => void, onDelete?: (id: string) => void, userProfile?: UserProfile }> = ({ exercise, history, allExercises, onClose, onSave, onDelete, userProfile }) => {
   const [formData, setFormData] = useState<Exercise>({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [], equipmentRequirements: exercise.equipmentRequirements || [] });
   const [activeTab, setActiveTab] = useState<'info' | 'muscles' | 'settings' | 'progression'>('info');
@@ -253,55 +462,6 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
         {activeTab === 'settings' && <SettingsTab formData={formData} setFormData={setFormData} onDelete={onDelete} allExercises={allExercises} />}
       </div>
       <div className="p-6 bg-[#0f0d15] border-t border-white/5 absolute bottom-0 left-0 right-0"><button onClick={() => onSave(formData)} className="w-full py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-transform"><Save size={20} /> Spara Ändringar</button></div>
-    </div>
-  );
-};
-
-const ProgressionTab = ({ stats }: { stats: { history: any[], best1RM: number } }) => {
-  const progressionHistory = [...stats.history].reverse();
-  return (
-      <div className="space-y-6 animate-in fade-in">
-          <div className="bg-accent-blue/10 border border-accent-blue/20 rounded-3xl p-6 flex justify-between items-center"><div><p className="text-[10px] font-black uppercase text-accent-blue tracking-widest mb-1">Ditt All-Time Best 1RM</p><h4 className="text-3xl font-black italic uppercase text-white">{stats.best1RM.toString().replace('.', ',')} <span className="text-sm">kg</span></h4></div><Trophy className="text-accent-blue" size={32} /></div>
-          <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Styrkeprogression (Est. 1RM)</label><div className="bg-black/20 rounded-2xl border border-white/5 p-2 space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">{progressionHistory.length > 0 ? (progressionHistory.map((item, idx) => (<div key={idx} className="bg-white/5 p-3 rounded-xl flex justify-between items-center text-xs"><span className="font-bold text-text-dim">{new Date(item.date).toLocaleDateString('sv-SE')}</span><span className="font-black text-white italic">{item.max1RM.toString().replace('.', ',')} kg</span></div>))) : (<div className="text-center p-4 text-text-dim text-[9px] uppercase font-bold">Ingen 1RM-historik</div>)}</div></div>
-      </div>
-  );
-};
-
-const InfoTab = ({ formData, setFormData }: any) => {
-  const [imageUrlInput, setImageUrlInput] = useState(formData.imageUrl || '');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const handleAiGenerate = async () => {
-    if (!formData.name) return alert("Skriv namnet på övningen först!");
-    setIsGenerating(true);
-    try {
-      const aiData = await generateExerciseDetailsFromGemini(formData.name);
-      setFormData((prev: any) => ({ ...prev, ...aiData }));
-    } catch (err: any) { alert(err.message); } finally { setIsGenerating(false); }
-  };
-  return (
-    <div className="space-y-6">
-      <div className="space-y-2"><div className="flex justify-between items-end"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Svenska)</label><button onClick={handleAiGenerate} disabled={isGenerating || !formData.name} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isGenerating ? 'bg-white/5 text-text-dim' : 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20 hover:bg-accent-blue/20'}`}>{isGenerating ? <Loader2 className="animate-spin" size={12} /> : <Zap size={12} />}{isGenerating ? 'Analyserar...' : 'Generera med AI'}</button></div><input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xl font-black outline-none focus:border-accent-pink" placeholder="T.ex. Bänkpress" /></div>
-      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Beskrivning</label><textarea value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-sm font-medium outline-none min-h-[100px]" placeholder="Hur utförs övningen?" /></div>
-      <div className="space-y-4"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Bild</label><div className="bg-white/5 rounded-2xl p-4 border border-white/10"><ImageUpload currentImageId={formData.imageId} onImageSaved={(id) => setFormData({ ...formData, imageId: id, imageUrl: '' })}/></div><div className="relative group"><LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} /><input type="text" value={imageUrlInput} onChange={(e) => { setImageUrlInput(e.target.value); setFormData({ ...formData, imageUrl: e.target.value, imageId: undefined }); }} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 pl-12 text-sm font-medium outline-none focus:border-accent-blue" placeholder="Eller klistra in bild-URL..." /></div></div>
-    </div>
-  );
-};
-
-const MusclesTab = ({ formData, setFormData, toggleList }: any) => (
-  <div className="space-y-8">
-    <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Rörelsemönster</label><div className="grid grid-cols-2 gap-2">{Object.values(MovementPattern).map(p => (<button key={p} onClick={() => setFormData({ ...formData, pattern: p })} className={`py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.pattern === p ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10 text-text-dim'}`}>{p}</button>))}</div></div>
-    <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-accent-pink"/> Primära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, primaryMuscles: toggleList(formData.primaryMuscles, m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.primaryMuscles || []).includes(m) ? 'bg-accent-pink text-white border-accent-pink' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
-    <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"/> Sekundära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, secondaryMuscles: toggleList(formData.secondaryMuscles, m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.secondaryMuscles || []).includes(m) ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
-  </div>
-);
-
-const SettingsTab = ({ formData, setFormData, onDelete, allExercises }: any) => {
-  const [showAltSelector, setShowAltSelector] = useState(false);
-  return (
-    <div className="space-y-6">
-        <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Mättyp</label><div className="grid grid-cols-2 gap-2">{([ 'reps_weight', 'time_distance', 'reps_only', 'time_only' ] as TrackingType[]).map(tt => (<button key={tt} onClick={() => setFormData({...formData, trackingType: tt})} className={`p-3 rounded-xl border text-xs font-bold uppercase ${formData.trackingType === tt ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10'}`}>{tt.replace('_', ' & ')}</button>))}</div></div>
-        <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Svårighetsgrad</label><input type="number" step="0.1" value={formData.difficultyMultiplier} onChange={e => setFormData({...formData, difficultyMultiplier: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white font-bold" /></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Kroppsviktsfaktor</label><input type="number" step="0.1" max="1" min="0" value={formData.bodyweightCoefficient} onChange={e => setFormData({...formData, bodyweightCoefficient: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white font-bold" /></div></div>
-        {onDelete && formData.userModified && (<div className="pt-8 border-t border-white/5"><button onClick={() => onDelete(formData.id)} className="w-full py-4 border border-red-500/30 text-red-500 rounded-2xl font-bold uppercase text-xs hover:bg-red-500/10 flex items-center justify-center gap-2"><Trash2 size={16}/> Ta bort övning</button></div>)}
     </div>
   );
 };

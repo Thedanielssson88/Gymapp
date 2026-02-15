@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements } from './types';
+import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements, SetType } from './types';
 import { WorkoutView } from './components/WorkoutView';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { WorkoutLog } from './components/WorkoutLog';
@@ -14,12 +13,16 @@ import { db } from './services/db';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
 import { AIProgramDashboard } from './components/AIProgramDashboard';
+import { ZonePickerModal } from './components/ZonePickerModal';
 import { getAccessToken, findBackupFile, downloadBackup, uploadBackup } from './services/googleDrive';
-import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud, Sparkles } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
+import { suggestWeightForReps } from './utils/progression';
+import { registerBackHandler, executeBackHandler } from './utils/backHandler';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud, Sparkles } from 'lucide-react';
 
 export default function App() {
   const [isReady, setIsReady] = useState(false);
@@ -27,6 +30,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms' | 'ai'>('workout');
   const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'analytics' | 'settings'>('recovery');
   
+  // Historik för flik-navigering
+  const [tabHistory, setTabHistory] = useState<string[]>([]);
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
@@ -44,6 +50,9 @@ export default function App() {
   
   const [pendingManualDate, setPendingManualDate] = useState<string | null>(null);
   const [targetExerciseId, setTargetExerciseId] = useState<string | null>(null);
+
+  const [pendingActivity, setPendingActivity] = useState<ScheduledActivity | null>(null);
+  const [showZonePicker, setShowZonePicker] = useState(false);
 
   const globalStyles = `
     :root {
@@ -63,6 +72,59 @@ export default function App() {
       padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);
     }
   `;
+
+  // --- NAVIGERING MED HISTORIK ---
+  const navigateToTab = (newTab: typeof activeTab) => {
+    if (newTab === activeTab) return;
+    setTabHistory(prev => [...prev, activeTab]);
+    setActiveTab(newTab);
+  };
+
+  // --- ANDROID BACK BUTTON LOGIC ---
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const handleBackButton = async () => {
+      // 1. Prioritet: Interna back handlers (modaler, AI-subvyer etc)
+      if (executeBackHandler()) return;
+
+      // 2. Prioritet: Start-menyn i App.tsx
+      if (showStartMenu) {
+        if (selectedZoneForStart) {
+          setSelectedZoneForStart(null);
+        } else {
+          setShowStartMenu(false);
+        }
+        return;
+      }
+
+      // 3. Prioritet: Flikhistorik
+      if (tabHistory.length > 0) {
+        const historyCopy = [...tabHistory];
+        const prevTab = historyCopy.pop();
+        setTabHistory(historyCopy);
+        if (prevTab) setActiveTab(prevTab as any);
+        return;
+      }
+
+      // 4. Prioritet: Gå hem eller stäng appen
+      if (activeTab !== 'workout') {
+        setActiveTab('workout');
+      } else {
+        CapacitorApp.exitApp();
+      }
+    };
+
+    const listener = CapacitorApp.addListener('backButton', handleBackButton);
+    return () => { listener.then(l => l.remove()); };
+  }, [showStartMenu, selectedZoneForStart, activeTab, tabHistory]);
+
+  // --- HANTERA BODY SUB-TABS BACK BEHAVIOR ---
+  useEffect(() => {
+    if (activeTab === 'body' && bodySubTab !== 'recovery') {
+      return registerBackHandler(() => setBodySubTab('recovery'));
+    }
+  }, [activeTab, bodySubTab]);
 
   useEffect(() => {
     const initNativeHardware = async () => {
@@ -86,20 +148,14 @@ export default function App() {
 
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
-      // Kontrollera inställningen
       const isVibrationEnabled = user?.settings?.vibrateButtons ?? true;
       if (!isVibrationEnabled) return;
-  
-      // Hitta närmaste knapp eller länk från det man klickade på
       const target = e.target as HTMLElement;
       const button = target.closest('button, a, [role="button"]');
-  
       if (button) {
-        // Utlös en lätt vibration (samma 'tick' som i timern)
         Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
       }
     };
-  
     window.addEventListener('click', handleGlobalClick);
     return () => window.removeEventListener('click', handleGlobalClick);
   }, [user?.settings?.vibrateButtons]);
@@ -160,7 +216,6 @@ export default function App() {
         setLoadingStatus('Kollar molnsynkronisering...');
         const initialProfile = await storage.getUserProfile();
         
-        // CHECK FOR STARTUP RESTORE
         if (initialProfile.settings?.googleDriveLinked && initialProfile.settings?.restoreOnStartup) {
            try {
              const token = await getAccessToken();
@@ -172,7 +227,6 @@ export default function App() {
                     const localExportedAt = initialProfile.settings.lastCloudSync || "0";
                     if (new Date(backup.exportedAt) > new Date(localExportedAt)) {
                        await storage.importFullBackup(backup);
-                       console.log("Cloud data restored on startup.");
                        alert("Nyare data hittades i molnet och har återställts. Appen startas om.");
                        window.location.reload();
                        return;
@@ -213,16 +267,11 @@ export default function App() {
   useEffect(() => {
     const checkMissions = async () => {
         if (!history.length || !userMissions.length || !user) return;
-
         let missionsUpdated = false;
-
         const updatedMissions = await Promise.all(userMissions.map(async (mission) => {
             if (mission.isCompleted || mission.type !== 'smart_goal' || !mission.smartConfig) return mission;
-
             const { targetType, exerciseId, measurementKey, startValue, targetValue } = mission.smartConfig;
-
             let currentProgress = startValue;
-
             if (targetType === 'exercise' && exerciseId) {
                 const exData = allExercises.find(e => e.id === exerciseId);
                 const lastPerf = getLastPerformance(exerciseId, history);
@@ -246,18 +295,13 @@ export default function App() {
                      currentProgress = latestLog?.measurements[key as keyof BodyMeasurements] || user.measurements[key as keyof BodyMeasurements] || 0;
                  }
             }
-            
-            const isGoalMet = targetValue > startValue
-              ? currentProgress >= targetValue 
-              : currentProgress <= targetValue;
-
+            const isGoalMet = targetValue > startValue ? currentProgress >= targetValue : currentProgress <= targetValue;
             if (isGoalMet) {
                 missionsUpdated = true;
                 return { ...mission, isCompleted: true, completedAt: new Date().toISOString() };
             }
             return mission;
         }));
-
         if (missionsUpdated) {
             const missionsToUpdateInDb = updatedMissions.filter(m => m.isCompleted && !userMissions.find(oldM => oldM.id === m.id && oldM.isCompleted));
             for (const mission of missionsToUpdateInDb) {
@@ -266,56 +310,29 @@ export default function App() {
             setUserMissions(updatedMissions);
         }
     };
-
-    if (isReady && user) {
-        checkMissions();
-    }
-}, [history, userMissions, user, biometricLogs, isReady, allExercises]); 
+    if (isReady && user) { checkMissions(); }
+  }, [history, userMissions, user, biometricLogs, isReady, allExercises]); 
 
   const activeZone = useMemo(() => zones.find(z => z.id === (currentSession?.zoneId || selectedZoneForStart?.id)) || zones[0], [zones, currentSession, selectedZoneForStart]);
 
   const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
     try {
-      await storage.saveToHistory({ 
-        ...session, 
-        isCompleted: true, 
-        duration, 
-        locationName: activeZone.name 
-      });
+      await storage.saveToHistory({ ...session, isCompleted: true, duration, locationName: activeZone.name });
       storage.setActiveSession(null);
-      
-      // AUTO SYNC AFTER WORKOUT with robust error handling
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
         getAccessToken().then(async (token) => {
           if (token) {
             const backupData = await storage.getFullBackupData();
             const existingFileId = await findBackupFile(token);
             await uploadBackup(token, backupData, existingFileId);
-            
-            // This is a fire-and-forget update, so we update the local user state
-            // to reflect the sync time immediately, even if the DB write is async.
-            const updatedProfile = {
-              ...user,
-              settings: {
-                ...user.settings!,
-                lastCloudSync: backupData.exportedAt
-              }
-            };
+            const updatedProfile = { ...user, settings: { ...user.settings!, lastCloudSync: backupData.exportedAt } };
             await storage.setUserProfile(updatedProfile);
-            setUser(updatedProfile); // Update state locally for immediate feedback
-            console.log("Cloud sync completed after workout.");
-
-          } else {
-            throw new Error("Ingen giltig token för Google Drive.");
+            setUser(updatedProfile);
           }
-        }).catch((err) => {
-          console.error("Auto-backup failed:", err);
-          alert("OBS: Kunde inte spara backup till Drive (utloggad eller nätverksfel). Gå till Inställningar och synka manuellt.");
-        });
+        }).catch((err) => { console.error("Auto-backup failed:", err); });
       }
-
       await refreshData(); 
-      setActiveTab('log');
+      navigateToTab('log');
     } catch (error) {
       console.error("Kunde inte spara passet:", error);
       alert("Ett fel uppstod när passet skulle sparas. Försök igen.");
@@ -328,67 +345,52 @@ export default function App() {
     setActiveTab('workout');
   };
 
-  const handleStartWorkout = (exercises: PlannedExercise[], name: string) => {
-    const zone = selectedZoneForStart || zones[0];
-    const sessionDate = pendingManualDate ? new Date(pendingManualDate).toISOString() : new Date().toISOString();
-    
-    const newSess: WorkoutSession = { 
-      id: 'w-' + Date.now(), 
-      date: sessionDate, 
-      name, 
-      zoneId: zone.id, 
-      exercises, 
-      isCompleted: false,
-      isManual: !!pendingManualDate
-    };
-    
-    // 1. Save to localStorage immediately (sync)
-    storage.setActiveSession(newSess);
-    
-    // 2. Update React state
-    setCurrentSession(newSess);
-    
-    // 3. Force the view to the workout tab
-    setActiveTab('workout');
-    
-    // 4. Close modals and reset temporary state
-    setShowStartMenu(false);
-    setSelectedZoneForStart(null);
-    setPendingManualDate(null);
+  const handleStartSession = (activity: ScheduledActivity) => {
+    setPendingActivity(activity);
+    setShowZonePicker(true);
   };
 
-  const handleStartEmptyWorkout = () => {
-    setShowStartMenu(true);
-  };
+  const handleFinalizeSessionStart = async (zone: Zone, filteredExercises?: PlannedExercise[]) => {
+    if (!pendingActivity) return;
+    setShowZonePicker(false);
 
-  const handleStartManualWorkout = (date: string) => {
-    setPendingManualDate(date);
-    setShowStartMenu(true);
-  };
-
-  const handleDeleteHistory = async (sessionId: string) => {
-    try {
-      await storage.deleteWorkoutFromHistory(sessionId);
-      setHistory(prev => prev.filter(s => s.id !== sessionId));
-    } catch (error) {
-      console.error("Kunde inte radera passet:", error);
-    }
-  };
-
-  const handleStartPlannedActivity = (activity: ScheduledActivity) => {
-    const exercisesForSession = (activity.exercises || []).map(pe => ({
+    let finalExercises = (filteredExercises || pendingActivity.exercises || []).map(pe => ({
       ...pe,
-      sets: pe.sets.map(s => ({...s, completed: false})) // Reset completion status
+      sets: pe.sets.map(s => ({...s, completed: false}))
     }));
 
-    const zoneToUse = activeZone || zones[0];
+    if (finalExercises.length === 0) {
+        alert("Inga övningar kvar i passet efter filtrering. Passet startas ej.");
+        setPendingActivity(null);
+        return;
+    }
+
+    const isScoutOrManual = !pendingActivity.programId;
+    if (isScoutOrManual) {
+        const historyData = await storage.getHistory();
+        finalExercises = finalExercises.map(ex => {
+            const targetReps = ex.sets[0]?.reps || 10;
+            const suggestedWeight = suggestWeightForReps(ex.exerciseId, targetReps, historyData);
+            
+            return {
+                ...ex,
+                sets: ex.sets.map(s => ({
+                    ...s,
+                    reps: targetReps,
+                    weight: suggestedWeight > 0 ? suggestedWeight : (s.weight || 0),
+                    completed: false
+                }))
+            };
+        });
+    }
 
     const newSess: WorkoutSession = { 
       id: 'w-' + Date.now(), 
       date: new Date().toISOString(),
-      name: activity.title, 
-      zoneId: zoneToUse.id, 
-      exercises: exercisesForSession, 
+      name: pendingActivity.title, 
+      zoneId: zone.id, 
+      locationName: zone.name,
+      exercises: finalExercises, 
       isCompleted: false, 
       isManual: false
     };
@@ -396,37 +398,53 @@ export default function App() {
     storage.setActiveSession(newSess);
     setCurrentSession(newSess);
     setActiveTab('workout');
+    setPendingActivity(null);
+  };
+
+  const handleStartWorkout = (exercises: PlannedExercise[], name: string) => {
+    const zone = selectedZoneForStart || zones[0];
+    const sessionDate = pendingManualDate ? new Date(pendingManualDate).toISOString() : new Date().toISOString();
+    const newSess: WorkoutSession = { 
+      id: 'w-' + Date.now(), 
+      date: sessionDate, 
+      name, 
+      zoneId: zone.id, 
+      exercises, 
+      isCompleted: false, 
+      isManual: !!pendingManualDate
+    };
+    storage.setActiveSession(newSess);
+    setCurrentSession(newSess);
+    setActiveTab('workout');
+    setShowStartMenu(false);
+    setSelectedZoneForStart(null);
+    setPendingManualDate(null);
+  };
+
+  const handleStartEmptyWorkout = () => { setShowStartMenu(true); };
+  const handleStartManualWorkout = (date: string) => { setPendingManualDate(date); setShowStartMenu(true); };
+
+  const handleDeleteHistory = async (sessionId: string) => {
+    try {
+      await storage.deleteWorkoutFromHistory(sessionId);
+      setHistory(prev => prev.filter(s => s.id !== sessionId));
+    } catch (error) { console.error("Kunde inte radera passet:", error); }
   };
 
   const handleAddPlan = async (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => {
     if (isRecurring && days) {
-      const plan: RecurringPlan = {
-        id: `rec-${Date.now()}`,
-        type: activity.type,
-        title: activity.title,
-        daysOfWeek: days,
-        startDate: activity.date,
-        exercises: activity.exercises
-      };
+      const plan: RecurringPlan = { id: `rec-${Date.now()}`, type: activity.type, title: activity.title, daysOfWeek: days, startDate: activity.date, exercises: activity.exercises };
       await storage.addRecurringPlan(plan);
       await storage.generateRecurringActivities();
-    } else {
-      await storage.addScheduledActivity(activity);
-    }
+    } else { await storage.addScheduledActivity(activity); }
     await refreshData();
   };
 
   const handleDeletePlan = async (id: string, isTemplate: boolean) => {
     try {
-      if (isTemplate) {
-        await storage.deleteRecurringPlan(id);
-      } else {
-        await storage.deleteScheduledActivity(id);
-      }
+      if (isTemplate) { await storage.deleteRecurringPlan(id); } else { await storage.deleteScheduledActivity(id); }
       await refreshData();
-    } catch (error) {
-      console.error("Kunde inte radera planeringen:", error);
-    }
+    } catch (error) { console.error("Kunde inte radera planeringen:", error); }
   };
 
   const handleMovePlan = async (id: string, newDate: string) => {
@@ -436,41 +454,19 @@ export default function App() {
         await db.scheduledActivities.update(id, { date: newDate });
         await refreshData();
       }
-    } catch (error) {
-      console.error("Kunde inte flytta planeringen:", error);
-    }
+    } catch (error) { console.error("Kunde inte flytta planeringen:", error); }
   };
 
-  const handleAddMission = async (mission: UserMission) => {
-    await storage.addUserMission(mission);
-    await refreshData();
-  };
-
-  const handleDeleteMission = async (id: string) => {
-    if (confirm("Är du säker på att du vill ta bort detta uppdrag?")) {
-      await storage.deleteUserMission(id);
-      await refreshData();
-    }
-  };
-
-  const handleGoToExercise = (exerciseId: string) => {
-    setTargetExerciseId(exerciseId);
-    setActiveTab('library');
-  };
+  const handleAddMission = async (mission: UserMission) => { await storage.addUserMission(mission); await refreshData(); };
+  const handleDeleteMission = async (id: string) => { if (confirm("Är du säker på att du vill ta bort detta uppdrag?")) { await storage.deleteUserMission(id); await refreshData(); } };
+  const handleGoToExercise = (exerciseId: string) => { setTargetExerciseId(exerciseId); navigateToTab('library'); };
 
   if (!isReady || !user) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f0d15] text-white p-6">
-        <div className="relative">
-          <div className="w-24 h-24 border-4 border-accent-pink/20 border-t-accent-pink rounded-full animate-spin"></div>
-          <Activity className="absolute inset-0 m-auto text-accent-pink animate-pulse" size={32} />
-        </div>
+        <div className="relative"><div className="w-24 h-24 border-4 border-accent-pink/20 border-t-accent-pink rounded-full animate-spin"></div><Activity className="absolute inset-0 m-auto text-accent-pink animate-pulse" size={32} /></div>
         <h1 className="mt-8 text-2xl font-black uppercase italic tracking-[0.3em] animate-pulse">MorphFit</h1>
-        <div className="mt-4 px-4 py-2 bg-white/5 rounded-xl border border-white/10">
-          <p className="text-[10px] font-mono text-text-dim uppercase tracking-widest animate-pulse">
-            {loadingStatus}
-          </p>
-        </div>
+        <div className="mt-4 px-4 py-2 bg-white/5 rounded-xl border border-white/10"><p className="text-[10px] font-mono text-text-dim uppercase tracking-widest animate-pulse">{loadingStatus}</p></div>
       </div>
     );
   }
@@ -498,7 +494,7 @@ export default function App() {
                   onComplete={handleFinishWorkout} 
                   onCancel={handleCancelWorkout} 
                   plannedActivities={plannedActivities}
-                  onStartActivity={handleStartPlannedActivity}
+                  onStartActivity={handleStartSession}
                   onStartEmptyWorkout={handleStartEmptyWorkout}
                   onUpdate={refreshData}
                   isManualMode={currentSession?.isManual}
@@ -508,79 +504,21 @@ export default function App() {
         return (
           <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen pt-[calc(env(safe-area-inset-top)+2rem)]">
             <nav className="flex items-center justify-center gap-4 border-b border-white/5 pb-4 px-2">
-              <button 
-                onClick={() => setBodySubTab('recovery')} 
-                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'recovery' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
-              >
-                Återhämtning
-              </button>
-              <button 
-                onClick={() => setBodySubTab('measurements')} 
-                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'measurements' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
-              >
-                Mått
-              </button>
-              <button 
-                onClick={() => setBodySubTab('analytics')} 
-                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'analytics' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
-              >
-                Statistik
-              </button>
-              <button 
-                onClick={() => setBodySubTab('settings')} 
-                className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'settings' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}
-              >
-                 <Settings size={16} />
-              </button>
+              <button onClick={() => setBodySubTab('recovery')} className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'recovery' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Återhämtning</button>
+              <button onClick={() => setBodySubTab('measurements')} className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'measurements' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Mått</button>
+              <button onClick={() => setBodySubTab('analytics')} className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'analytics' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}>Statistik</button>
+              <button onClick={() => setBodySubTab('settings')} className={`text-[10px] font-black uppercase tracking-[0.15em] transition-all ${bodySubTab === 'settings' ? 'text-accent-pink scale-110' : 'text-text-dim'}`}><Settings size={16} /></button>
             </nav>
-            {(bodySubTab === 'recovery' || bodySubTab === 'analytics') && (
-              <StatsView 
-                logs={biometricLogs} 
-                history={history} 
-                allExercises={allExercises} 
-                userProfile={user} 
-                onUpdateProfile={refreshData}
-                initialMode={bodySubTab === 'analytics' ? 'analytics' : 'recovery'}
-              />
-            )}
+            {(bodySubTab === 'recovery' || bodySubTab === 'analytics') && ( <StatsView logs={biometricLogs} history={history} allExercises={allExercises} userProfile={user} onUpdateProfile={refreshData} initialMode={bodySubTab === 'analytics' ? 'analytics' : 'recovery'} /> )}
             {bodySubTab === 'measurements' && <MeasurementsView profile={user} onUpdate={refreshData} />}
             {bodySubTab === 'settings' && user && ( <SettingsView userProfile={user} onUpdate={refreshData} /> )}
           </div>
         );
-      case 'log': return <WorkoutLog 
-                          history={history} 
-                          plannedActivities={plannedActivities}
-                          routines={routines} 
-                          allExercises={allExercises} 
-                          onAddPlan={handleAddPlan} 
-                          onDeletePlan={handleDeletePlan}
-                          onDeleteHistory={handleDeleteHistory}
-                          onMovePlan={handleMovePlan}
-                          onStartActivity={handleStartPlannedActivity}
-                          onStartManualWorkout={handleStartManualWorkout}
-                          onStartLiveWorkout={handleStartEmptyWorkout}
-                        />;
-      case 'targets': return <TargetsView 
-                                userMissions={userMissions} 
-                                history={history} 
-                                exercises={allExercises} 
-                                userProfile={user} 
-                                biometricLogs={biometricLogs} 
-                                onAddMission={handleAddMission} 
-                                onDeleteMission={handleDeleteMission} 
-                              />;
-      case 'library': return (
-        <ExerciseLibrary 
-          allExercises={allExercises} 
-          history={history} 
-          onUpdate={refreshData} 
-          userProfile={user} 
-          initialExerciseId={targetExerciseId}
-          onClose={() => setTargetExerciseId(null)}
-        />
-      );
+      case 'log': return <WorkoutLog history={history} plannedActivities={plannedActivities} routines={routines} allExercises={allExercises} onAddPlan={handleAddPlan} onDeletePlan={handleDeletePlan} onDeleteHistory={handleDeleteHistory} onMovePlan={handleMovePlan} onStartActivity={handleStartSession} onStartManualWorkout={handleStartManualWorkout} onStartLiveWorkout={handleStartEmptyWorkout} />;
+      case 'targets': return <TargetsView userMissions={userMissions} history={history} exercises={allExercises} userProfile={user} biometricLogs={biometricLogs} onAddMission={handleAddMission} onDeleteMission={handleDeleteMission} />;
+      case 'library': return ( <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} userProfile={user} initialExerciseId={targetExerciseId} onClose={() => setTargetExerciseId(null)} /> );
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
-      case 'ai': return <AIProgramDashboard onStartSession={handleStartPlannedActivity} onGoToExercise={handleGoToExercise} />;
+      case 'ai': return <AIProgramDashboard onStartSession={handleStartSession} onGoToExercise={handleGoToExercise} />;
       default: return null;
     }
   };
@@ -588,13 +526,7 @@ export default function App() {
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#0f0d15] selection:bg-accent-pink selection:text-white relative overflow-x-hidden">
       <style>{globalStyles}</style>
-      {showOnboarding && isReady && (
-        <OnboardingWizard onComplete={() => {
-           setShowOnboarding(false);
-           refreshData();
-        }} />
-      )}
-
+      {showOnboarding && isReady && ( <OnboardingWizard onComplete={() => { setShowOnboarding(false); refreshData(); }} /> )}
       {renderContent()}
       
       {showStartMenu && (
@@ -604,64 +536,30 @@ export default function App() {
             <div className="grid grid-cols-1 w-full gap-4">
               {zones.map(z => (<button key={z.id} onClick={() => setSelectedZoneForStart(z)} className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex items-center justify-between group active:scale-95 transition-all"><div className="flex items-center gap-6"><div className="w-16 h-16 bg-white/5 rounded-[24px] flex items-center justify-center">{z.name.toLowerCase().includes('hem') ? <Home size={32} /> : z.name.toLowerCase().includes('ute') ? <Trees size={32} /> : <MapPin size={32} />}</div><span className="text-2xl font-black uppercase italic tracking-tight">{z.name}</span></div><ChevronRight size={32} className="text-text-dim" /></button>))}
             </div>
-          ) : (
-            <RoutinePicker onStart={handleStartWorkout} activeZone={selectedZoneForStart} allExercises={allExercises} userProfile={user} routines={routines} onUpdate={refreshData} history={history} />
-          )}
+          ) : ( <RoutinePicker onStart={handleStartWorkout} activeZone={selectedZoneForStart} allExercises={allExercises} userProfile={user} routines={routines} onUpdate={refreshData} history={history} /> )}
         </div>
+      )}
+
+      {showZonePicker && pendingActivity && (
+          <ZonePickerModal 
+            onClose={() => setShowZonePicker(false)}
+            zones={zones}
+            plannedExercises={pendingActivity.exercises || []}
+            allExercises={allExercises}
+            onSelect={handleFinalizeSessionStart}
+          />
       )}
 
       {!isWorkoutActive && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent fixed-bottom-nav">
           <div className="max-w-md mx-auto flex gap-1 items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl overflow-x-auto scrollbar-hide">
-            <button 
-              onClick={() => setActiveTab('workout')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <Dumbbell size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Träning</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('gyms')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <MapPin size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Platser</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('body')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <User2 size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Kropp</span>
-            </button>
-             <button 
-              onClick={() => setActiveTab('ai')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'ai' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <Sparkles size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">AI PT</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('targets')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <Trophy size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Mål</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('library')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <BookOpen size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Övningar</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('log')}
-              className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}
-            >
-              <Calendar size={20} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Logg</span>
-            </button>
+            <button onClick={() => navigateToTab('workout')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}><Dumbbell size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Träning</span></button>
+            <button onClick={() => navigateToTab('gyms')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}><MapPin size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Platser</span></button>
+            <button onClick={() => navigateToTab('body')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}><User2 size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Kropp</span></button>
+            <button onClick={() => navigateToTab('ai')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'ai' ? 'bg-white text-black' : 'text-text-dim'}`}><Sparkles size={20} /><span className="text-[10px] font-black uppercase tracking-widest">AI PT</span></button>
+            <button onClick={() => navigateToTab('targets')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}><Trophy size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Mål</span></button>
+            <button onClick={() => navigateToTab('library')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}><BookOpen size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Övningar</span></button>
+            <button onClick={() => navigateToTab('log')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}><Calendar size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Logg</span></button>
           </div>
         </nav>
       )}

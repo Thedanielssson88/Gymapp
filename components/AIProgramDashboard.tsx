@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AIProgram, ScheduledActivity, WorkoutSession, Exercise, PlannedExercise, SetType } from '../types';
 import { storage } from '../services/storage';
@@ -8,6 +7,7 @@ import { ChevronRight, Calendar, Activity, XCircle, PlusCircle, TrendingUp, Chec
 import { AIArchitect } from './AIArchitect';
 import { WorkoutDetailsModal } from './WorkoutDetailsModal';
 import { AIExerciseRecommender } from './AIExerciseRecommender';
+import { registerBackHandler } from '../utils/backHandler';
 
 interface AIProgramDashboardProps {
   onStartSession: (activity: ScheduledActivity) => void;
@@ -25,6 +25,26 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
   
   const [viewingActivity, setViewingActivity] = useState<ScheduledActivity | null>(null);
   const [isGeneratingNext, setIsGeneratingNext] = useState(false);
+
+  // --- NYA BACK HANDLERS ---
+  useEffect(() => {
+    if (showGenerator) return registerBackHandler(() => setShowGenerator(false));
+  }, [showGenerator]);
+
+  useEffect(() => {
+    if (selectedProgram && !viewingActivity) return registerBackHandler(() => setSelectedProgram(null));
+  }, [selectedProgram, viewingActivity]);
+
+  useEffect(() => {
+    if (viewingActivity) return registerBackHandler(() => setViewingActivity(null));
+  }, [viewingActivity]);
+
+  // Special: Om vi är på fliken 'Exercises' (Scout), backa till 'Programs'
+  useEffect(() => {
+    if (activeTab === 'exercises' && !showGenerator && !selectedProgram && !viewingActivity) {
+      return registerBackHandler(() => setActiveTab('programs'));
+    }
+  }, [activeTab, showGenerator, selectedProgram, viewingActivity]);
 
   const loadData = async () => {
     setPrograms(await storage.getAIPrograms());
@@ -172,7 +192,11 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             <p className="text-sm text-text-dim italic border-l-2 border-accent-blue pl-3 mb-4 leading-relaxed">"{selectedProgram.motivation}"</p>
             {selectedProgram.status === 'active' && (
                 <div className="flex gap-3 mt-4">
-                    <button onClick={handleGenerateNextPhase} disabled={isGeneratingNext} className="flex-1 bg-accent-blue text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest disabled:opacity-50 hover:bg-white transition-all active:scale-95 shadow-lg shadow-accent-blue/20">
+                    <button 
+                      onClick={handleGenerateNextPhase} 
+                      disabled={isGeneratingNext} 
+                      className="flex-1 bg-[#2ed573] hover:bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all active:scale-95 shadow-lg shadow-green-500/20"
+                    >
                         {isGeneratingNext ? <Loader2 className="animate-spin" size={16}/> : <PlusCircle size={16} strokeWidth={3} />} {isGeneratingNext ? 'Analyserar...' : 'Nästa Fas'}
                     </button>
                     <button onClick={handleCancel} className="bg-red-500/10 text-red-500 font-bold py-3 px-4 rounded-2xl flex items-center justify-center hover:bg-red-500/20 transition-colors"><XCircle size={20} /></button>
@@ -285,7 +309,10 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             )}
           </>
       ) : (
-          <AIExerciseRecommender onEditExercise={onGoToExercise} />
+          <AIExerciseRecommender 
+            onEditExercise={onGoToExercise} 
+            onStartSession={onStartSession}
+          />
       )}
     </div>
   );
