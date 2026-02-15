@@ -325,8 +325,19 @@ export default function App() {
 
   const handleFinishWorkout = async (session: WorkoutSession, duration: number) => {
     try {
-      await storage.saveToHistory({ ...session, isCompleted: true, duration, locationName: activeZone.name });
+      const historySession = { ...session, isCompleted: true, duration, locationName: activeZone.name };
+      await storage.saveToHistory(historySession);
+
+      // FIX: Explicitly update the source scheduled activity
+      if (session.sourceActivityId) {
+        await db.scheduledActivities.update(session.sourceActivityId, {
+          isCompleted: true,
+          linkedSessionId: historySession.id
+        });
+      }
+
       storage.setActiveSession(null);
+      
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
         getAccessToken().then(async (token) => {
           if (token) {
@@ -339,6 +350,7 @@ export default function App() {
           }
         }).catch((err) => { console.error("Auto-backup failed:", err); });
       }
+
       await refreshData(); 
       navigateToTab('log');
     } catch (error) {
@@ -400,7 +412,8 @@ export default function App() {
       locationName: zone.name,
       exercises: finalExercises, 
       isCompleted: false, 
-      isManual: false
+      isManual: false,
+      sourceActivityId: pendingActivity.id // FIX: Store the original activity ID
     };
     
     storage.setActiveSession(newSess);

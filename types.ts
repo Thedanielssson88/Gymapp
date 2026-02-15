@@ -230,6 +230,7 @@ export interface WorkoutSession {
   rpe?: number;
   feeling?: string;
   isManual?: boolean;
+  sourceActivityId?: string; // FIX: Länkar tillbaka till den planerade aktiviteten
 }
 
 export interface BiometricLog {

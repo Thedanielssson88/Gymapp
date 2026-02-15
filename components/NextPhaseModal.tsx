@@ -1,9 +1,10 @@
+
 import React, { useState } from 'react';
 import { AIProgram, AIPlanResponse, ScheduledActivity, ProgressionRate, SetType, PlannedExercise, WorkoutSession, Exercise } from '../types';
 import { storage } from '../services/storage';
 import { generateNextPhase } from '../services/geminiService';
 import { calculatePPLStats, analyzeProgressTrend, PROGRESSION_MATRIX, suggestWeightForReps } from '../utils/progression';
-import { X, Calendar, Repeat, Clock, Loader2, Send, AlertTriangle } from 'lucide-react';
+import { X, Calendar, Repeat, Clock, Loader2, Send, AlertTriangle, TrendingUp } from 'lucide-react';
 
 interface NextPhaseModalProps {
   program: AIProgram;
@@ -17,6 +18,7 @@ interface NextPhaseModalProps {
 export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose, onGenerated, history, allExercises, scheduled }) => {
   const [daysPerWeek, setDaysPerWeek] = useState(3);
   const [durationMinutes, setDurationMinutes] = useState(60);
+  const [weeks, setWeeks] = useState(4); // State for week duration
   const [progressionRate, setProgressionRate] = useState<ProgressionRate>('normal');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,6 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
     setError(null);
     setLoading(true);
 
-    // 1. "Noll-analysen" Safety Check
     const completedInPhase = scheduled.filter(s => s.programId === program.id && s.isCompleted).length;
     if (completedInPhase === 0) {
       setError("Du måste slutföra minst ett pass i den nuvarande fasen för att skapa en ny. Detta ger AI:n en baslinje för din nuvarande styrka.");
@@ -34,23 +35,18 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
     }
 
     try {
-      // 2. Data Analysis
       const currentStats = calculatePPLStats(history, allExercises);
-      const startStats = program.startStats || currentStats; // Fallback if no startStats
+      const startStats = program.startStats || currentStats;
       const trend = analyzeProgressTrend(startStats, currentStats);
       const rules = PROGRESSION_MATRIX[progressionRate][trend];
 
-      // 3. Generate with Gemini
       const result = await generateNextPhase(
-        program,
-        history,
-        allExercises,
+        program, history, allExercises,
         { start: startStats, current: currentStats },
-        { daysPerWeek, durationMinutes, weeks: 4, progressionRate },
+        { daysPerWeek, durationMinutes, weeks, progressionRate },
         rules
       );
 
-      // 4. Clean Slate & Generate
       await storage.clearUpcomingProgramActivities(program.id);
       
       const lastProgramActivity = scheduled
@@ -60,7 +56,6 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
         
       const lastDate = lastProgramActivity ? new Date(lastProgramActivity.date) : new Date();
       
-      // Start next phase on the Monday after the last scheduled workout
       const dayOfWeek = lastDate.getDay();
       const daysUntilMonday = (dayOfWeek === 1) ? 7 : (8 - dayOfWeek) % 7;
       const startOfNewPhase = new Date(lastDate);
@@ -99,14 +94,13 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
         await storage.addScheduledActivity(activity);
       }
 
-      // 5. Update Program
       const updatedProgram: AIProgram = {
         ...program,
         status: 'active',
         motivation: result.motivation,
-        weeks: program.weeks + 4,
+        weeks: program.weeks + weeks,
         phaseNumber: (program.phaseNumber || 1) + 1,
-        startStats: currentStats, // Save current stats for next phase's comparison
+        startStats: currentStats,
       };
       await storage.saveAIProgram(updatedProgram);
 
@@ -136,6 +130,18 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
         </div>
         
         <div className="p-6 overflow-y-auto space-y-6 scrollbar-hide flex-1 overscroll-contain">
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-400 block">Längd på nästa fas</label>
+              <div className="flex items-center justify-between bg-black/40 p-4 rounded-xl border border-white/5">
+                <button onClick={() => setWeeks(Math.max(1, weeks - 1))} className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-white hover:bg-white/10">-</button>
+                <span className="text-xl font-bold text-white flex items-center gap-2">
+                  <Calendar size={18} className="text-blue-400"/>
+                  {weeks} veckor
+                </span>
+                <button onClick={() => setWeeks(Math.min(12, weeks + 1))} className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center text-white hover:bg-white/10">+</button>
+              </div>
+            </div>
+            
             <div className="grid grid-cols-2 gap-3">
                 <div className="bg-black/40 p-3 rounded-xl border border-white/5">
                     <label className="text-[10px] text-text-dim font-bold uppercase mb-2 flex items-center gap-1"><Calendar size={12}/> Frekvens</label>
@@ -174,7 +180,7 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
                 disabled={loading}
                 className="w-full py-5 bg-white text-black rounded-3xl font-black italic text-xl uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-95 transition-all disabled:opacity-50"
             >
-                {loading ? <Loader2 className="animate-spin" /> : <Send size={24} />}
+                {loading ? <Loader2 className="animate-spin" /> : <TrendingUp size={24} />}
                 {loading ? 'Analyserar...' : 'Bygg Nästa Fas'}
             </button>
         </div>

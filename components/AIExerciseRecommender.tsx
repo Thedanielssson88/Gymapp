@@ -33,6 +33,9 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [viewingExercise, setViewingExercise] = useState<Exercise | null>(null);
   
+  // NY STATE: Håller koll på övningar vi lagt till just nu för direkt UI-feedback
+  const [locallyAdded, setLocallyAdded] = useState<string[]>([]);
+
   useEffect(() => {
     loadHistory();
   }, []);
@@ -118,7 +121,11 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
         };
 
         await storage.saveExercise(exerciseToSave);
-        onUpdate();
+        
+        // UPPDATERING: Lägg till ID:t i lokal state direkt
+        setLocallyAdded(prev => [...prev, cleanId]);
+        
+        onUpdate(); // Säg till appen att uppdatera DB-listan
 
     } catch (error) {
         console.error("Fel vid sparande av övning:", error);
@@ -127,10 +134,14 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   };
 
   const getExistingExerciseId = (rec: ExerciseRecommendation): string | null => {
+    // UPPDATERING: Kolla först om vi precis lagt till den lokalt
+    const cleanId = sanitizeId(rec.data.id || rec.data.name);
+    if (locallyAdded.includes(cleanId)) return cleanId;
+
     const exactMatch = allExercises.find(e => e.id === rec.data.id);
     if (exactMatch) return exactMatch.id;
 
-    const cleanId = sanitizeId(rec.data.id || rec.data.name);
+    // cleanId räknas redan ut ovan, så vi återanvänder den variabeln
     const slugMatch = allExercises.find(e => e.id === cleanId);
     if (slugMatch) return slugMatch.id;
 
@@ -194,6 +205,8 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
             const handleCardClick = () => {
                 if (exists) {
                     const exerciseToShow = allExercises.find(e => e.id === existingId);
+                    // Om vi precis lagt till den finns den kanske inte i allExercises än,
+                    // men vi vill inte krascha. Vi kan visa en fallback eller bara låta bli om den saknas.
                     if (exerciseToShow) setViewingExercise(exerciseToShow);
                 }
             };

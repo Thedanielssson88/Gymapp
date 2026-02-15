@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise, UserMission } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, calculate1RM } from '../utils/fitness';
@@ -455,14 +456,6 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     return plansForToday;
   }, [plannedActivities]);
 
-  const getExercisePreview = (plan: PlannedActivityForLogDisplay) => {
-    return (plan.exercises || [])
-      .map(pe => (allExercises || []).find(e => e.id === pe.exerciseId)?.name)
-      .filter(Boolean)
-      .slice(0, 3)
-      .join(', ');
-  };
-
   const handleUpdateSessionName = useCallback(async (name: string) => {
     if (localSession) {
       const updatedSession = { ...localSession, name };
@@ -511,8 +504,22 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                       </div>
                       <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-text-dim group-hover:border-accent-blue group-hover:text-accent-blue transition-colors"><Play size={18} fill="currentColor" /></div>
                     </div>
-                    <div className="flex items-center gap-2 px-1 py-3 bg-white/5 rounded-2xl border border-white/5">
-                      <Dumbbell size={12} className="text-accent-pink ml-3 shrink-0" /><p className="text-[10px] text-text-dim font-medium uppercase tracking-tight truncate pr-3">{getExercisePreview(plan)}{(plan.exercises?.length || 0) > 3 && '...'}</p>
+                    {/* FIX: Replaced truncated text with wrapping pills */}
+                    <div className="flex flex-wrap gap-1.5 px-3 py-3 bg-white/5 rounded-2xl border border-white/5">
+                      {(plan.exercises || []).slice(0, 8).map((pe, idx) => {
+                        const exName = (allExercises || []).find(e => e.id === pe.exerciseId)?.name;
+                        if (!exName) return null;
+                        return (
+                          <span key={idx} className="text-[9px] bg-black/30 text-text-dim px-2 py-1 rounded-md border border-white/5 whitespace-nowrap">
+                            {exName}
+                          </span>
+                        );
+                      })}
+                      {(plan.exercises?.length || 0) > 8 && (
+                        <span className="text-xs text-text-dim self-center">
+                          +{(plan.exercises?.length || 0) - 8} mer
+                        </span>
+                      )}
                     </div>
                   </button>
                 ))}
