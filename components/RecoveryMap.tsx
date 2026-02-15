@@ -1,8 +1,8 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { MuscleGroup, WorkoutSession, Exercise, WorkoutSet } from '../types';
 import { getMuscleWorkloadDetails, WorkloadDetail } from '../utils/recovery';
 import { X, Activity, Dumbbell, Calendar, Info, AlertTriangle } from 'lucide-react';
+import { registerBackHandler } from '../utils/backHandler';
 
 // --- DEFINITIONS ---
 const MAIN_MUSCLES: MuscleGroup[] = ['Bröst', 'Rygg', 'Axlar', 'Framsida lår', 'Baksida lår', 'Säte', 'Mage', 'Ryggslut', 'Triceps', 'Biceps'];
@@ -27,6 +27,10 @@ const RecoveryDetailModal: React.FC<{
   contributors: WorkloadDetail[];
   getColor: (fatigue: number) => string;
 }> = ({ muscle, fatigue, onClose, contributors, getColor }) => {
+
+  useEffect(() => {
+    return registerBackHandler(onClose);
+  }, [onClose]);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';

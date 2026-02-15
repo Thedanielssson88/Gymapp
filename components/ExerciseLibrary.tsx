@@ -233,11 +233,24 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
       </div>
 
       {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={exercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} userProfile={userProfile} />}
+      
       {showAIScout && (
-        <div className="fixed inset-0 z-[250] bg-[#0f0d15] animate-in slide-in-from-bottom">
-          <AIExerciseRecommender 
-            onClose={() => setShowAIScout(false)} 
-          />
+        <div className="fixed inset-0 z-[300] bg-[#0f0d15] flex flex-col">
+          <div style={{ paddingTop: 'env(safe-area-inset-top)' }} className="flex-1 flex flex-col overflow-hidden">
+            <AIExerciseRecommender 
+              onClose={() => setShowAIScout(false)}
+              allExercises={exercises}
+              activeZone={activeZone}
+              onUpdate={onUpdate}
+              onEditExercise={(exerciseId) => {
+                const exerciseToEdit = exercises.find(e => e.id === exerciseId);
+                if (exerciseToEdit) {
+                  setShowAIScout(false);
+                  setEditingExercise(exerciseToEdit);
+                }
+              }}
+            />
+          </div>
         </div>
       )}
     </div>

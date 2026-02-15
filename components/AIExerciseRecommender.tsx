@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles, Play, AlertTriangle, X } from 'lucide-react';
 import { recommendExercises, ExerciseRecommendation, ExerciseSearchResponse } from '../services/geminiService';
 import { storage } from '../services/storage';
-import { Exercise, ScheduledActivity, SetType } from '../types';
+import { Exercise, ScheduledActivity, SetType, Zone } from '../types';
 import { registerBackHandler } from '../utils/backHandler';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 
@@ -10,6 +10,9 @@ interface AIExerciseRecommenderProps {
   onEditExercise?: (exerciseId: string) => void;
   onStartSession?: (activity: ScheduledActivity) => void;
   onClose?: () => void;
+  allExercises: Exercise[];
+  onUpdate: () => void;
+  activeZone?: Zone;
 }
 
 const HISTORY_KEY = 'gym_ai_scout_history_v3';
@@ -21,75 +24,21 @@ interface HistoryItem {
     timestamp: number;
 }
 
-// Simple detail modal component for Scout
-const ScoutExerciseDetailModal: React.FC<{ exercise: Exercise, onClose: () => void }> = ({ exercise, onClose }) => {
-    const imageSrc = useExerciseImage(exercise);
-
-    useEffect(() => {
-        document.body.style.overflow = 'hidden';
-        return () => { document.body.style.overflow = 'unset'; };
-    }, []);
-
-    useEffect(() => {
-        return registerBackHandler(onClose);
-    }, [onClose]);
-
-    return (
-        <div className="fixed inset-0 z-[250] bg-[#0f0d15] overflow-y-auto flex flex-col animate-in fade-in">
-            <header className="p-4 flex justify-between items-center border-b border-white/5 sticky top-0 bg-[#0f0d15]/80 backdrop-blur-sm">
-                <h3 className="text-lg font-black italic uppercase text-white">{exercise.name}</h3>
-                <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X size={20} /></button>
-            </header>
-            <div className="p-4 space-y-4">
-                {imageSrc && <img src={imageSrc} alt={exercise.name} className="w-full h-48 object-cover rounded-2xl" />}
-                <div className="bg-[#1a1721] p-4 rounded-xl border border-white/5">
-                    <h4 className="text-xs font-bold text-text-dim uppercase mb-2">Instruktioner</h4>
-                    <p className="text-sm text-white/80 whitespace-pre-wrap">{exercise.description}</p>
-                </div>
-                <div className="bg-[#1a1721] p-4 rounded-xl border border-white/5">
-                    <h4 className="text-xs font-bold text-text-dim uppercase mb-2">Muskler</h4>
-                    <div className="flex flex-wrap gap-2">
-                        {exercise.primaryMuscles.map(m => <span key={m} className="text-xs bg-accent-pink/20 text-accent-pink font-bold px-2 py-1 rounded">{m}</span>)}
-                        {exercise.secondaryMuscles?.map(m => <span key={m} className="text-xs bg-white/10 text-white/70 font-bold px-2 py-1 rounded">{m}</span>)}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession, onClose }) => {
+export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession, onClose, allExercises, onUpdate }) => {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentResult, setCurrentResult] = useState<ExerciseSearchResponse | null>(null);
   const [currentQuery, setCurrentQuery] = useState('');
-  const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [viewingExerciseId, setViewingExerciseId] = useState<string | null>(null);
   
   useEffect(() => {
-    loadLibrary();
     loadHistory();
-  }, [refreshTrigger]);
+  }, []);
 
-  // --- NY BACK HANDLER ---
   useEffect(() => {
     if (currentResult) return registerBackHandler(() => setCurrentResult(null));
   }, [currentResult]);
   
-  useEffect(() => {
-    if (viewingExerciseId) {
-      return registerBackHandler(() => setViewingExerciseId(null));
-    }
-  }, [viewingExerciseId]);
-
-  const loadLibrary = async () => {
-    const exercises = await storage.getAllExercises();
-    setAllExercises(exercises);
-  };
-
   const loadHistory = () => {
     try {
       const raw = localStorage.getItem(HISTORY_KEY);
@@ -150,7 +99,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
 
         const exists = allExercises.find(e => e.id === cleanId || e.name.toLowerCase() === rec.data.name.toLowerCase());
         if (exists) {
-            setRefreshTrigger(prev => prev + 1);
+            onUpdate();
             return;
         }
 
@@ -162,10 +111,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
         };
 
         await storage.saveExercise(exerciseToSave);
-        
-        // Uppdatera lokalt bibliotek direkt så UI:t ändras
-        setAllExercises(prev => [...prev, exerciseToSave]);
-        setRefreshTrigger(prev => prev + 1);
+        onUpdate();
 
     } catch (error) {
         console.error("Fel vid sparande av övning:", error);
@@ -195,7 +141,6 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   const handleStartWorkout = () => {
     if (!currentResult || !onStartSession) return;
 
-    // 1. Filtrera fram övningar som FINNS i biblioteket
     const availableExercises = currentResult.recommendations
         .map(rec => {
             const id = getExistingExerciseId(rec);
@@ -203,16 +148,13 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
         })
         .filter((item): item is { id: string, name: string } => item !== null);
 
-    // 2. Validering
     if (availableExercises.length === 0) {
         alert("Inga av de föreslagna övningarna finns i ditt bibliotek än. Lägg till dem först genom att klicka på 'Lägg till' i listan.");
         return;
     }
 
-    // 3. Begränsa till max 15
     const exercisesToRun = availableExercises.slice(0, 15);
 
-    // 4. Skapa aktivitets-objektet
     const activity: ScheduledActivity = {
         id: `scout-session-${Date.now()}`,
         date: new Date().toISOString().split('T')[0],
@@ -229,8 +171,6 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
             notes: "Genererat från Övningsscout"
         }))
     };
-
-    // 5. Starta!
     onStartSession(activity);
   };
 
@@ -271,10 +211,10 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                     <div className="pt-2 border-t border-white/5 mt-1">
                         {exists ? (
                             <button 
-                                onClick={() => existingId && setViewingExerciseId(existingId)}
+                                onClick={() => existingId && onEditExercise?.(existingId)}
                                 className="w-full py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-white/5"
                             >
-                                Visa instruktioner <ArrowRight size={14} />
+                                Visa Detaljer <ArrowRight size={14} />
                             </button>
                         ) : (
                             <button 
@@ -292,12 +232,15 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   );
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="flex flex-col h-full">
+      <div className="shrink-0 px-4">
         {onClose && (
-            <div className="p-4 flex justify-end">
+            <div className="flex justify-end pt-4">
                 <button onClick={onClose} className="p-2 bg-white/5 rounded-full text-white"><X size={20}/></button>
             </div>
         )}
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 space-y-6 pb-24">
         <div className="bg-gradient-to-br from-[#1a1721] to-[#2a2435] p-6 rounded-[32px] border border-accent-blue/20 shadow-xl">
             <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-accent-blue/10 rounded-full">
@@ -438,14 +381,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                 )}
             </div>
         )}
-        <div className="pb-24" />
-
-        {viewingExerciseId && (
-            <ScoutExerciseDetailModal 
-                exercise={allExercises.find(e => e.id === viewingExerciseId)!}
-                onClose={() => setViewingExerciseId(null)}
-            />
-        )}
+      </div>
     </div>
   );
 };

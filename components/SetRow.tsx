@@ -151,14 +151,14 @@ export const SetRow: React.FC<SetRowProps> = ({
       {/* MODALS */}
       {showActiveTimer && (
         <ActiveTimerModal 
-          targetSeconds={set.duration || 60} 
-          onCancel={() => setShowActiveTimer(false)}
-          vibrateEnabled={userProfile.settings?.vibrateTimer}
-          onComplete={(time, isFail) => {
+          initialSeconds={set.duration || 60} 
+          onClose={() => setShowActiveTimer(false)}
+          exerciseName={exData.name}
+          userProfile={userProfile}
+          onComplete={(actualSeconds) => {
             onUpdate({ 
-              duration: isFail ? time : (set.duration || time), 
+              duration: actualSeconds, 
               completed: true,
-              type: isFail ? 'failure' : set.type 
             });
             setShowActiveTimer(false);
           }}
@@ -169,7 +169,7 @@ export const SetRow: React.FC<SetRowProps> = ({
         <TimePickerModal 
           title="Ange Tid"
           totalSeconds={set.duration || 0}
-          onSave={(s) => { onUpdate({ duration: s }); setActiveModal(null); }}
+          onSelect={(s) => onUpdate({ duration: s })}
           onClose={() => setActiveModal(null)}
         />
       )}

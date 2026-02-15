@@ -101,7 +101,7 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
         <button 
           onClick={handleGenerate}
           disabled={isGenerating || !prompt}
-          className="w-full py-5 bg-accent-blue text-black rounded-3xl font-black uppercase italic flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-5 bg-green-600 text-white rounded-3xl font-black uppercase italic flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-green-900/20"
         >
           {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles />}
           Generera & Starta

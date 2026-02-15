@@ -3,6 +3,7 @@ import { X, Check, ChevronUp, ChevronDown, Scale } from 'lucide-react';
 import { PlateDisplay } from './PlateDisplay';
 import { UserProfile } from '../types';
 import { triggerHaptic } from '../utils/haptics';
+import { registerBackHandler } from '../utils/backHandler';
 
 interface NumberPickerModalProps {
   title: string;
@@ -25,32 +26,23 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   const [localVal, setLocalVal] = useState<string>(value.toString());
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const options = useMemo(() => Array.from({ length: 81 }, (_, i) => i * 2.5), []);
 
   useEffect(() => {
-    if (inputRef.current) {
+    return registerBackHandler(onClose);
+  }, [onClose]);
+
+  useEffect(() => {
+    // Only focus input if it's not the meter scroll picker
+    if (inputRef.current && unit !== 'm') {
       inputRef.current.focus();
       inputRef.current.select();
     }
-  }, []);
-  
-  useEffect(() => {
-    if (unit === 'kg' && scrollRef.current) {
-      const currentNum = parseFloat(localVal) || 0;
-      const closestOption = options.reduce((prev, curr) =>
-          Math.abs(curr - currentNum) < Math.abs(prev - currentNum) ? curr : prev
-      );
-      const activeEl = scrollRef.current.querySelector(`[data-value="${closestOption}"]`);
-      if (activeEl) {
-          const behavior = localVal === value.toString() ? 'auto' : 'smooth';
-          setTimeout(() => {
-              activeEl.scrollIntoView({ behavior, inline: 'center', block: 'nearest' });
-          }, 50);
-      }
-    }
-  }, [localVal, unit, value, options]);
+  }, [unit]);
 
-  const saveValue = (num: number) => {
+  const handleFinalSave = () => {
+    const num = parseFloat(localVal) || 0;
+    
+    // Use a single save logic
     if (unit === 'kg' && barWeight > 0 && step === 2.5) {
         const plateWeight = num - barWeight;
         if (plateWeight > 0) {
@@ -66,6 +58,71 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     }
   };
 
+  // --- METER-SPECIFIC UI ---
+  if (unit === 'm') {
+    const m_step = 50;
+    const m_max = 10000;
+    const options = useMemo(() => {
+      const opts = [];
+      for (let i = 0; i <= m_max; i += m_step) {
+        opts.push(i);
+      }
+      return opts;
+    }, []);
+
+    const currentNumValue = parseFloat(localVal) || 0;
+    
+    const formatDisplayValue = (val: number) => {
+      if (val >= 1000) {
+        const km = val / 1000;
+        return `${km.toLocaleString('sv-SE')} Km`;
+      }
+      return val.toString();
+    };
+
+    // Auto-scroll to selected value
+    useEffect(() => {
+        if (scrollRef.current) {
+            const el = scrollRef.current.querySelector(`[data-value="${currentNumValue}"]`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center' });
+        }
+    }, [currentNumValue]);
+
+    return (
+      <div className="fixed inset-0 z-[300] flex items-center justify-center px-4 animate-in fade-in duration-200">
+        <div className="absolute inset-0 bg-[#0f0d15]/95 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative w-full max-w-sm bg-[#1a1721] rounded-[40px] border border-white/10 shadow-[0_32px_64px_rgba(0,0,0,0.5)] p-8 animate-in zoom-in-95 duration-300">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-black italic uppercase text-white tracking-tighter">{title}</h3>
+            <button onClick={onClose} className="p-2 bg-white/5 rounded-full text-text-dim hover:text-white transition-colors"><X size={20}/></button>
+          </div>
+          <div className="text-center text-5xl font-black italic text-accent-blue mb-10 flex items-baseline justify-center gap-2">
+            {formatDisplayValue(currentNumValue)}
+            {currentNumValue < 1000 && <span className="text-xl uppercase not-italic text-text-dim">m</span>}
+          </div>
+          <div ref={scrollRef} className="w-full flex gap-4 overflow-x-auto pb-8 scrollbar-hide snap-x snap-mandatory px-[40%] mb-6">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                data-value={opt}
+                onClick={() => setLocalVal(opt.toString())}
+                className={`flex-shrink-0 min-w-[64px] h-16 px-4 rounded-2xl flex items-center justify-center text-sm font-black snap-center transition-all ${
+                  opt === currentNumValue ? 'bg-accent-blue text-black scale-125 shadow-lg' : 'bg-white/5 text-text-dim'
+                }`}
+              >
+                {formatDisplayValue(opt)}
+              </button>
+            ))}
+          </div>
+          <button onClick={handleFinalSave} className="w-full py-5 bg-white text-black rounded-[24px] font-black italic uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-transform">
+            <Check size={24} strokeWidth={4} /> Spara
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- EXISTING UI FOR KG, REPS ---
   const handleStep = (direction: 'up' | 'down') => {
     const currentNum = parseFloat(localVal) || 0;
     const newValue = direction === 'up' ? currentNum + step : currentNum - step;
@@ -95,12 +152,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   const handleQuickSelect = (val: number) => {
     setLocalVal(val.toString());
   };
-
-  const handleFinalSave = () => {
-    const num = parseFloat(localVal) || 0;
-    saveValue(num);
-  };
-
+  
   const quickValues = useMemo(() => {
     const numValue = parseFloat(localVal) || 0;
     let values: number[] = [];
@@ -154,11 +206,14 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
 
             <div className="flex-1 flex flex-col items-center">
               <div className="flex items-baseline justify-center w-full">
-                {/* Ändrat från input till div för att dölja tangentbordet */}
-                <div className="text-6xl font-black text-white w-full text-center py-2 select-none">
-                  {localVal || "0"}
-                  <span className="animate-pulse text-accent-pink ml-1">|</span>
-                </div>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode={precision === 0 ? "numeric" : "decimal"}
+                    value={localVal}
+                    onChange={handleInputChange}
+                    className="text-6xl font-black text-white w-full bg-transparent outline-none text-center py-2 select-all"
+                />
               </div>
               <span className="text-sm font-black italic text-accent-blue uppercase tracking-widest mt-1">{unit}</span>
             </div>
@@ -175,29 +230,8 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
           
           {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={currentNumericWeight} barWeight={barWeight} availablePlates={availablePlates} />}
         </div>
-
-        {unit === 'kg' ? (
-          <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
-              <div 
-                  ref={scrollRef}
-                  className="w-full flex gap-4 overflow-x-auto pb-8 scrollbar-hide snap-x snap-mandatory px-[40%]"
-              >
-                  {options.map((opt) => (
-                      <button
-                          key={opt}
-                          data-value={opt}
-                          onClick={() => handleQuickSelect(opt)}
-                          className={`flex-shrink-0 w-16 h-16 rounded-2xl flex items-center justify-center text-lg font-black snap-center transition-all ${
-                              Math.abs(opt - (parseFloat(localVal) || 0)) < 0.01 ? 'bg-accent-blue text-black scale-125' : 'bg-white/5 text-text-dim'
-                          }`}
-                      >
-                          {opt}
-                      </button>
-                  ))}
-              </div>
-          </div>
-        ) : (
-          <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
+        
+        <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
               <p className="text-center text-[10px] font-black uppercase tracking-widest text-text-dim">Smarta Förslag</p>
               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide justify-center">
               {quickValues.map(val => (
@@ -211,7 +245,6 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
               ))}
               </div>
           </div>
-        )}
 
         <button 
           onClick={handleFinalSave}
