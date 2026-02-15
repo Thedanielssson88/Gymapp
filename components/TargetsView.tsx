@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   WorkoutSession, 
   Exercise, 
@@ -24,6 +23,7 @@ import { AddMissionModal } from './AddMissionModal';
 import { MissionStatusModal } from './MissionStatusModal';
 import { calculateSmartProgression } from '../utils/progression';
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
+import { registerBackHandler } from '../utils/backHandler';
 
 interface TargetsViewProps {
   userMissions: UserMission[];
@@ -124,6 +124,12 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewingMission, setViewingMission] = useState<UserMission | null>(null);
+  
+  useEffect(() => {
+    if (viewingMission) {
+      return registerBackHandler(() => setViewingMission(null));
+    }
+  }, [viewingMission]);
 
   const currentValues = useMemo(() => {
     const newValues: Record<string, number> = {};

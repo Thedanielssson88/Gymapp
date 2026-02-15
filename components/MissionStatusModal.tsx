@@ -1,10 +1,10 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { UserMission, WorkoutSession, BiometricLog } from '../types';
 import { calculateSmartProgression, getHistoryForGoal } from '../utils/progression';
 import { storage } from '../services/storage';
 import { X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { registerBackHandler } from '../utils/backHandler';
 
 interface Props {
   mission: UserMission;
@@ -15,6 +15,10 @@ export const MissionStatusModal: React.FC<Props> = ({ mission, onClose }) => {
   const [historyPoints, setHistoryPoints] = useState<any[]>([]);
   const [currentVal, setCurrentVal] = useState(0);
 
+  useEffect(() => {
+    return registerBackHandler(onClose);
+  }, [onClose]);
+  
   useEffect(() => {
     const loadData = async () => {
       if (!mission.smartConfig) return;

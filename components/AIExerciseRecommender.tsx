@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles, Play, AlertTriangle } from 'lucide-react';
+import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles, Play, AlertTriangle, X } from 'lucide-react';
 import { recommendExercises, ExerciseRecommendation, ExerciseSearchResponse } from '../services/geminiService';
 import { storage } from '../services/storage';
 import { Exercise, ScheduledActivity, SetType } from '../types';
 import { registerBackHandler } from '../utils/backHandler';
+import { useExerciseImage } from '../hooks/useExerciseImage';
 
 interface AIExerciseRecommenderProps {
   onEditExercise: (exerciseId: string) => void;
@@ -19,6 +20,44 @@ interface HistoryItem {
     timestamp: number;
 }
 
+// Simple detail modal component for Scout
+const ScoutExerciseDetailModal: React.FC<{ exercise: Exercise, onClose: () => void }> = ({ exercise, onClose }) => {
+    const imageSrc = useExerciseImage(exercise);
+
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = 'unset'; };
+    }, []);
+
+    useEffect(() => {
+        return registerBackHandler(onClose);
+    }, [onClose]);
+
+    return (
+        <div className="fixed inset-0 z-[250] bg-[#0f0d15] overflow-y-auto flex flex-col animate-in fade-in">
+            <header className="p-4 flex justify-between items-center border-b border-white/5 sticky top-0 bg-[#0f0d15]/80 backdrop-blur-sm">
+                <h3 className="text-lg font-black italic uppercase text-white">{exercise.name}</h3>
+                <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X size={20} /></button>
+            </header>
+            <div className="p-4 space-y-4">
+                {imageSrc && <img src={imageSrc} alt={exercise.name} className="w-full h-48 object-cover rounded-2xl" />}
+                <div className="bg-[#1a1721] p-4 rounded-xl border border-white/5">
+                    <h4 className="text-xs font-bold text-text-dim uppercase mb-2">Instruktioner</h4>
+                    <p className="text-sm text-white/80 whitespace-pre-wrap">{exercise.description}</p>
+                </div>
+                <div className="bg-[#1a1721] p-4 rounded-xl border border-white/5">
+                    <h4 className="text-xs font-bold text-text-dim uppercase mb-2">Muskler</h4>
+                    <div className="flex flex-wrap gap-2">
+                        {exercise.primaryMuscles.map(m => <span key={m} className="text-xs bg-accent-pink/20 text-accent-pink font-bold px-2 py-1 rounded">{m}</span>)}
+                        {exercise.secondaryMuscles?.map(m => <span key={m} className="text-xs bg-white/10 text-white/70 font-bold px-2 py-1 rounded">{m}</span>)}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ onEditExercise, onStartSession }) => {
   const [request, setRequest] = useState('');
   const [loading, setLoading] = useState(false);
@@ -27,6 +66,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [viewingExerciseId, setViewingExerciseId] = useState<string | null>(null);
   
   useEffect(() => {
     loadLibrary();
@@ -37,6 +77,12 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   useEffect(() => {
     if (currentResult) return registerBackHandler(() => setCurrentResult(null));
   }, [currentResult]);
+  
+  useEffect(() => {
+    if (viewingExerciseId) {
+      return registerBackHandler(() => setViewingExerciseId(null));
+    }
+  }, [viewingExerciseId]);
 
   const loadLibrary = async () => {
     const exercises = await storage.getAllExercises();
@@ -224,7 +270,7 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
                     <div className="pt-2 border-t border-white/5 mt-1">
                         {exists ? (
                             <button 
-                                onClick={() => existingId && onEditExercise(existingId)}
+                                onClick={() => existingId && setViewingExerciseId(existingId)}
                                 className="w-full py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-white/5"
                             >
                                 Visa instruktioner <ArrowRight size={14} />
@@ -385,6 +431,13 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
             </div>
         )}
         <div className="pb-24" />
+
+        {viewingExerciseId && (
+            <ScoutExerciseDetailModal 
+                exercise={allExercises.find(e => e.id === viewingExerciseId)!}
+                onClose={() => setViewingExerciseId(null)}
+            />
+        )}
     </div>
   );
 };

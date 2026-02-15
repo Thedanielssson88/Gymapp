@@ -74,10 +74,18 @@ export default function App() {
   `;
 
   // --- NAVIGERING MED HISTORIK ---
-  const navigateToTab = (newTab: typeof activeTab) => {
-    if (newTab === activeTab) return;
-    setTabHistory(prev => [...prev, activeTab]);
-    setActiveTab(newTab);
+  const navigateToTab = (newTab: typeof activeTab, options?: { fromNav?: boolean }) => {
+    if (newTab === activeTab && newTab !== 'library') return;
+
+    if (newTab === 'library' && options?.fromNav) {
+        setTargetExerciseId(null);
+    }
+    
+    // Only add to history if it's a real tab change
+    if (newTab !== activeTab) {
+      setTabHistory(prev => [...prev, activeTab]);
+      setActiveTab(newTab);
+    }
   };
 
   // --- ANDROID BACK BUTTON LOGIC ---
@@ -553,13 +561,13 @@ export default function App() {
       {!isWorkoutActive && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent fixed-bottom-nav">
           <div className="max-w-md mx-auto flex gap-1 items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl overflow-x-auto scrollbar-hide">
-            <button onClick={() => navigateToTab('workout')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}><Dumbbell size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Träning</span></button>
-            <button onClick={() => navigateToTab('gyms')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}><MapPin size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Platser</span></button>
-            <button onClick={() => navigateToTab('body')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}><User2 size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Kropp</span></button>
-            <button onClick={() => navigateToTab('ai')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'ai' ? 'bg-white text-black' : 'text-text-dim'}`}><Sparkles size={20} /><span className="text-[10px] font-black uppercase tracking-widest">AI PT</span></button>
-            <button onClick={() => navigateToTab('targets')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}><Trophy size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Mål</span></button>
-            <button onClick={() => navigateToTab('library')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}><BookOpen size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Övningar</span></button>
-            <button onClick={() => navigateToTab('log')} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}><Calendar size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Logg</span></button>
+            <button onClick={() => navigateToTab('workout', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'workout' ? 'bg-white text-black' : 'text-text-dim'}`}><Dumbbell size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Träning</span></button>
+            <button onClick={() => navigateToTab('gyms', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'gyms' ? 'bg-white text-black' : 'text-text-dim'}`}><MapPin size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Platser</span></button>
+            <button onClick={() => navigateToTab('body', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'body' ? 'bg-white text-black' : 'text-text-dim'}`}><User2 size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Kropp</span></button>
+            <button onClick={() => navigateToTab('ai', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'ai' ? 'bg-white text-black' : 'text-text-dim'}`}><Sparkles size={20} /><span className="text-[10px] font-black uppercase tracking-widest">AI PT</span></button>
+            <button onClick={() => navigateToTab('targets', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'targets' ? 'bg-white text-black' : 'text-text-dim'}`}><Trophy size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Mål</span></button>
+            <button onClick={() => navigateToTab('library', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'library' ? 'bg-white text-black' : 'text-text-dim'}`}><BookOpen size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Övningar</span></button>
+            <button onClick={() => navigateToTab('log', { fromNav: true })} className={`flex-shrink-0 px-5 flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeTab === 'log' ? 'bg-white text-black' : 'text-text-dim'}`}><Calendar size={20} /><span className="text-[10px] font-black uppercase tracking-widest">Logg</span></button>
           </div>
         </nav>
       )}

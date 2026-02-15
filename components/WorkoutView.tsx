@@ -369,6 +369,16 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [showNoSetsInfo, setShowNoSetsInfo] = useState(false);
   const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null);
   const [exerciseToDelete, setExerciseToDelete] = useState<number | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  useEffect(() => {
+    if (session) {
+      // Registrera Android Back för att öppna modalen istället för att stänga passet direkt
+      return registerBackHandler(() => {
+        setShowCancelConfirm(true);
+      });
+    }
+  }, [session]);
 
   // --- NYA BACK HANDLERS ---
   useEffect(() => {
@@ -836,7 +846,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           timer={timer} 
           isTimerActive={isTimerActive} 
           onToggleTimer={() => !isManualMode && setIsTimerActive(!isTimerActive)} 
-          onCancel={() => { if (window.confirm("Avbryt passet?")) { onCancel(); } }} 
+          onCancel={() => setShowCancelConfirm(true)} 
           onSaveRoutine={async () => {
              const name = window.prompt("Vad ska rutinen heta?", localSession.name);
              if (!name) return;
@@ -956,6 +966,21 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           </div>
         </div>
       </div>
+
+      {showCancelConfirm && (
+        <ConfirmModal
+          title="Avbryt passet?"
+          message="Är du säker på att du vill avsluta? All osparad data för detta pass kommer gå förlorad."
+          confirmLabel="Ja, avbryt passet"
+          cancelLabel="Nej, fortsätt träna"
+          isDestructive={true}
+          onConfirm={() => {
+            setShowCancelConfirm(false);
+            onCancel();
+          }}
+          onCancel={() => setShowCancelConfirm(false)}
+        />
+      )}
 
       {exerciseToDelete !== null && (
         <ConfirmModal

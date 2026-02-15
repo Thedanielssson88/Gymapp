@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Zone, Equipment } from '../types';
 import { storage } from '../services/storage';
 import { Plus, Edit2, X, Check, Save, Dumbbell, Home, Trees, Briefcase, Building2, Scale } from 'lucide-react';
+import { registerBackHandler } from '../utils/backHandler';
 
 // --- DEFINIERA KATEGORIERNA HÄR ---
 const EQUIPMENT_CATEGORIES = [
@@ -72,6 +73,14 @@ interface LocationManagerProps {
 
 export const LocationManager: React.FC<LocationManagerProps> = ({ zones, onUpdate }) => {
   const [editingZone, setEditingZone] = useState<Zone | null>(null);
+
+  useEffect(() => {
+    if (editingZone) {
+      return registerBackHandler(() => {
+        setEditingZone(null);
+      });
+    }
+  }, [editingZone]);
 
   const handleSave = async (zone: Zone) => {
     await storage.saveZone(zone);
