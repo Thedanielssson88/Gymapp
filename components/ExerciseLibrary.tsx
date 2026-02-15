@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession, UserProfile } from '../types';
 import { storage } from '../services/storage';
@@ -18,6 +19,7 @@ interface ExerciseLibraryProps {
   onClose?: () => void;
   activeZone?: Zone;
   userProfile?: UserProfile;
+  initialExerciseId?: string | null;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -35,7 +37,7 @@ const ExerciseImage = ({ exercise }: { exercise: Exercise }) => {
     );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: initialExercises, history, onUpdate, onSelect, onClose, activeZone, userProfile }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: initialExercises, history, onUpdate, onSelect, onClose, activeZone, userProfile, initialExerciseId }) => {
   const [exercises, setExercises] = useState(initialExercises || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'alphabetical' | 'recent'>('recent');
@@ -50,11 +52,18 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
   useEffect(() => {
-    // Sync with props, but avoid re-syncing if only an item's content changed
+    if (initialExerciseId) {
+      const ex = initialExercises.find(e => e.id === initialExerciseId);
+      if (ex) {
+        setEditingExercise(ex);
+      }
+    }
+  }, [initialExerciseId, initialExercises]);
+
+  useEffect(() => {
     if (initialExercises.length !== exercises.length) {
       setExercises(initialExercises);
     } else {
-       // A more robust check in case items are swapped but length is the same
        const initialIds = initialExercises.map(e => e.id).join(',');
        const currentIds = exercises.map(e => e.id).join(',');
        if(initialIds !== currentIds) {
@@ -64,12 +73,9 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
   }, [initialExercises]);
 
   useEffect(() => {
-    // A modal is open if this component is a selector, or if it has an editor/importer open inside.
     const isModalOpen = isSelectorMode || !!editingExercise || showImporter;
-    
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
-      // Return a cleanup function to restore scrolling when the modal condition is no longer met.
       return () => {
         document.body.style.overflow = 'unset';
       };
@@ -78,22 +84,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
 
   const handleRate = async (ex: Exercise, rating: 'up' | 'down') => {
     const newRating = ex.userRating === rating ? null : rating;
-    
     let newScore = 5;
     if (newRating === 'up') newScore = 10;
     if (newRating === 'down') newScore = 1;
-
     const updatedExercise = { ...ex, userRating: newRating, score: newScore };
-
-    // Optimistic UI update
     setExercises(prev => prev.map(exercise => exercise.id === ex.id ? updatedExercise : exercise));
-
     try {
-      // Update database in background
       await storage.updateExercise(ex.id, { userRating: newRating, score: newScore });
     } catch (error) {
-      console.error("Failed to rate exercise, reverting UI", error);
-      // Revert on failure
       setExercises(prev => prev.map(exercise => exercise.id === ex.id ? ex : exercise));
       alert("Kunde inte spara betyget.");
     }
@@ -110,30 +108,20 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
     let filtered = (exercises || []).filter(ex => {
       const q = searchQuery.toLowerCase();
       const matchesSearch = ex.name.toLowerCase().includes(q) || ex.englishName?.toLowerCase().includes(q);
-      
-      if (showOnlyFavorites && ex.userRating !== 'up') {
-        return false;
-      }
-
+      if (showOnlyFavorites && ex.userRating !== 'up') return false;
       let matchesFilter = true;
       if (selectedFilterValue) {
           if (activeFilterTab === 'muscles') matchesFilter = ex.primaryMuscles?.includes(selectedFilterValue as MuscleGroup) || ex.muscleGroups?.includes(selectedFilterValue as MuscleGroup);
           else if (activeFilterTab === 'equipment') matchesFilter = ex.equipment?.includes(selectedFilterValue as Equipment);
           else if (activeFilterTab === 'pattern') matchesFilter = ex.pattern === selectedFilterValue;
       }
-
       if (isSelectorMode && activeZone) {
           const hasRequiredEquipment = (ex: Exercise, zoneInventory: Equipment[]): boolean => {
-            if (!ex.equipmentRequirements || ex.equipmentRequirements.length === 0) {
-              return ex.equipment.every(eq => zoneInventory.includes(eq));
-            }
-            return ex.equipmentRequirements.every(group => 
-              group.some(item => zoneInventory.includes(item))
-            );
+            if (!ex.equipmentRequirements || ex.equipmentRequirements.length === 0) return ex.equipment.every(eq => zoneInventory.includes(eq));
+            return ex.equipmentRequirements.every(group => group.some(item => zoneInventory.includes(item)));
           };
           if (!hasRequiredEquipment(ex, activeZone.inventory)) return false;
       }
-
       return matchesSearch && matchesFilter;
     });
 
@@ -160,42 +148,29 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
             ...exerciseData, 
             muscleGroups: Array.from(new Set([...(exerciseData.primaryMuscles || []), ...(exerciseData.secondaryMuscles || [])])) 
         };
-
-        // Optimistic update for save/edit
         setExercises(prev => {
             const exists = prev.some(ex => ex.id === exerciseToSave.id);
-            if (exists) {
-                return prev.map(ex => ex.id === exerciseToSave.id ? exerciseToSave : ex);
-            }
+            if (exists) return prev.map(ex => ex.id === exerciseToSave.id ? exerciseToSave : ex);
             return [exerciseToSave, ...prev];
         });
         setEditingExercise(null);
-        
         await storage.saveExercise(exerciseToSave);
-        // Full refresh might be needed if other parts of the app depend on a global state,
-        // but for local changes this is faster. We can call onUpdate for robustness.
         onUpdate(); 
-
     } catch (error) {
         console.error("Fel vid sparning:", error);
-        // Optional: Revert UI on save failure
     }
   };
 
-
   const handleDelete = async (id: string) => {
     if(confirm("Är du säker på att du vill ta bort denna övning?")) {
-        // Optimistic delete
         const originalExercises = exercises;
         setExercises(prev => prev.filter(ex => ex.id !== id));
         setEditingExercise(null);
-
         try {
             await storage.deleteExercise(id);
             onUpdate();
         } catch (error) {
-            console.error("Failed to delete, reverting", error);
-            setExercises(originalExercises); // Revert on failure
+            setExercises(originalExercises);
         }
     }
   }
@@ -215,101 +190,27 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
           <h2 className="text-3xl font-black italic uppercase tracking-tighter">{isSelectorMode ? 'Välj Övning' : 'Bibliotek'}</h2>
           {!isSelectorMode && (<p className="text-[10px] font-black text-text-dim uppercase tracking-widest mt-1">{(exercises || []).length} ÖVNINGAR I DATABASEN</p>)}
         </div>
-        {isSelectorMode ? (<button onClick={onClose} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (<div className="flex gap-2"><button onClick={() => setShowImporter(true)} className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl"><Plus size={24} /></button><button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [], equipmentRequirements: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button></div>)}
+        {(isSelectorMode || editingExercise) ? (<button onClick={() => { if (editingExercise) setEditingExercise(null); if (onClose) onClose(); }} className="p-4 bg-white/5 border border-white/5 text-white rounded-2xl"><X size={24} /></button>) : (<div className="flex gap-2"><button onClick={() => setShowImporter(true)} className="p-4 bg-white/5 border border-white/5 text-accent-blue rounded-2xl"><Plus size={24} /></button><button onClick={() => setEditingExercise({ id: `custom-${Date.now()}`, name: '', pattern: MovementPattern.ISOLATION, tier: 'tier_3', muscleGroups: [], primaryMuscles: [], secondaryMuscles: [], equipment: [], difficultyMultiplier: 1.0, bodyweightCoefficient: 0, trackingType: 'reps_weight', userModified: true, alternativeExIds: [], equipmentRequirements: [] })} className="p-4 bg-accent-pink text-white rounded-2xl"><Plus size={24} strokeWidth={3} /></button></div>)}
       </header>
 
       <div className="space-y-4">
           <div className="flex gap-2">
             <div className="relative flex-1 group">
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim" size={18} />
-              <input 
-                type="text" 
-                placeholder="Sök övning..." 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold" 
-              />
+              <input type="text" placeholder="Sök övning..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[24px] p-5 pl-14 outline-none focus:border-accent-pink/50 font-bold" />
             </div>
-            <button 
-              onClick={() => setSortBy(sortBy === 'recent' ? 'alphabetical' : 'recent')}
-              className={`p-5 rounded-[24px] border transition-all flex items-center gap-2 ${sortBy === 'recent' ? 'bg-accent-pink/10 border-accent-pink text-accent-pink' : 'bg-white/5 border-white/10 text-text-dim'}`}
-              title={sortBy === 'recent' ? 'Sorterat på senaste' : 'Sorterat A-Ö'}
-            >
-              {sortBy === 'recent' ? <Clock size={20} /> : <SortAsc size={20} />}
-            </button>
+            <button onClick={() => setSortBy(sortBy === 'recent' ? 'alphabetical' : 'recent')} className={`p-5 rounded-[24px] border transition-all flex items-center gap-2 ${sortBy === 'recent' ? 'bg-accent-pink/10 border-accent-pink text-accent-pink' : 'bg-white/5 border-white/10 text-text-dim'}`}>{sortBy === 'recent' ? <Clock size={20} /> : <SortAsc size={20} />}</button>
           </div>
-          <button
-              onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
-              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border ${
-                showOnlyFavorites 
-                ? 'bg-accent-pink/10 border-accent-pink text-accent-pink' 
-                : 'bg-white/5 border-white/5 text-text-dim'
-              }`}
-            >
-              <Heart size={14} fill={showOnlyFavorites ? 'currentColor' : 'none'} />
-              Visa Endast Favoriter ({exercises.filter(e => e.userRating === 'up').length})
-            </button>
-          <div className="flex bg-[#1a1721] p-1 rounded-2xl border border-white/5 overflow-x-auto shrink-0">
-            {[{ id: 'all', label: 'Alla' }, { id: 'muscles', label: 'Muskler' }, { id: 'equipment', label: 'Utrustning' }, { id: 'pattern', label: 'Mönster' }].map(tab => (<button key={tab.id} onClick={() => { setActiveFilterTab(tab.id as any); setSelectedFilterValue(null); }} className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeFilterTab === tab.id ? 'bg-white/10 text-white shadow-sm' : 'text-text-dim hover:text-white'}`}>{tab.label}</button>))}
-          </div>
+          <button onClick={() => setShowOnlyFavorites(!showOnlyFavorites)} className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border ${showOnlyFavorites ? 'bg-accent-pink/10 border-accent-pink text-accent-pink' : 'bg-white/5 border-white/5 text-text-dim'}`}><Heart size={14} fill={showOnlyFavorites ? 'currentColor' : 'none'} /> Visa Endast Favoriter ({exercises.filter(e => e.userRating === 'up').length})</button>
+          <div className="flex bg-[#1a1721] p-1 rounded-2xl border border-white/5 overflow-x-auto shrink-0">{[{ id: 'all', label: 'Alla' }, { id: 'muscles', label: 'Muskler' }, { id: 'equipment', label: 'Utrustning' }, { id: 'pattern', label: 'Mönster' }].map(tab => (<button key={tab.id} onClick={() => { setActiveFilterTab(tab.id as any); setSelectedFilterValue(null); }} className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeFilterTab === tab.id ? 'bg-white/10 text-white shadow-sm' : 'text-text-dim hover:text-white'}`}>{tab.label}</button>))}</div>
           {activeFilterTab === 'muscles' && <FilterPills items={ALL_MUSCLE_GROUPS} />}
           {activeFilterTab === 'equipment' && <FilterPills items={Object.values(Equipment)} />}
           {activeFilterTab === 'pattern' && <FilterPills items={Object.values(MovementPattern)} />}
       </div>
 
       <div ref={listRef} className="grid grid-cols-1 gap-3 flex-1 overflow-y-auto scrollbar-hide pt-2 pb-20">
-        <div className="text-[10px] font-bold text-text-dim uppercase tracking-widest text-center opacity-50 mb-2">
-          Visar {Math.min(displayCount, filteredExercises.length)} av {filteredExercises.length} övningar
-          {sortBy === 'recent' && ' • Sorterat på senaste'}
-        </div>
-        {visibleExercises.map(ex => {
-          const lastTime = getLastUsed(ex.id);
-          
-          const handleItemClick = () => {
-            if (isSelectorMode && onSelect) {
-              onSelect(ex);
-            } else {
-              setEditingExercise(ex);
-            }
-          };
-
-          return (
-            <div 
-              key={ex.id} 
-              onClick={handleItemClick}
-              className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors cursor-pointer ${
-                lastTime > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5 hover:border-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-4 overflow-hidden flex-1">
-                <ExerciseImage exercise={ex} />
-                <div className="min-w-0">
-                  <h3 className="text-base font-black italic uppercase truncate text-white">{ex.name}</h3>
-                  <p className="text-[10px] text-text-dim uppercase tracking-widest truncate mt-1">
-                    {ex.primaryMuscles?.join(', ') || ex.pattern}
-                  </p>
-                </div>
-              </div>
-              
-              {isSelectorMode && onSelect ? (
-                <div className="p-3 bg-accent-pink rounded-xl text-white active:scale-90 transition-transform">
-                  <Plus size={18} />
-                </div>
-              ) : (
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}> 
-                    <button onClick={() => handleRate(ex, 'up')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'up' ? 'bg-green-500/20 text-green-500' : 'bg-white/10 text-text-dim'}`}>
-                      <ThumbsUp size={16} fill={ex.userRating === 'up' ? "currentColor" : "none"}/>
-                    </button>
-                    <button onClick={() => handleRate(ex, 'down')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'down' ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-text-dim'}`}>
-                      <ThumbsDown size={16} fill={ex.userRating === 'down' ? "currentColor" : "none"}/>
-                    </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {visibleExercises.map(ex => (<div key={ex.id} onClick={() => { if (isSelectorMode && onSelect) onSelect(ex); else setEditingExercise(ex); }} className={`bg-[#1a1721] p-4 rounded-[28px] border flex items-center justify-between group animate-in fade-in slide-in-from-bottom-2 transition-colors cursor-pointer ${getLastUsed(ex.id) > 0 && sortBy === 'recent' ? 'border-accent-pink/20' : 'border-white/5 hover:border-white/10'}`}><div className="flex items-center gap-4 overflow-hidden flex-1"><ExerciseImage exercise={ex} /><div className="min-w-0"><h3 className="text-base font-black italic uppercase truncate text-white">{ex.name}</h3><p className="text-[10px] text-text-dim uppercase tracking-widest truncate mt-1">{ex.primaryMuscles?.join(', ') || ex.pattern}</p></div></div>{isSelectorMode && onSelect ? (<div className="p-3 bg-accent-pink rounded-xl text-white active:scale-90 transition-transform"><Plus size={18} /></div>) : (<div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}><button onClick={() => handleRate(ex, 'up')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'up' ? 'bg-green-500/20 text-green-500' : 'bg-white/10 text-text-dim'}`}><ThumbsUp size={16} fill={ex.userRating === 'up' ? "currentColor" : "none"}/></button><button onClick={() => handleRate(ex, 'down')} className={`p-3 rounded-xl transition-all ${ex.userRating === 'down' ? 'bg-red-500/20 text-red-500' : 'bg-white/10 text-text-dim'}`}><ThumbsDown size={16} fill={ex.userRating === 'down' ? "currentColor" : "none"}/></button></div>)}</div>))}
         {filteredExercises.length > displayCount && (<button onClick={() => setDisplayCount(prev => prev + ITEMS_PER_PAGE)} className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2"><ChevronDown size={16} /> Visa fler övningar</button>)}
-        {filteredExercises.length === 0 && (<div className="text-center py-10 opacity-30"><Filter size={48} className="mx-auto mb-2"/><p className="text-xs font-bold uppercase">Inga övningar matchar filtret</p></div>)}
       </div>
 
       {editingExercise && !isSelectorMode && <ExerciseEditor exercise={editingExercise} history={history} allExercises={exercises} onClose={() => setEditingExercise(null)} onSave={handleSave} onDelete={handleDelete} userProfile={userProfile} />}
@@ -334,10 +235,8 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
                 .flatMap(ex => (ex.sets || []).map(s => calculate1RM(s.weight || 0, s.reps || 0))))
         }))
         .filter(h => h.volume > 0 || h.max1RM > 0)
-        .sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
-
-    const allTimeBest1RM = Math.max(0, ...exerciseHistory.map(h => h.max1RM));
-    return { history: exerciseHistory, best1RM: allTimeBest1RM };
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return { history: exerciseHistory, best1RM: Math.max(0, ...exerciseHistory.map(h => h.max1RM)) };
   }, [formData.id, history]);
 
   useEffect(() => { setFormData({ ...exercise, englishName: exercise.englishName || '', primaryMuscles: exercise.primaryMuscles || [], secondaryMuscles: exercise.secondaryMuscles || [], equipment: exercise.equipment || [], difficultyMultiplier: exercise.difficultyMultiplier ?? 1, bodyweightCoefficient: exercise.bodyweightCoefficient ?? 0, trackingType: exercise.trackingType || 'reps_weight', tier: exercise.tier || 'tier_3', alternativeExIds: exercise.alternativeExIds || [], equipmentRequirements: exercise.equipmentRequirements || [] }); }, [exercise]);
@@ -346,9 +245,7 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
   return (
     <div className="fixed inset-0 bg-[#0f0d15] z-[250] flex flex-col animate-in slide-in-from-bottom-10 overscroll-y-contain">
       <header className="flex justify-between items-center p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] border-b border-white/5 bg-[#0f0d15]"><h3 className="text-2xl font-black italic uppercase">Redigera Övning</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
-      <div className="flex p-4 gap-2 border-b border-white/5">
-          {[{ id: 'info', label: 'Info', icon: Activity }, { id: 'muscles', label: 'Muskler', icon: Layers }, { id: 'progression', label: 'Progression', icon: TrendingUp }, { id: 'settings', label: 'Data', icon: Scale }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}><tab.icon size={16} /> {tab.label}</button>))}
-      </div>
+      <div className="flex p-4 gap-2 border-b border-white/5">{[{ id: 'info', label: 'Info', icon: Activity }, { id: 'muscles', label: 'Muskler', icon: Layers }, { id: 'progression', label: 'Progression', icon: TrendingUp }, { id: 'settings', label: 'Data', icon: Scale }].map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-white text-black' : 'bg-white/5 text-text-dim'}`}><tab.icon size={16} /> {tab.label}</button>))}</div>
       <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
         {activeTab === 'info' && <InfoTab formData={formData} setFormData={setFormData} userProfile={userProfile} />}
         {activeTab === 'muscles' && <MusclesTab formData={formData} setFormData={setFormData} toggleList={toggleList} />}
@@ -361,89 +258,31 @@ const ExerciseEditor: React.FC<{ exercise: Exercise, history: WorkoutSession[], 
 };
 
 const ProgressionTab = ({ stats }: { stats: { history: any[], best1RM: number } }) => {
-  const progressionHistory = [...stats.history].reverse(); // Show most recent first
-
+  const progressionHistory = [...stats.history].reverse();
   return (
       <div className="space-y-6 animate-in fade-in">
-          <div className="bg-accent-blue/10 border border-accent-blue/20 rounded-3xl p-6 flex justify-between items-center">
-              <div>
-                  <p className="text-[10px] font-black uppercase text-accent-blue tracking-widest mb-1">Ditt All-Time Best 1RM</p>
-                  <h4 className="text-3xl font-black italic uppercase text-white">{stats.best1RM.toString().replace('.', ',')} <span className="text-sm">kg</span></h4>
-              </div>
-              <Trophy className="text-accent-blue" size={32} />
-          </div>
-          
-          <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Styrkeprogression (Est. 1RM)</label>
-              <div className="bg-black/20 rounded-2xl border border-white/5 p-2 space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
-                  {progressionHistory.length > 0 ? (
-                      progressionHistory.map((item, idx) => (
-                          <div key={idx} className="bg-white/5 p-3 rounded-xl flex justify-between items-center text-xs">
-                              <span className="font-bold text-text-dim">{new Date(item.date).toLocaleDateString('sv-SE')}</span>
-                              <span className="font-black text-white italic">{item.max1RM.toString().replace('.', ',')} kg</span>
-                          </div>
-                      ))
-                  ) : (
-                      <div className="text-center p-4 text-text-dim text-[9px] uppercase font-bold">Ingen 1RM-historik</div>
-                  )}
-              </div>
-          </div>
-
-          <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Volymutveckling (Total kg)</label>
-              <div className="bg-white/5 rounded-3xl p-4 h-48 flex items-end justify-between gap-1 border border-white/5">
-                  {stats.history.length > 0 ? (
-                      stats.history.slice(-15).map((h, i) => {
-                          const maxVol = Math.max(1, ...stats.history.map(x => x.volume));
-                          const height = (h.volume / maxVol) * 100;
-                          return (
-                              <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
-                                  <div className="absolute bottom-full mb-2 bg-white text-black text-[8px] font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                      {h.volume} kg ({new Date(h.date).toLocaleDateString('sv-SE')})
-                                  </div>
-                                  <div className="w-full bg-accent-pink rounded-t-lg transition-all duration-500 hover:bg-white" style={{ height: `${height}%`, opacity: 0.3 + (height/100) }} />
-                              </div>
-                          );
-                      })
-                  ) : (
-                      <div className="w-full h-full flex items-center justify-center opacity-20 italic text-[10px] uppercase font-black">Ingen data ännu</div>
-                  )}
-              </div>
-          </div>
+          <div className="bg-accent-blue/10 border border-accent-blue/20 rounded-3xl p-6 flex justify-between items-center"><div><p className="text-[10px] font-black uppercase text-accent-blue tracking-widest mb-1">Ditt All-Time Best 1RM</p><h4 className="text-3xl font-black italic uppercase text-white">{stats.best1RM.toString().replace('.', ',')} <span className="text-sm">kg</span></h4></div><Trophy className="text-accent-blue" size={32} /></div>
+          <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Styrkeprogression (Est. 1RM)</label><div className="bg-black/20 rounded-2xl border border-white/5 p-2 space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">{progressionHistory.length > 0 ? (progressionHistory.map((item, idx) => (<div key={idx} className="bg-white/5 p-3 rounded-xl flex justify-between items-center text-xs"><span className="font-bold text-text-dim">{new Date(item.date).toLocaleDateString('sv-SE')}</span><span className="font-black text-white italic">{item.max1RM.toString().replace('.', ',')} kg</span></div>))) : (<div className="text-center p-4 text-text-dim text-[9px] uppercase font-bold">Ingen 1RM-historik</div>)}</div></div>
       </div>
   );
 };
 
-
-const InfoTab = ({ formData, setFormData, userProfile }: { formData: Exercise, setFormData: React.Dispatch<React.SetStateAction<Exercise>>, userProfile?: UserProfile }) => {
+const InfoTab = ({ formData, setFormData }: any) => {
   const [imageUrlInput, setImageUrlInput] = useState(formData.imageUrl || '');
   const [isGenerating, setIsGenerating] = useState(false);
   const handleAiGenerate = async () => {
-    if (!formData.name) { alert("Skriv namnet på övningen först!"); return; }
+    if (!formData.name) return alert("Skriv namnet på övningen först!");
     setIsGenerating(true);
     try {
       const aiData = await generateExerciseDetailsFromGemini(formData.name);
-      setFormData(prev => {
-        const primary = aiData.primaryMuscles ?? prev.primaryMuscles;
-        const secondary = aiData.secondaryMuscles ?? prev.secondaryMuscles;
-        return { ...prev, englishName: aiData.englishName ?? prev.englishName, description: aiData.description ?? prev.description, pattern: aiData.pattern ?? prev.pattern, tier: aiData.tier ?? prev.tier, trackingType: aiData.trackingType ?? prev.trackingType, difficultyMultiplier: aiData.difficultyMultiplier ?? prev.difficultyMultiplier, bodyweightCoefficient: aiData.bodyweightCoefficient ?? prev.bodyweightCoefficient, primaryMuscles: primary, secondaryMuscles: secondary, muscleGroups: Array.from(new Set([...(primary ?? []), ...(secondary ?? [])])) as MuscleGroup[] };
-      });
-    } catch (err: any) { alert(err.message || "Något gick fel med AI-genereringen."); } 
-    finally { setIsGenerating(false); }
+      setFormData((prev: any) => ({ ...prev, ...aiData }));
+    } catch (err: any) { alert(err.message); } finally { setIsGenerating(false); }
   };
-  useEffect(() => { setImageUrlInput(formData.imageUrl || '') }, [formData.imageUrl]);
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => { setImageUrlInput(e.target.value); setFormData(prev => ({ ...prev, imageUrl: e.target.value, imageId: undefined })); };
-  const handleImageUpload = (id: string) => { setFormData(prev => ({ ...prev, imageId: id, imageUrl: '' })); setImageUrlInput(''); };
-  const handleChange = (field: keyof Exercise, value: any) => { setFormData(prev => ({ ...prev, [field]: value })); };
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="flex justify-between items-end"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Svenska)</label><button onClick={handleAiGenerate} disabled={isGenerating || !formData.name} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isGenerating ? 'bg-white/5 text-text-dim cursor-not-allowed' : 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20 hover:bg-accent-blue/20'}`}>{isGenerating ? <Loader2 className="animate-spin" size={12} /> : <Zap size={12} />}{isGenerating ? 'Analyserar...' : 'Generera med AI'}</button></div>
-        <input type="text" value={formData.name} onChange={e => handleChange('name', e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xl font-black outline-none focus:border-accent-pink" placeholder="T.ex. Bänkpress" />
-      </div>
-      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Engelska)</label><input type="text" value={formData.englishName || ''} onChange={e => handleChange('englishName', e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-lg font-bold italic outline-none focus:border-accent-pink" placeholder="T.ex. Bench Press" /></div>
-      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Beskrivning</label><textarea value={formData.description || ''} onChange={e => handleChange('description', e.target.value)} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-sm font-medium outline-none min-h-[100px]" placeholder="Hur utförs övningen?" /></div>
-      <div className="space-y-4"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Bild</label><div className="bg-white/5 rounded-2xl p-4 border border-white/10"><ImageUpload currentImageId={formData.imageId} onImageSaved={handleImageUpload}/></div><div className="relative group"><LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} /><input type="text" value={imageUrlInput} onChange={handleUrlChange} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 pl-12 text-sm font-medium outline-none focus:border-accent-blue placeholder:text-text-dim/50" placeholder="Eller klistra in bild-URL..." /></div></div>
+      <div className="space-y-2"><div className="flex justify-between items-end"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Namn (Svenska)</label><button onClick={handleAiGenerate} disabled={isGenerating || !formData.name} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${isGenerating ? 'bg-white/5 text-text-dim' : 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20 hover:bg-accent-blue/20'}`}>{isGenerating ? <Loader2 className="animate-spin" size={12} /> : <Zap size={12} />}{isGenerating ? 'Analyserar...' : 'Generera med AI'}</button></div><input type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-xl font-black outline-none focus:border-accent-pink" placeholder="T.ex. Bänkpress" /></div>
+      <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Beskrivning</label><textarea value={formData.description || ''} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-sm font-medium outline-none min-h-[100px]" placeholder="Hur utförs övningen?" /></div>
+      <div className="space-y-4"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Bild</label><div className="bg-white/5 rounded-2xl p-4 border border-white/10"><ImageUpload currentImageId={formData.imageId} onImageSaved={(id) => setFormData({ ...formData, imageId: id, imageUrl: '' })}/></div><div className="relative group"><LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim" size={16} /><input type="text" value={imageUrlInput} onChange={(e) => { setImageUrlInput(e.target.value); setFormData({ ...formData, imageUrl: e.target.value, imageId: undefined }); }} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 pl-12 text-sm font-medium outline-none focus:border-accent-blue" placeholder="Eller klistra in bild-URL..." /></div></div>
     </div>
   );
 };
@@ -453,44 +292,16 @@ const MusclesTab = ({ formData, setFormData, toggleList }: any) => (
     <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Rörelsemönster</label><div className="grid grid-cols-2 gap-2">{Object.values(MovementPattern).map(p => (<button key={p} onClick={() => setFormData({ ...formData, pattern: p })} className={`py-3 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.pattern === p ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10 text-text-dim'}`}>{p}</button>))}</div></div>
     <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-accent-pink"/> Primära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, primaryMuscles: toggleList(formData.primaryMuscles, m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.primaryMuscles || []).includes(m) ? 'bg-accent-pink text-white border-accent-pink' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
     <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-500"/> Sekundära Muskler</label><div className="flex flex-wrap gap-2">{ALL_MUSCLE_GROUPS.map(m => (<button key={m} onClick={() => setFormData({...formData, secondaryMuscles: toggleList(formData.secondaryMuscles, m)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.secondaryMuscles || []).includes(m) ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' : 'bg-white/5 border-white/10 text-text-dim'}`}>{m}</button>))}</div></div>
-    <div className="space-y-3"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Utrustning</label><div className="flex flex-wrap gap-2">{Object.values(Equipment).map(eq => (<button key={eq} onClick={() => setFormData({...formData, equipment: toggleList(formData.equipment, eq)})} className={`px-3 py-2 rounded-lg text-[10px] font-bold uppercase border transition-all ${(formData.equipment || []).includes(eq) ? 'bg-white text-black border-white' : 'bg-white/5 border-white/10 text-text-dim'}`}>{eq}</button>))}</div></div>
   </div>
 );
 
-const AlternativeSelectorModal: React.FC<{ allExercises: Exercise[], selectedIds: string[], onClose: () => void, onSave: (newSelection: string[]) => void, currentExerciseId: string }> = ({ allExercises, selectedIds, onClose, onSave, currentExerciseId }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentSelection, setCurrentSelection] = useState<string[]>(selectedIds || []);
-  const filteredExercises = useMemo(() => (allExercises || []).filter(ex => ex.id !== currentExerciseId && ex.name.toLowerCase().includes(searchQuery.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name)), [allExercises, searchQuery, currentExerciseId]);
-  const toggleSelection = (id: string) => setCurrentSelection(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  const handleSave = () => { onSave(currentSelection); onClose(); };
-  return (
-    <div className="fixed inset-0 bg-[#0f0d15] z-[300] flex flex-col p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)] animate-in slide-in-from-bottom-10">
-      <header className="flex justify-between items-center mb-6"><h3 className="text-2xl font-black italic uppercase">Välj Alternativ</h3><button onClick={onClose} className="p-2 bg-white/5 rounded-xl"><X size={24}/></button></header>
-      <div className="relative group mb-4"><Search className="absolute left-5 top-1/2 -translate-y-1/2 text-text-dim" size={18} /><input type="text" placeholder="Sök övning..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 pl-14 outline-none focus:border-accent-blue" /></div>
-      <div className="flex-1 overflow-y-auto scrollbar-hide space-y-2 pb-24">{filteredExercises.map(ex => { const isSelected = currentSelection.includes(ex.id); return (<button key={ex.id} onClick={() => toggleSelection(ex.id)} className={`w-full p-4 rounded-2xl flex items-center justify-between transition-all border ${isSelected ? 'bg-accent-blue/10 border-accent-blue' : 'bg-white/5 border-transparent'}`}><span className={`font-bold text-sm ${isSelected ? 'text-accent-blue' : 'text-white'}`}>{ex.name}</span><div className={`w-6 h-6 rounded-full border flex items-center justify-center ${isSelected ? 'bg-accent-blue border-accent-blue' : 'border-white/20'}`}>{isSelected && <Check size={14} className="text-black" />}</div></button>)})}</div>
-      <div className="absolute bottom-0 left-0 right-0 p-6 bg-[#0f0d15]/80 backdrop-blur-xl border-t border-white/5"><button onClick={handleSave} className="w-full py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest flex items-center justify-center gap-2"><Check size={20} /> Spara Val ({currentSelection.length})</button></div>
-    </div>
-  );
-};
-
-const SettingsTab = ({ formData, setFormData, onDelete, allExercises }: { formData: Exercise, setFormData: (d: Exercise) => void, onDelete?: (id: string) => void, allExercises: Exercise[] }) => {
+const SettingsTab = ({ formData, setFormData, onDelete, allExercises }: any) => {
   const [showAltSelector, setShowAltSelector] = useState(false);
-  const removeAlternative = (altId: string) => { setFormData({ ...formData, alternativeExIds: (formData.alternativeExIds || []).filter(id => id !== altId) }); };
-  const handleSaveAlternatives = (newSelection: string[]) => { setFormData({ ...formData, alternativeExIds: newSelection }); };
-  const handleRequirementsChange = (newReqs: Equipment[][]) => { setFormData({ ...formData, equipmentRequirements: newReqs }); };
   return (
-    <>
-      <div className="space-y-6">
-        <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Nivå / Prioritet</label><div className="flex gap-2">{([ 'tier_1', 'tier_2', 'tier_3' ] as ExerciseTier[]).map(t => (<button key={t} onClick={() => setFormData({ ...formData, tier: t })} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase border transition-all ${formData.tier === t ? 'bg-white text-black' : 'bg-white/5 border-white/10 text-text-dim'}`}>{t.replace('_', ' ')}</button>))}</div></div>
+    <div className="space-y-6">
         <div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Mättyp</label><div className="grid grid-cols-2 gap-2">{([ 'reps_weight', 'time_distance', 'reps_only', 'time_only' ] as TrackingType[]).map(tt => (<button key={tt} onClick={() => setFormData({...formData, trackingType: tt})} className={`p-3 rounded-xl border text-xs font-bold uppercase ${formData.trackingType === tt ? 'bg-accent-blue text-white border-accent-blue' : 'bg-white/5 border-white/10'}`}>{tt.replace('_', ' & ')}</button>))}</div></div>
-        
-        <EquipmentBuilder value={formData.equipmentRequirements || []} onChange={handleRequirementsChange} />
-
         <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Svårighetsgrad</label><input type="number" step="0.1" value={formData.difficultyMultiplier} onChange={e => setFormData({...formData, difficultyMultiplier: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white font-bold" /></div><div className="space-y-2"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest">Kroppsviktsfaktor</label><input type="number" step="0.1" max="1" min="0" value={formData.bodyweightCoefficient} onChange={e => setFormData({...formData, bodyweightCoefficient: parseFloat(e.target.value)})} className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white font-bold" /></div></div>
-        <div className="space-y-3 pt-4 border-t border-white/5"><label className="text-[10px] font-black uppercase text-text-dim tracking-widest flex items-center gap-2"><ArrowRightLeft size={12}/> Likvärdiga Alternativ</label><div className="flex flex-wrap gap-2 min-h-[40px] bg-white/5 p-3 rounded-xl border border-white/5">{(formData.alternativeExIds || []).length === 0 ? (<span className="text-text-dim text-xs italic opacity-50">Inga alternativ valda...</span>) : (formData.alternativeExIds || []).map(altId => { const altEx = (allExercises || []).find(e => e.id === altId); if (!altEx) return null; return (<div key={altId} className="bg-accent-blue/20 text-accent-blue border border-accent-blue/30 rounded-lg px-3 py-2 text-[10px] font-bold uppercase flex items-center gap-2 animate-in fade-in zoom-in-95"><span>{altEx.name}</span><button onClick={() => removeAlternative(altId)} className="text-accent-blue/50 hover:text-accent-blue"><X size={12}/></button></div>); })}</div><button onClick={() => setShowAltSelector(true)} className="w-full mt-2 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-text-dim uppercase tracking-widest flex items-center justify-center gap-2 transition-all"><Plus size={14} /> Välj alternativ...</button></div>
         {onDelete && formData.userModified && (<div className="pt-8 border-t border-white/5"><button onClick={() => onDelete(formData.id)} className="w-full py-4 border border-red-500/30 text-red-500 rounded-2xl font-bold uppercase text-xs hover:bg-red-500/10 flex items-center justify-center gap-2"><Trash2 size={16}/> Ta bort övning</button></div>)}
-      </div>
-      {showAltSelector && (<AlternativeSelectorModal allExercises={allExercises} selectedIds={formData.alternativeExIds || []} onClose={() => setShowAltSelector(false)} onSave={handleSaveAlternatives} currentExerciseId={formData.id} />)}
-    </>
+    </div>
   );
 };

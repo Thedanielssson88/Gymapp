@@ -146,6 +146,37 @@ export const storage = {
     }
   },
 
+  // Function to move an entire AI program relative to one session
+  async rescheduleAIProgram(programId: string, fromActivityId: string, newDateStr: string): Promise<void> {
+    const allActivities = await db.scheduledActivities.where('programId').equals(programId).toArray();
+    const targetActivity = allActivities.find(a => a.id === fromActivityId);
+    
+    if (!targetActivity) return;
+
+    const oldDate = new Date(targetActivity.date);
+    const newDate = new Date(newDateStr);
+    
+    const diffTime = newDate.getTime() - oldDate.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return;
+
+    const updates = allActivities
+      .filter(a => !a.isCompleted && new Date(a.date) >= oldDate)
+      .map(a => {
+        const d = new Date(a.date);
+        d.setDate(d.getDate() + diffDays);
+        return {
+          ...a,
+          date: d.toISOString().split('T')[0]
+        };
+      });
+
+    if (updates.length > 0) {
+      await db.scheduledActivities.bulkPut(updates);
+    }
+  },
+
   getRecurringPlans: async (): Promise<RecurringPlan[]> => await db.recurringPlans.toArray(),
 
   addRecurringPlan: async (plan: RecurringPlan) => {

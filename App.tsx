@@ -43,6 +43,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   
   const [pendingManualDate, setPendingManualDate] = useState<string | null>(null);
+  const [targetExerciseId, setTargetExerciseId] = useState<string | null>(null);
 
   const globalStyles = `
     :root {
@@ -388,7 +389,7 @@ export default function App() {
       name: activity.title, 
       zoneId: zoneToUse.id, 
       exercises: exercisesForSession, 
-      isCompleted: false,
+      isCompleted: false, 
       isManual: false
     };
     
@@ -450,6 +451,11 @@ export default function App() {
       await storage.deleteUserMission(id);
       await refreshData();
     }
+  };
+
+  const handleGoToExercise = (exerciseId: string) => {
+    setTargetExerciseId(exerciseId);
+    setActiveTab('library');
   };
 
   if (!isReady || !user) {
@@ -563,9 +569,18 @@ export default function App() {
                                 onAddMission={handleAddMission} 
                                 onDeleteMission={handleDeleteMission} 
                               />;
-      case 'library': return <ExerciseLibrary allExercises={allExercises} history={history} onUpdate={refreshData} userProfile={user} />;
+      case 'library': return (
+        <ExerciseLibrary 
+          allExercises={allExercises} 
+          history={history} 
+          onUpdate={refreshData} 
+          userProfile={user} 
+          initialExerciseId={targetExerciseId}
+          onClose={() => setTargetExerciseId(null)}
+        />
+      );
       case 'gyms': return <LocationManager zones={zones} onUpdate={refreshData} />;
-      case 'ai': return <AIProgramDashboard onStartSession={handleStartPlannedActivity} />;
+      case 'ai': return <AIProgramDashboard onStartSession={handleStartPlannedActivity} onGoToExercise={handleGoToExercise} />;
       default: return null;
     }
   };
