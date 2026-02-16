@@ -1,4 +1,3 @@
-
 import { GOOGLE_CLIENT_ID, DRIVE_BACKUP_FILENAME } from '../constants';
 
 const CLIENT_ID = GOOGLE_CLIENT_ID;
@@ -56,34 +55,50 @@ export const initializeGoogleDrive = async (): Promise<void> => {
 };
 
 /**
- * 2. Get Access Token (Forces login if needed)
+ * 2. Get Access Token (Caches in localStorage)
  */
-// FIX: Export the getAccessToken function to make it accessible to other modules.
 export const getAccessToken = async (): Promise<string> => {
-  console.log("Requesting Access Token...");
   if (!gisInited) await initializeGoogleDrive();
 
+  // 1. Check for a valid cached token
+  const savedToken = localStorage.getItem('g_drive_token');
+  const expiry = localStorage.getItem('g_drive_token_expiry');
+
+  // If token exists and it has more than 5 minutes left, use it directly.
+  if (savedToken && expiry && Date.now() < (parseInt(expiry, 10) - 300000)) {
+    console.log("Using cached Google Drive token.");
+    return savedToken;
+  }
+
+  // 2. Otherwise, request a new token
   return new Promise((resolve, reject) => {
+    console.log("Requesting new Google Drive access token...");
     try {
-      // Override the callback for this specific request
       tokenClient.callback = (resp: any) => {
         if (resp.error) {
-          console.error("Auth Error:", resp);
-          reject(resp);
-          return;
+          console.error("Google Auth Error:", resp);
+          return reject(resp);
         }
-        console.log("Access Token Received!");
+        
+        // expires_in is in seconds, convert to milliseconds for expiry time
+        const expiryTime = Date.now() + (resp.expires_in * 1000);
+        localStorage.setItem('g_drive_token', resp.access_token);
+        localStorage.setItem('g_drive_token_expiry', expiryTime.toString());
+        
+        console.log("New Google Access Token received and cached.");
         resolve(resp.access_token);
       };
 
-      // Request token (opens popup if user is not logged in)
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      // 'consent' forces a popup. '' will try silently if user has approved before.
+      // Use 'consent' if there was no previous token, to ensure user sees the prompt.
+      tokenClient.requestAccessToken({ prompt: savedToken ? '' : 'consent' });
     } catch (err) {
-      console.error("Token Request Error:", err);
+      console.error("Google Token Request Error:", err);
       reject(err);
     }
   });
 };
+
 
 /**
  * 3. Find the file (via Fetch API instead of GAPI)
@@ -201,10 +216,17 @@ export const downloadBackup = async (fileId: string): Promise<BackupData> => {
  * 6. Sign out
  */
 export const signOutGoogle = () => {
+  // Revoke token from Google's side
   if (tokenClient && (window as any).google) {
-    // @ts-ignore
-    (window as any).google.accounts.oauth2.revoke(localStorage.getItem('g_token'), () => {
-      console.log('Revoked access');
-    });
+    const savedToken = localStorage.getItem('g_drive_token');
+    if(savedToken) {
+      // @ts-ignore
+      (window as any).google.accounts.oauth2.revoke(savedToken, () => {
+        console.log('Revoked Google access token.');
+      });
+    }
   }
+  // Clear local cache
+  localStorage.removeItem('g_drive_token');
+  localStorage.removeItem('g_drive_token_expiry');
 };

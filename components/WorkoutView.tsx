@@ -18,6 +18,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { calculateSmartProgression } from '../utils/progression';
 import { ExerciseInfoModal } from './ExerciseInfoModal';
 import { TypeSelectorModal } from './TypeSelectorModal';
+import { ImageUpload } from './ImageUpload';
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -60,6 +61,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [exerciseToDelete, setExerciseToDelete] = useState<number | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [typeSelectorData, setTypeSelectorData] = useState<{ exIdx: number; currentType: TrackingType } | null>(null);
+  const [imageUploadTarget, setImageUploadTarget] = useState<Exercise | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -78,7 +80,8 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     if (showSummary) return registerBackHandler(() => setShowSummary(false));
     if (exerciseToDelete !== null) return registerBackHandler(() => setExerciseToDelete(null));
     if (typeSelectorData) return registerBackHandler(() => setTypeSelectorData(null));
-  }, [showGenerator, showAddModal, localShowZonePicker, showSummary, exerciseToDelete, typeSelectorData]);
+    if (imageUploadTarget) return registerBackHandler(() => setImageUploadTarget(null));
+  }, [showGenerator, showAddModal, localShowZonePicker, showSummary, exerciseToDelete, typeSelectorData, imageUploadTarget]);
 
 
   useEffect(() => {
@@ -132,6 +135,20 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       ex.sets.some(set => set.completed)
     );
   }, [localSession]);
+
+  const handleImageSaved = async (imageId: string) => {
+    if (!imageUploadTarget) return;
+
+    try {
+        await db.exercises.update(imageUploadTarget.id, { imageId: imageId });
+        onUpdate();
+        setImageUploadTarget(null);
+    } catch (error) {
+        console.error("Failed to save image for exercise:", error);
+        alert("Bilden kunde inte sparas.");
+        setImageUploadTarget(null);
+    }
+  };
 
   const handleChangeTrackingType = async (exIdx: number, newType: TrackingType) => {
     const exerciseId = localSession?.exercises[exIdx]?.exerciseId;
@@ -731,7 +748,22 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               })}</div>
         </div>
       )}
-      {infoModalData && <ExerciseInfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onExerciseSwap={handleSwapExercise} allExercises={allExercises} onGoToExercise={onGoToExercise} />}
+      {infoModalData && <ExerciseInfoModal 
+        exercise={infoModalData.exercise} 
+        exIdx={infoModalData.index} 
+        onClose={() => setInfoModalData(null)} 
+        history={history} 
+        onApplyHistory={handleApplyHistory} 
+        onExerciseSwap={handleSwapExercise} 
+        allExercises={allExercises} 
+        onGoToExercise={onGoToExercise} 
+        onEditImage={() => {
+            if(infoModalData) {
+                setImageUploadTarget(infoModalData.exercise);
+                setInfoModalData(null);
+            }
+        }}
+      />}
 
       {showNoSetsInfo && (
         <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-md z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -754,6 +786,21 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
           onClose={() => setTypeSelectorData(null)}
           onSelect={(newType) => handleChangeTrackingType(typeSelectorData.exIdx, newType)}
         />
+      )}
+
+      {imageUploadTarget && (
+        <div className="fixed inset-0 bg-[#0f0d15] z-[10000] flex flex-col animate-in fade-in">
+            <header className="flex justify-between items-center p-6 pt-[calc(env(safe-area-inset-top)+1.5rem)]">
+                <h3 className="text-xl font-black italic">Lägg till bild för <span className="text-accent-pink">{imageUploadTarget.name}</span></h3>
+                <button onClick={() => setImageUploadTarget(null)} className="p-3 bg-white/5 rounded-2xl text-white"><X size={24}/></button>
+            </header>
+            <div className="flex-1 flex items-center justify-center p-6">
+                <ImageUpload
+                    currentImageId={imageUploadTarget.imageId}
+                    onImageSaved={handleImageSaved}
+                />
+            </div>
+        </div>
       )}
     </>
   );

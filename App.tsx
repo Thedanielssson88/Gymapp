@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements, SetType } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -11,12 +9,12 @@ import { StatsView } from './components/StatsView';
 import { MeasurementsView } from './components/MeasurementsView';
 import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
-import { db, importDatabase } from './services/db'; 
+import { db, importDatabase, exportDatabase } from './services/db'; 
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
 import { AIProgramDashboard } from './components/AIProgramDashboard';
 import { ZonePickerModal } from './components/ZonePickerModal';
-import { listBackups, downloadBackup } from './services/googleDrive';
+import { listBackups, downloadBackup, uploadBackup } from './services/googleDrive';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { suggestWeightForReps } from './utils/progression';
 import { registerBackHandler, executeBackHandler } from './utils/backHandler';
@@ -304,27 +302,38 @@ export default function App() {
       const historySession = { ...session, isCompleted: true, duration, locationName: activeZone.name };
       await storage.saveToHistory(historySession);
 
-      // FIX: Markera det planerade passet som slutfört så det försvinner från loggen/kalendern
       if (session.sourceActivityId) {
         await db.scheduledActivities.update(session.sourceActivityId, {
           isCompleted: true,
           linkedSessionId: historySession.id
         });
-        console.log("Markerade käll-aktivitet som slutförd:", session.sourceActivityId);
+        console.log("Marked source activity as complete:", session.sourceActivityId);
       }
 
       storage.setActiveSession(null);
       setCurrentSession(null);
       
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
-        // This will now use the new googleDrive.ts implementation
+        const syncToCloud = async () => {
+          try {
+            const allData = await exportDatabase();
+            await uploadBackup(allData);
+            console.log("Auto-sync to Google Drive successful after workout.");
+            // Update last sync time silently
+            const profile = await storage.getUserProfile();
+            await storage.setUserProfile({ ...profile, settings: { ...profile.settings, lastCloudSync: new Date().toISOString() }});
+          } catch (err) {
+            console.warn("Auto-sync failed (user might not be logged in):", err);
+          }
+        };
+        syncToCloud(); // Fire and forget
       }
 
       await refreshData(); 
       navigateToTab('log');
     } catch (error) {
-      console.error("Kunde inte spara passet:", error);
-      alert("Ett fel uppstod när passet skulle sparas. Försök igen.");
+      console.error("Failed to save workout session:", error);
+      alert("An error occurred while saving the workout. Please try again.");
     }
   };
 
@@ -347,7 +356,7 @@ export default function App() {
       sets: pe.sets.map(s => ({...s, completed: false}))
     }));
     if (finalExercises.length === 0) {
-        alert("Inga övningar kvar i passet efter filtrering. Passet startas ej.");
+        alert("No exercises left after filtering for this zone. Workout not started.");
         setPendingActivity(null);
         return;
     }
@@ -396,7 +405,7 @@ export default function App() {
     try {
       await storage.deleteWorkoutFromHistory(sessionId);
       setHistory(prev => prev.filter(s => s.id !== sessionId));
-    } catch (error) { console.error("Kunde inte radera passet:", error); }
+    } catch (error) { console.error("Could not delete workout:", error); }
   };
 
   const handleAddPlan = async (activity: ScheduledActivity, isRecurring: boolean, days?: number[]) => {
@@ -412,7 +421,7 @@ export default function App() {
     try {
       if (isTemplate) { await storage.deleteRecurringPlan(id); } else { await storage.deleteScheduledActivity(id); }
       await refreshData();
-    } catch (error) { console.error("Kunde inte radera planeringen:", error); }
+    } catch (error) { console.error("Could not delete plan:", error); }
   };
 
   const handleMovePlan = async (id: string, newDate: string) => {
@@ -422,11 +431,11 @@ export default function App() {
         await db.scheduledActivities.update(id, { date: newDate });
         await refreshData();
       }
-    } catch (error) { console.error("Kunde inte flytta planeringen:", error); }
+    } catch (error) { console.error("Could not move plan:", error); }
   };
 
   const handleAddMission = async (mission: UserMission) => { await storage.addUserMission(mission); await refreshData(); };
-  const handleDeleteMission = async (id: string) => { if (confirm("Är du säker på att du vill ta bort detta uppdrag?")) { await storage.deleteUserMission(id); await refreshData(); } };
+  const handleDeleteMission = async (id: string) => { if (confirm("Are you sure you want to delete this mission?")) { await storage.deleteUserMission(id); await refreshData(); } };
   const handleGoToExercise = (exerciseId: string) => { setTargetExerciseId(exerciseId); navigateToTab('library'); };
 
   if (!isReady || !user) {

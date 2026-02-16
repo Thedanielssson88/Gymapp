@@ -14,6 +14,7 @@ interface ExerciseInfoModalProps {
   onApplyHistory?: (idx: number, sets: WorkoutSet[]) => void;
   onExerciseSwap?: (idx: number, newId: string) => void;
   onGoToExercise?: (exerciseId: string) => void;
+  onEditImage?: () => void;
 }
 
 const formatSeconds = (totalSeconds: number | undefined) => {
@@ -32,6 +33,7 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
   onApplyHistory, 
   onExerciseSwap, 
   onGoToExercise,
+  onEditImage,
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
   const imageSrc = useExerciseImage(exercise);
@@ -48,7 +50,9 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
   }, [onClose]);
   
   const handleEditImage = () => {
-    if (onGoToExercise) {
+    if (onEditImage) {
+      onEditImage();
+    } else if (onGoToExercise) {
       onClose(); // Close this modal first
       onGoToExercise(exercise.id);
     }
@@ -145,7 +149,7 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
                     alt={exercise.name}
                     className="w-full h-auto max-h-[60vh] object-contain mx-auto" 
                   />
-                  {onGoToExercise && (
+                  {(onGoToExercise || onEditImage) && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -159,8 +163,8 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
                 </div>
               ) : (
                 <div 
-                  onClick={onGoToExercise ? handleEditImage : undefined} 
-                  className={`h-64 flex flex-col items-center justify-center text-text-dim ${onGoToExercise ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}`}
+                  onClick={(onGoToExercise || onEditImage) ? handleEditImage : undefined} 
+                  className={`h-64 flex flex-col items-center justify-center text-text-dim ${(onGoToExercise || onEditImage) ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}`}
                 >
                   <Camera size={48} className="mb-2 opacity-50" />
                   <span className="text-sm font-medium">Lägg till bild</span>
