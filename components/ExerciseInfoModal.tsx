@@ -143,31 +143,29 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
             
             <div className="w-full bg-white/5 rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative group">
               {imageSrc ? (
-                <div className="relative">
+                <button
+                  onClick={handleEditImage}
+                  className="relative w-full block group"
+                  disabled={!onGoToExercise && !onEditImage}
+                >
                   <img
                     src={imageSrc}
                     alt={exercise.name}
                     className="w-full h-auto max-h-[60vh] object-contain mx-auto" 
                   />
                   {(onGoToExercise || onEditImage) && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditImage();
-                      }}
-                      className="absolute top-4 right-4 p-2 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent-blue hover:text-black"
-                    >
-                      <Camera size={20} />
-                    </button>
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <Camera size={32} className="text-white" />
+                    </div>
                   )}
-                </div>
+                </button>
               ) : (
                 <div 
                   onClick={(onGoToExercise || onEditImage) ? handleEditImage : undefined} 
                   className={`h-64 flex flex-col items-center justify-center text-text-dim ${(onGoToExercise || onEditImage) ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}`}
                 >
                   <Camera size={48} className="mb-2 opacity-50" />
-                  <span className="text-sm font-medium">Lägg till bild</span>
+                  <span className="text-sm font-medium">Klicka för att välja bild</span>
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0f0d15] via-transparent to-transparent opacity-60 pointer-events-none" />

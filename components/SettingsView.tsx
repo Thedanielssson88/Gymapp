@@ -269,6 +269,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between py-2 border-t border-white/5">
                 <div className="flex items-center gap-3">
+                  <Upload size={16} className="text-text-dim" />
+                  <div>
+                    <p className="text-sm font-bold text-white">Spara automatiskt</p>
+                    <p className="text-[9px] text-text-dim uppercase">Backup efter varje pass</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleSettingChange('autoSyncMode', (localProfile.settings?.autoSyncMode === 'after_workout') ? 'manual' : 'after_workout')}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${(localProfile.settings?.autoSyncMode === 'after_workout') ? 'bg-accent-blue' : 'bg-white/10'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.autoSyncMode === 'after_workout') ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between py-2 border-t border-white/5">
+                <div className="flex items-center gap-3">
                   <RefreshCw size={16} className="text-text-dim" />
                   <div>
                     <p className="text-sm font-bold text-white">Återställ vid start</p>

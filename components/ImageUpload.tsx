@@ -14,6 +14,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSaved, currentI
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // If the component opens without a pre-existing image, trigger the file picker immediately.
+    if (!currentImageId && inputRef.current) {
+      inputRef.current.click();
+    }
+  }, []); // Empty dependency array ensures this runs only on mount.
+
+  useEffect(() => {
     if (currentImageId) {
       storage.getImage(currentImageId).then(url => {
         if (url) setPreview(url);

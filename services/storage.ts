@@ -1,7 +1,8 @@
-import { db, migrateFromLocalStorage } from './db';
+
+// FIX: Import `importDatabase` to be used in the new `importFullBackup` method.
+import { db, migrateFromLocalStorage, importDatabase } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
-import { BackupData } from './googleDrive';
 
 const ACTIVE_SESSION_KEY = 'morphfit_active_session';
 
@@ -279,40 +280,10 @@ export const storage = {
     window.dispatchEvent(new Event('storage-update'));
   },
 
-
-  getFullBackupData: async () => {
-    return {
-      profile: await storage.getUserProfile(),
-      history: await db.workoutHistory.toArray(),
-      zones: await db.zones.toArray(),
-      exercises: await db.exercises.toArray(),
-      routines: await db.workoutRoutines.toArray(),
-      biometricLogs: await db.biometricLogs.toArray(),
-      missions: await db.userMissions.toArray(),
-      goalTargets: await db.goalTargets.toArray(),
-      exportedAt: new Date().toISOString()
-    };
+  // FIX: Added missing importFullBackup method called in OnboardingWizard.
+  importFullBackup: async (backup: { data: any }) => {
+    await importDatabase(backup.data);
   },
-
-  importFullBackup: async (data: BackupData) => {
-    await (db as any).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.workoutRoutines, db.userMissions, db.goalTargets], async () => {
-      await db.userProfile.put(data.data.profile);
-      await db.zones.clear();
-      await db.zones.bulkPut(data.data.zones);
-      await db.exercises.clear();
-      await db.exercises.bulkPut(data.data.exercises);
-      await db.workoutHistory.clear();
-      await db.workoutHistory.bulkPut(data.data.history);
-      await db.biometricLogs.clear();
-      await db.biometricLogs.bulkPut(data.data.biometricLogs);
-      await db.workoutRoutines.clear();
-      await db.workoutRoutines.bulkPut(data.data.routines);
-      await db.userMissions.clear();
-      await db.userMissions.bulkPut(data.data.missions);
-      await db.goalTargets.clear();
-      await db.goalTargets.bulkPut(data.data.goalTargets);
-    });
-  }
 };
 
 export const exportExerciseLibrary = async () => {

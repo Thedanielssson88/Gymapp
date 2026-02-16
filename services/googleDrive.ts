@@ -57,15 +57,15 @@ export const initializeGoogleDrive = async (): Promise<void> => {
 /**
  * 2. Get Access Token (Caches in localStorage)
  */
-export const getAccessToken = async (): Promise<string> => {
+export const getAccessToken = async (forcePrompt = false): Promise<string> => {
   if (!gisInited) await initializeGoogleDrive();
 
   // 1. Check for a valid cached token
   const savedToken = localStorage.getItem('g_drive_token');
   const expiry = localStorage.getItem('g_drive_token_expiry');
 
-  // If token exists and it has more than 5 minutes left, use it directly.
-  if (savedToken && expiry && Date.now() < (parseInt(expiry, 10) - 300000)) {
+  // If token exists, has time left, and we aren't forcing a prompt, use it.
+  if (!forcePrompt && savedToken && expiry && Date.now() < (parseInt(expiry, 10) - 300000)) {
     console.log("Using cached Google Drive token.");
     return savedToken;
   }
@@ -80,7 +80,6 @@ export const getAccessToken = async (): Promise<string> => {
           return reject(resp);
         }
         
-        // expires_in is in seconds, convert to milliseconds for expiry time
         const expiryTime = Date.now() + (resp.expires_in * 1000);
         localStorage.setItem('g_drive_token', resp.access_token);
         localStorage.setItem('g_drive_token_expiry', expiryTime.toString());
@@ -89,9 +88,9 @@ export const getAccessToken = async (): Promise<string> => {
         resolve(resp.access_token);
       };
 
-      // 'consent' forces a popup. '' will try silently if user has approved before.
-      // Use 'consent' if there was no previous token, to ensure user sees the prompt.
-      tokenClient.requestAccessToken({ prompt: savedToken ? '' : 'consent' });
+      // Use 'consent' prompt if forced or if no token was ever saved.
+      // Use silent prompt ('') if a token existed but may have expired.
+      tokenClient.requestAccessToken({ prompt: (savedToken && !forcePrompt) ? '' : 'consent' });
     } catch (err) {
       console.error("Google Token Request Error:", err);
       reject(err);

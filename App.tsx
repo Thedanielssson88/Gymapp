@@ -14,7 +14,7 @@ import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
 import { AIProgramDashboard } from './components/AIProgramDashboard';
 import { ZonePickerModal } from './components/ZonePickerModal';
-import { listBackups, downloadBackup, uploadBackup } from './services/googleDrive';
+import { listBackups, downloadBackup, uploadBackup, getAccessToken } from './services/googleDrive';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { suggestWeightForReps } from './utils/progression';
 import { registerBackHandler, executeBackHandler } from './utils/backHandler';
@@ -314,19 +314,29 @@ export default function App() {
       setCurrentSession(null);
       
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
-        const syncToCloud = async () => {
+        const syncToCloud = async (isRetry = false) => {
           try {
+            if (isRetry) {
+                await getAccessToken(true); // Force login prompt
+            }
             const allData = await exportDatabase();
             await uploadBackup(allData);
             console.log("Auto-sync to Google Drive successful after workout.");
-            // Update last sync time silently
             const profile = await storage.getUserProfile();
             await storage.setUserProfile({ ...profile, settings: { ...profile.settings, lastCloudSync: new Date().toISOString() }});
           } catch (err) {
-            console.warn("Auto-sync failed (user might not be logged in):", err);
+            console.warn("Auto-sync failed:", err);
+            if (!isRetry) {
+                const retry = window.confirm("Kunde inte spara till Google Drive (du kan vara utloggad). Vill du logga in och försöka igen?");
+                if (retry) {
+                    await syncToCloud(true);
+                }
+            } else {
+                alert("Synkroniseringen misslyckades igen. Du kan försöka manuellt från Inställningar senare.");
+            }
           }
         };
-        syncToCloud(); // Fire and forget
+        syncToCloud();
       }
 
       await refreshData(); 
