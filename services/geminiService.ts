@@ -223,7 +223,13 @@ export const generateProfessionalPlan = async (
     const contents = `
       Du är en expert-PT och träningsfysiolog. Skapa ett detaljerat träningsprogram.
       
-      DAGENS DATUM: ${today}
+      CURRENT CONTEXT:
+      - Today's Date: ${today}
+
+      CRITICAL RULES:
+      1. All new deadlines and scheduled workouts MUST be in the future relative to ${today}.
+      2. NEVER use dates from past years (e.g. 2023).
+      3. Format all dates as YYYY-MM-DD.
 
       VIKTIGT: Använd ENDAST övningar från listan nedan. Svara med det exakta ID:t för varje övning.
       TILLGÄNGLIGA ÖVNINGAR:
@@ -240,13 +246,12 @@ export const generateProfessionalPlan = async (
       - normal: Standard linjär progression. (+2.5kg/vecka för överkropp, +5kg/vecka för ben).
       - aggressive: Utmana användaren. Utnyttja "newbie gains" eller tuff periodisering. Öka snabbare om det är fysiologiskt möjligt (t.ex. +2.5kg per pass istället för per vecka för en nybörjare).
       
-      VIKTIGT - REALISM & DATUM:
+      VIKTIGT - REALISM:
       1. För SMART GOALS, använd NUVARANDE STYRKA för att sätta ett realistiskt 'startValue'.
       2. Bedöm om målet är fysiologiskt nåbart på ${durationWeeks} veckor med vald takt.
       3. Även vid 'aggressive', om målet är orealistiskt (t.ex. +60kg på 4v), designa programmet som "Fas 1" av en längre plan.
       4. Maximera då ökningen under denna fas (t.ex. gå från 40kg -> 55kg istället för 43kg) och skriv i 'motivation' att detta är en ambitiös start på en längre resa.
       5. Sätt målet (smartGoals) för sista veckan i detta program till en realistisk delvinst.
-      6. ALLA deadlines MÅSTE vara i framtiden, relativt till DAGENS DATUM (${today}). Använd ALLTID formatet 'YYYY-MM-DD'. GENERERA ALDRIG DATUM SOM REDAN HAR PASSERAT.
     `;
 
     const response = await ai.models.generateContent({

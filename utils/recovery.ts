@@ -25,37 +25,40 @@ export const calculateExerciseImpact = (
   const validSets = sets.filter(s => (s.reps || 0) > 0 || (s.duration || 0) > 0 || (s.distance || 0) > 0);
   if (validSets.length === 0) return 0;
 
-  const totalVolume = validSets.reduce((sum, s) => {
+  const totalImpact = validSets.reduce((sum, s) => {
     const trackingType = exData.trackingType || 'reps_weight';
-    switch (trackingType) {
+    let setImpact = 0;
+    
+    switch(trackingType) {
         case 'time_only':
-        case 'time_distance':
-            // JUSTERING: Sänkt koefficient från 0.1 till 0.04 för att balansera mot styrketräning.
-            // Plankan 60s @ 80kg: 60 * 80 * 0.5 * 0.04 = 96 (Motsvarar ca 1 rep @ 100kg)
             const duration = s.duration || 0;
-            const timeBasedBwFactor = exData.bodyweightCoefficient || 0.5;
-            // Dämpningsfaktor för extremt långa set (logaritmisk avtagande avkastning)
-            const effectiveDuration = duration > 60 ? 60 + (duration - 60) * 0.5 : duration;
-            const timeVolume = effectiveDuration * userBodyWeight * timeBasedBwFactor * 0.04;
-            return sum + timeVolume;
+            const effectiveBodyweightTime = userBodyWeight * (exData.bodyweightCoefficient || 0.5);
+            // 10 sekunders ansträngning motsvarar ungefär 1 "rep" med kroppsvikten
+            setImpact = (duration / 10) * effectiveBodyweightTime;
+            break;
+            
+        case 'time_distance':
+            // Anta att 1 meter i en tung konditionsövning motsvarar ca 10 poäng (10kg * 1 rep)
+            const distance = s.distance || 0;
+            setImpact = distance * 10;
+            break;
             
         case 'reps_only':
-            // JUSTERING: Sänkt rep-koefficient för att undvika överdriven belastning vid högvolym-calisthenics
-            const repBasedBwFactor = exData.bodyweightCoefficient || 0.7;
-            return sum + (userBodyWeight * repBasedBwFactor * (s.reps || 0) * 0.8);
+            const bodyweightLoadReps = userBodyWeight * (exData.bodyweightCoefficient || 0.7);
+            setImpact = bodyweightLoadReps * (s.reps || 0);
+            break;
             
         case 'reps_weight':
         default:
-            const bodyweightLoad = userBodyWeight * (exData.bodyweightCoefficient || 0);
-            const effectiveLoad = bodyweightLoad + (s.weight || 0);
-            return sum + (effectiveLoad * (s.reps || 0));
+            const addedBodyweightLoad = userBodyWeight * (exData.bodyweightCoefficient || 0);
+            const effectiveLoad = addedBodyweightLoad + (s.weight || 0);
+            setImpact = effectiveLoad * (s.reps || 0);
+            break;
     }
+    return sum + setImpact;
   }, 0);
   
-  // Bas-fatigue som skalar med volym men har ett tak per set
-  let fatigue = (totalVolume / 250) + (validSets.length * 1.5);
-  
-  return fatigue * exData.difficultyMultiplier;
+  return totalImpact * exData.difficultyMultiplier;
 };
 
 
@@ -92,7 +95,7 @@ export const calculateMuscleRecovery = (
       if (setsToCount.length === 0) return;
 
       const baseFatigue = calculateExerciseImpact(exData, setsToCount, userProfile.weight);
-      const finalFatigue = baseFatigue * intensityFactor;
+      const finalFatigue = (baseFatigue / 250) * intensityFactor;
 
       const primaries = exData.primaryMuscles?.length ? exData.primaryMuscles : exData.muscleGroups;
       primaries?.forEach(m => applyFatigue(status, m, finalFatigue, hoursSince));

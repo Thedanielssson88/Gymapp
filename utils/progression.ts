@@ -286,7 +286,6 @@ export const checkProgressiveOverload = (
   exercise: Exercise
 ): { improved: boolean; factor: number } => {
   
-  // Filtrera bort ofullständiga set
   const validPrev = prevSets.filter(s => s.completed);
   const validCurr = currentSets.filter(s => s.completed);
 
@@ -296,16 +295,16 @@ export const checkProgressiveOverload = (
   const getBestMetric = (sets: WorkoutSet[]) => {
     switch (exercise.trackingType) {
       case 'time_only':
-        // Jämför längsta tid
+        // Jämför längsta tid (duration)
         return Math.max(...sets.map(s => s.duration || 0));
       case 'time_distance':
-        // Jämför snabbaste tid eller längsta distans (beroende på mål, här kör vi distans)
+        // Jämför längsta distans (eller tid om man vill, men distans är oftast prio)
         return Math.max(...sets.map(s => s.distance || 0));
       case 'reps_only':
-        // Jämför max antal reps i ett set
+        // Jämför max antal reps
         return Math.max(...sets.map(s => s.reps || 0));
       default:
-        // Styrka: Jämför 1RM (Weight * Reps-faktor)
+        // Styrka: Jämför 1RM
         return Math.max(...sets.map(s => (s.weight || 0) * (1 + (s.reps || 0) / 30)));
     }
   };
@@ -313,9 +312,8 @@ export const checkProgressiveOverload = (
   const prevBest = getBestMetric(validPrev);
   const currBest = getBestMetric(validCurr);
 
-  // Om vi presterat bättre än förra gången
   if (currBest > prevBest) {
-    const increase = prevBest > 0 ? (currBest - prevBest) / prevBest : 1;
+    const increase = (currBest - prevBest) / (prevBest || 1); // Undvik dela med noll
     return { improved: true, factor: increase };
   }
 
