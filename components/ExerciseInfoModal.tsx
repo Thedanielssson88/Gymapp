@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Exercise, WorkoutSession, WorkoutSet } from '../types';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { registerBackHandler } from '../utils/backHandler';
-import { X, Dumbbell, Info, Calendar, Trophy, History, Shuffle, MessageSquare, RefreshCw, Activity } from 'lucide-react';
+import { X, Dumbbell, Info, Calendar, Trophy, History, Shuffle, MessageSquare, RefreshCw, Activity, Camera } from 'lucide-react';
 import { calculate1RM } from '../utils/fitness';
 
 interface ExerciseInfoModalProps {
@@ -13,6 +13,7 @@ interface ExerciseInfoModalProps {
   exIdx?: number;
   onApplyHistory?: (idx: number, sets: WorkoutSet[]) => void;
   onExerciseSwap?: (idx: number, newId: string) => void;
+  onGoToExercise?: (exerciseId: string) => void;
 }
 
 const formatSeconds = (totalSeconds: number | undefined) => {
@@ -30,6 +31,7 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
   exIdx = 0, 
   onApplyHistory, 
   onExerciseSwap, 
+  onGoToExercise,
 }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'history' | 'alternatives'>('info');
   const imageSrc = useExerciseImage(exercise);
@@ -44,6 +46,13 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
   useEffect(() => {
     return registerBackHandler(onClose);
   }, [onClose]);
+  
+  const handleEditImage = () => {
+    if (onGoToExercise) {
+      onClose(); // Close this modal first
+      onGoToExercise(exercise.id);
+    }
+  };
 
   const stats = useMemo(() => {
     const exerciseHistory = history
@@ -128,26 +137,46 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
         {activeTab === 'info' && (
           <div className="space-y-6 animate-in slide-in-from-bottom-2">
             
-            <div className="aspect-video w-full bg-white/5 rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative group">
-                {imageSrc ? (
-                    <img src={imageSrc} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={exercise.name} />
-                ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-white/10">
-                        <Dumbbell size={64} />
-                        <span className="text-xs font-black uppercase tracking-widest mt-4">Ingen bild</span>
-                    </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0f0d15] via-transparent to-transparent opacity-60" />
-                <div className="absolute bottom-4 left-4 right-4">
-                    <div className="flex flex-wrap gap-2">
-                        <span className="px-3 py-1 bg-accent-blue/20 border border-accent-blue/30 rounded-lg text-[9px] font-black uppercase text-accent-blue backdrop-blur-sm">
-                            {exercise.pattern}
-                        </span>
-                        <span className="px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-[9px] font-black uppercase text-white backdrop-blur-sm">
-                            {exercise.tier === 'tier_1' ? 'Basövning' : exercise.tier === 'tier_2' ? 'Komplement' : 'Isolering'}
-                        </span>
-                    </div>
+            <div className="w-full bg-white/5 rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative group">
+              {imageSrc ? (
+                <div className="relative">
+                  <img
+                    src={imageSrc}
+                    alt={exercise.name}
+                    className="w-full h-auto max-h-[60vh] object-contain mx-auto" 
+                  />
+                  {onGoToExercise && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditImage();
+                      }}
+                      className="absolute top-4 right-4 p-2 bg-black/60 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent-blue hover:text-black"
+                    >
+                      <Camera size={20} />
+                    </button>
+                  )}
                 </div>
+              ) : (
+                <div 
+                  onClick={onGoToExercise ? handleEditImage : undefined} 
+                  className={`h-64 flex flex-col items-center justify-center text-text-dim ${onGoToExercise ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}`}
+                >
+                  <Camera size={48} className="mb-2 opacity-50" />
+                  <span className="text-sm font-medium">Lägg till bild</span>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0f0d15] via-transparent to-transparent opacity-60 pointer-events-none" />
+              <div className="absolute bottom-4 left-4 right-4 pointer-events-none">
+                  <div className="flex flex-wrap gap-2">
+                      <span className="px-3 py-1 bg-accent-blue/20 border border-accent-blue/30 rounded-lg text-[9px] font-black uppercase text-accent-blue backdrop-blur-sm">
+                          {exercise.pattern}
+                      </span>
+                      <span className="px-3 py-1 bg-white/10 border border-white/20 rounded-lg text-[9px] font-black uppercase text-white backdrop-blur-sm">
+                          {exercise.tier === 'tier_1' ? 'Basövning' : exercise.tier === 'tier_2' ? 'Komplement' : 'Isolering'}
+                      </span>
+                  </div>
+              </div>
             </div>
 
             {exercise.description && (

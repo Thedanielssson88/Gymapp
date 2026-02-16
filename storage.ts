@@ -1,8 +1,8 @@
 
+
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
-import { BackupData } from './googleDrive';
 
 const ACTIVE_SESSION_KEY = 'morphfit_active_session';
 
@@ -240,7 +240,6 @@ export const storage = {
     window.dispatchEvent(new Event('storage-update'));
   },
   
-  // FIX: Added missing clearUpcomingProgramActivities function to storage object.
   clearUpcomingProgramActivities: async (programId: string): Promise<void> => {
     const today = new Date().toISOString().split('T')[0];
     const activitiesToDelete = await db.scheduledActivities
@@ -253,12 +252,11 @@ export const storage = {
     }
   },
 
-  // FIX: Renamed `cancelAIProgram` to `deleteAIProgram` and implemented full deletion logic.
   deleteAIProgram: async (programId: string): Promise<void> => {
     const program = await db.aiPrograms.get(programId);
     if (!program) return;
   
-    await db.transaction('rw', db.aiPrograms, db.scheduledActivities, db.userMissions, async () => {
+    await (db as any).transaction('rw', db.aiPrograms, db.scheduledActivities, db.userMissions, async () => {
       // 1. Delete future, non-completed scheduled activities for this program
       const today = new Date().toISOString().split('T')[0];
       const activitiesToDelete = await db.scheduledActivities
@@ -281,41 +279,6 @@ export const storage = {
     
     window.dispatchEvent(new Event('storage-update'));
   },
-
-
-  getFullBackupData: async (): Promise<BackupData> => {
-    return {
-      profile: await storage.getUserProfile(),
-      history: await db.workoutHistory.toArray(),
-      zones: await db.zones.toArray(),
-      exercises: await db.exercises.toArray(),
-      routines: await db.workoutRoutines.toArray(),
-      biometricLogs: await db.biometricLogs.toArray(),
-      missions: await db.userMissions.toArray(),
-      goalTargets: await db.goalTargets.toArray(),
-      exportedAt: new Date().toISOString()
-    };
-  },
-
-  importFullBackup: async (data: BackupData) => {
-    await (db as any).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.workoutRoutines, db.userMissions, db.goalTargets], async () => {
-      await db.userProfile.put(data.profile);
-      await db.zones.clear();
-      await db.zones.bulkPut(data.zones);
-      await db.exercises.clear();
-      await db.exercises.bulkPut(data.exercises);
-      await db.workoutHistory.clear();
-      await db.workoutHistory.bulkPut(data.history);
-      await db.biometricLogs.clear();
-      await db.biometricLogs.bulkPut(data.biometricLogs);
-      await db.workoutRoutines.clear();
-      await db.workoutRoutines.bulkPut(data.routines);
-      await db.userMissions.clear();
-      await db.userMissions.bulkPut(data.missions);
-      await db.goalTargets.clear();
-      await db.goalTargets.bulkPut(data.goalTargets);
-    });
-  }
 };
 
 export const exportExerciseLibrary = async () => {

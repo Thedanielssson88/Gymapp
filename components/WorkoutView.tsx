@@ -37,12 +37,13 @@ interface WorkoutViewProps {
   onUpdate: () => void;
   isManualMode?: boolean;
   userMissions: UserMission[];
+  onGoToExercise: (exerciseId: string) => void;
 }
 
 export const WorkoutView: React.FC<WorkoutViewProps> = ({ 
   session, allExercises, userProfile, allZones, history, activeZone, 
   onZoneChange, onComplete, onCancel, plannedActivities, onStartActivity, onStartEmptyWorkout, onUpdate,
-  userMissions, isManualMode = false
+  userMissions, isManualMode = false, onGoToExercise
 }) => {
   const [localSession, setLocalSession] = useState<WorkoutSession | null>(session);
   const [timer, setTimer] = useState(0);
@@ -730,7 +731,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
               })}</div>
         </div>
       )}
-      {infoModalData && <ExerciseInfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onExerciseSwap={handleSwapExercise} allExercises={allExercises} />}
+      {infoModalData && <ExerciseInfoModal exercise={infoModalData.exercise} exIdx={infoModalData.index} onClose={() => setInfoModalData(null)} history={history} onApplyHistory={handleApplyHistory} onExerciseSwap={handleSwapExercise} allExercises={allExercises} onGoToExercise={onGoToExercise} />}
 
       {showNoSetsInfo && (
         <div className="fixed inset-0 bg-[#0f0d15]/95 backdrop-blur-md z-[9999] flex items-center justify-center p-6 animate-in fade-in duration-300">

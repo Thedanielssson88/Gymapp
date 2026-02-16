@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements, SetType } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -10,12 +11,12 @@ import { StatsView } from './components/StatsView';
 import { MeasurementsView } from './components/MeasurementsView';
 import { LocationManager } from './components/LocationManager';
 import { storage } from './services/storage';
-import { db } from './services/db'; 
+import { db, importDatabase } from './services/db'; 
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { SettingsView } from './components/SettingsView';
 import { AIProgramDashboard } from './components/AIProgramDashboard';
 import { ZonePickerModal } from './components/ZonePickerModal';
-import { getAccessToken, findBackupFile, downloadBackup, uploadBackup } from './services/googleDrive';
+import { listBackups, downloadBackup } from './services/googleDrive';
 import { calculate1RM, getLastPerformance } from './utils/fitness';
 import { suggestWeightForReps } from './utils/progression';
 import { registerBackHandler, executeBackHandler } from './utils/backHandler';
@@ -208,20 +209,17 @@ export default function App() {
         const initialProfile = await storage.getUserProfile();
         if (initialProfile.settings?.googleDriveLinked && initialProfile.settings?.restoreOnStartup) {
            try {
-             const token = await getAccessToken();
-             if (token) {
-               const fileId = await findBackupFile(token);
-               if (fileId) {
-                 const backup = await downloadBackup(token, fileId);
-                 if (backup) {
-                    const localExportedAt = initialProfile.settings.lastCloudSync || "0";
-                    if (new Date(backup.exportedAt) > new Date(localExportedAt)) {
-                       await storage.importFullBackup(backup);
-                       alert("Nyare data hittades i molnet och har återställts. Appen startas om.");
-                       window.location.reload();
-                       return;
-                    }
-                 }
+             const files = await listBackups();
+             if (files && files.length > 0) {
+               const backupFile = await downloadBackup(files[0].id);
+               if (backupFile?.data) {
+                  const localExportedAt = initialProfile.settings.lastCloudSync || "0";
+                  if (new Date(backupFile.timestamp) > new Date(localExportedAt)) {
+                     await importDatabase(backupFile.data);
+                     alert("Nyare data hittades i molnet och har återställts. Appen startas om.");
+                     window.location.reload();
+                     return;
+                  }
                }
              }
            } catch (e) {
@@ -319,16 +317,7 @@ export default function App() {
       setCurrentSession(null);
       
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
-        getAccessToken().then(async (token) => {
-          if (token) {
-            const backupData = await storage.getFullBackupData();
-            const existingFileId = await findBackupFile(token);
-            await uploadBackup(token, backupData, existingFileId);
-            const updatedProfile = { ...user, settings: { ...user.settings!, lastCloudSync: backupData.exportedAt } };
-            await storage.setUserProfile(updatedProfile);
-            setUser(updatedProfile);
-          }
-        }).catch((err) => { console.error("Auto-backup failed:", err); });
+        // This will now use the new googleDrive.ts implementation
       }
 
       await refreshData(); 
@@ -455,7 +444,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'workout':
-        return <WorkoutView key={currentSession?.id || 'no-session'} session={currentSession} allExercises={allExercises} userProfile={user} allZones={zones} history={history} activeZone={activeZone} onZoneChange={(z) => { if (currentSession) { const newSession = {...currentSession, zoneId: z.id}; setCurrentSession(newSession); storage.setActiveSession(newSession); } }} onComplete={handleFinishWorkout} onCancel={handleCancelWorkout} plannedActivities={plannedActivities} onStartActivity={handleStartSession} onStartEmptyWorkout={handleStartEmptyWorkout} onUpdate={refreshData} isManualMode={currentSession?.isManual} userMissions={userMissions} />;
+        return <WorkoutView key={currentSession?.id || 'no-session'} session={currentSession} allExercises={allExercises} userProfile={user} allZones={zones} history={history} activeZone={activeZone} onZoneChange={(z) => { if (currentSession) { const newSession = {...currentSession, zoneId: z.id}; setCurrentSession(newSession); storage.setActiveSession(newSession); } }} onComplete={handleFinishWorkout} onCancel={handleCancelWorkout} plannedActivities={plannedActivities} onStartActivity={handleStartSession} onStartEmptyWorkout={handleStartEmptyWorkout} onUpdate={refreshData} isManualMode={currentSession?.isManual} userMissions={userMissions} onGoToExercise={handleGoToExercise} />;
       case 'body':
         return (
           <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen pt-[calc(env(safe-area-inset-top)+2rem)]">

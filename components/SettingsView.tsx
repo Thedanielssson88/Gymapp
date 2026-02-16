@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile, Goal, UserSettings } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
-import { db } from '../services/db';
-import { getAccessToken, uploadBackup, findBackupFile, BackupData, isTokenValid } from '../services/googleDrive';
+import { db, exportDatabase, importDatabase } from '../services/db';
+import { uploadBackup, listBackups, downloadBackup } from '../services/googleDrive';
 import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2, Timer, Key } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -14,19 +14,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   const [localProfile, setLocalProfile] = useState<UserProfile>(userProfile);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
   const [connectionError, setConnectionError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // Proactively check token validity on mount if user is linked
-    if (userProfile.settings?.googleDriveLinked) {
-      isTokenValid().then(valid => {
-        if (!valid) {
-          setConnectionError(true);
-        }
-      });
-    }
-  }, [userProfile.settings?.googleDriveLinked]);
 
   const handleSettingChange = (key: keyof UserSettings, value: any) => {
     setLocalProfile(prev => ({
@@ -48,22 +38,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     onUpdate();
     alert("Inställningar sparade!");
   };
-
-  const handleCloudSync = async () => {
+  
+  const handleCloudBackup = async () => {
     setIsSyncing(true);
     setSyncStatus('idle');
-    setConnectionError(false);
-
+    setSyncMessage('Ansluter & exporterar data...');
     try {
-      const token = await getAccessToken();
-      if (!token) {
-        throw new Error("Kunde inte ansluta till Google. Försök igen.");
-      }
-
-      const backupData = await storage.getFullBackupData();
-      const existingFileId = await findBackupFile(token);
-      await uploadBackup(token, backupData, existingFileId);
-      
+      const data = await exportDatabase();
+      setSyncMessage('Laddar upp till Google Drive...');
+      await uploadBackup(data);
+      setSyncStatus('success');
+      setSyncMessage('Backup lyckades!');
       const updatedProfile = {
         ...localProfile,
         settings: {
@@ -74,25 +59,69 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
       };
       await storage.setUserProfile(updatedProfile);
       setLocalProfile(updatedProfile);
-      setSyncStatus('success');
       onUpdate();
     } catch (error) {
-      console.error("Cloud sync failed:", error);
+      console.error(error);
       setSyncStatus('error');
+      setSyncMessage('Kunde inte göra backup.');
     } finally {
       setIsSyncing(false);
-      setTimeout(() => setSyncStatus('idle'), 3000); // Reset status after 3s
+      setTimeout(() => setSyncStatus('idle'), 5000);
+    }
+  };
+
+  const handleCloudRestore = async () => {
+    if (!confirm("Är du säker? Detta kommer skriva över all din nuvarande lokala data med datan från din backup.")) {
+        return;
+    }
+    setIsSyncing(true);
+    setSyncStatus('idle');
+    setSyncMessage('Letar efter backup...');
+    try {
+      const files = await listBackups();
+      if (files.length === 0) {
+        setSyncStatus('error');
+        setSyncMessage('Ingen backup hittades');
+        return;
+      }
+  
+      setSyncMessage('Laddar ner...');
+      const backupFile = await downloadBackup(files[0].id);
+  
+      if (backupFile?.data) {
+        setSyncMessage('Återställer databas...');
+        await importDatabase(backupFile.data);
+        setSyncStatus('success');
+        setSyncMessage('Klart! Startar om...');
+        
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+          throw new Error("Backup-filen var korrupt eller tom.");
+      }
+    } catch (error) {
+      console.error(error);
+      setSyncStatus('error');
+      setSyncMessage('Fel vid återställning.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncStatus('idle'), 5000);
     }
   };
 
   const handleExport = async () => {
-    const allData = await storage.getFullBackupData();
-    const blob = new Blob([JSON.stringify(allData)], { type: "application/json" });
+    const allData = await exportDatabase();
+    const backupObject = {
+        timestamp: new Date().toISOString(),
+        device: 'local_export',
+        data: allData
+    };
+    const blob = new Blob([JSON.stringify(backupObject, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `morphfit_backup.json`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,7 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     if (!file) return;
 
     if (!confirm("Är du säker? Detta kommer att skriva över all din nuvarande data.")) {
-        if(e.target) e.target.value = ''; // Reset file input
+        if(e.target) e.target.value = '';
         return;
     }
 
@@ -108,18 +137,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     reader.onload = async (event) => {
         try {
             const content = event.target?.result as string;
-            const data = JSON.parse(content) as BackupData;
-            if (!data.profile || !data.history) {
+            const data = JSON.parse(content);
+            if (!data.data || !data.data.profile) {
               throw new Error("Filen verkar inte vara en giltig backup.");
             }
-            await storage.importFullBackup(data);
+            await importDatabase(data.data);
             alert("Återställning klar! Appen startas om.");
             window.location.reload();
         } catch (error) {
             alert("Kunde inte läsa backup-filen: " + (error as Error).message);
             console.error("Import failed:", error);
         } finally {
-            if(e.target) e.target.value = ''; // Reset file input
+            if(e.target) e.target.value = '';
         }
     };
     reader.readAsText(file);
@@ -144,21 +173,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
       alert("Ett fel uppstod vid importen: " + err.message);
     }
   };
-
-  const getSyncButtonContent = () => {
-    if (isSyncing) return <><Loader2 className="animate-spin" size={18} /> Synkroniserar...</>;
-    if (syncStatus === 'success') return <><CheckCircle2 size={18} /> Synkning Lyckades!</>;
-    if (syncStatus === 'error') return <><AlertCircle size={18} /> Försök Igen</>;
-    return <><Cloud size={18} /> {localProfile.settings?.googleDriveLinked ? 'Synka Nu' : 'Anslut till Google Drive'}</>;
-  };
   
-  const getSyncButtonClass = () => {
-    if (isSyncing) return 'bg-white/5 text-white/40 cursor-not-allowed';
-    if (syncStatus === 'success') return 'bg-accent-green text-black';
-    if (syncStatus === 'error') return 'bg-red-500 text-white';
-    return 'bg-accent-blue text-white shadow-lg shadow-accent-blue/20';
-  };
-
   return (
     <div className="space-y-8 pb-32 px-2 animate-in fade-in">
       
@@ -216,23 +231,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
           </div>
         </div>
 
-        {connectionError && (
-          <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl animate-in fade-in">
-            <AlertCircle className="text-red-500" size={24} />
-            <p className="text-[10px] font-bold text-red-500 uppercase leading-snug">
-              Anslutningen till Google har löpt ut. Tryck på "Synka Nu" för att logga in igen.
-            </p>
-          </div>
-        )}
-
         <div className="space-y-4">
-          <button 
-            onClick={handleCloudSync}
-            disabled={isSyncing}
-            className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black uppercase tracking-widest text-xs transition-all active:scale-95 ${getSyncButtonClass()}`}
-          >
-            {getSyncButtonContent()}
-          </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={handleCloudBackup}
+                disabled={isSyncing}
+                className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-black uppercase tracking-widest text-xs transition-all active:scale-95 bg-accent-blue/80 text-white shadow-lg shadow-accent-blue/20 disabled:opacity-50`}
+              >
+                  <Upload size={16}/> Spara i molnet
+              </button>
+              <button 
+                onClick={handleCloudRestore}
+                disabled={isSyncing}
+                className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-black uppercase tracking-widest text-xs transition-all active:scale-95 bg-white/5 text-white disabled:opacity-50`}
+              >
+                  <Download size={16}/> Hämta från molnet
+              </button>
+            </div>
+          
+            {isSyncing && (
+                <div className="flex items-center gap-2 text-xs font-bold justify-center text-text-dim"><Loader2 className="animate-spin" size={14}/> {syncMessage}</div>
+            )}
+            {syncStatus === 'success' && !isSyncing && (
+                <div className="flex items-center gap-2 text-xs font-bold justify-center text-accent-green"><CheckCircle2 size={14}/> {syncMessage}</div>
+            )}
+            {syncStatus === 'error' && !isSyncing && (
+                <div className="flex items-center gap-2 text-xs font-bold justify-center text-red-500"><AlertCircle size={14}/> {syncMessage}</div>
+            )}
 
           {localProfile.settings?.lastCloudSync && !connectionError && (
             <p className="text-[9px] text-center text-text-dim uppercase font-bold">
@@ -246,22 +271,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                 <div className="flex items-center gap-3">
                   <RefreshCw size={16} className="text-text-dim" />
                   <div>
-                    <p className="text-sm font-bold text-white">Auto-synk efter pass</p>
-                    <p className="text-[9px] text-text-dim uppercase">Ladda upp automatiskt</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => handleSettingChange('autoSyncMode', localProfile.settings?.autoSyncMode === 'after_workout' ? 'manual' : 'after_workout')}
-                  className={`w-10 h-5 rounded-full relative transition-colors ${localProfile.settings?.autoSyncMode === 'after_workout' ? 'bg-accent-blue' : 'bg-white/10'}`}
-                >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${localProfile.settings?.autoSyncMode === 'after_workout' ? 'left-5.5' : 'left-0.5'}`} />
-                </button>
-              </div>
-              
-              <div className="flex items-center justify-between py-2 border-t border-white/5">
-                <div className="flex items-center gap-3">
-                  <RefreshCw size={16} className="text-text-dim" />
-                  <div>
                     <p className="text-sm font-bold text-white">Återställ vid start</p>
                     <p className="text-[9px] text-text-dim uppercase">Kolla efter nyare data</p>
                   </div>
@@ -270,7 +279,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                   onClick={() => handleSettingChange('restoreOnStartup', !(localProfile.settings?.restoreOnStartup ?? false))}
                   className={`w-10 h-5 rounded-full relative transition-colors ${(localProfile.settings?.restoreOnStartup ?? false) ? 'bg-accent-blue' : 'bg-white/10'}`}
                 >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.restoreOnStartup ?? false) ? 'left-5.5' : 'left-0.5'}`} />
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.restoreOnStartup ?? false) ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </div>
             </div>
@@ -299,93 +308,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               Hämta nyckel här
             </a>
           </p>
-        </div>
-      </section>
-
-      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-6">
-         <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
-            <Smartphone className="text-accent-blue" /> Appupplevelse
-         </h3>
-
-         <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <div className="flex items-center gap-3">
-               {(localProfile.settings?.bodyViewMode || 'list') === 'list' ? <LayoutList size={18} className="text-white"/> : <Map size={18} className="text-white"/>}
-               <div>
-                  <p className="text-sm font-bold text-white">Kroppsvy</p>
-                  <p className="text-[10px] text-text-dim">Hur vill du se din status?</p>
-               </div>
-            </div>
-            
-            <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
-               <button 
-                 onClick={() => handleSettingChange('bodyViewMode', 'list')}
-                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider ${
-                   (localProfile.settings?.bodyViewMode || 'list') === 'list' 
-                     ? 'bg-white text-black shadow-sm' 
-                     : 'text-text-dim hover:bg-white/5'
-                 }`}
-               >
-                 <LayoutList size={14} /> Lista
-               </button>
-               <button 
-                 onClick={() => handleSettingChange('bodyViewMode', 'map')}
-                 className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider ${
-                   (localProfile.settings?.bodyViewMode || 'list') === 'map' 
-                     ? 'bg-white text-black shadow-sm' 
-                     : 'text-text-dim hover:bg-white/5'
-                 }`}
-               >
-                 <Map size={14} /> Karta
-               </button>
-            </div>
-         </div>
-
-         <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <div className="flex items-center gap-3">
-              <Thermometer size={18} className="text-text-dim" />
-              <div>
-                <p className="text-sm font-bold text-white">Logga Uppvärmning</p>
-                <p className="text-[10px] text-text-dim">Räkna med värmset i stats</p>
-              </div>
-            </div>
-            <button 
-              onClick={() => handleSettingChange('includeWarmupInStats', !(localProfile.settings?.includeWarmupInStats ?? false))}
-              className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.includeWarmupInStats ?? false) ? 'bg-accent-green' : 'bg-white/10'}`}
-            >
-              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.includeWarmupInStats ?? false) ? 'left-7' : 'left-1'}`} />
-            </button>
-         </div>
-         
-         <div className="flex items-center justify-between py-2 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <Smartphone size={18} className={localProfile.settings?.vibrateButtons ? "text-accent-blue" : "text-text-dim"} />
-            <div>
-              <p className="text-sm font-bold text-white">Vibrera vid tryck</p>
-              <p className="text-[10px] text-text-dim">Känn haptisk feedback när du trycker på knappar</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => handleSettingChange('vibrateButtons', !(localProfile.settings?.vibrateButtons ?? true))}
-            className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.vibrateButtons ?? true) ? 'bg-accent-blue' : 'bg-white/10'}`}
-          >
-            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateButtons ?? true) ? 'left-7' : 'left-1'}`} />
-          </button>
-         </div>
-
-         <div className="flex items-center justify-between py-2 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <Timer size={18} className={localProfile.settings?.vibrateTimer ? "text-accent-green" : "text-text-dim"} />
-            <div>
-              <p className="text-sm font-bold text-white">Vibrera vid timer slut</p>
-              <p className="text-[10px] text-text-dim">Kraftig vibration när vilan är över</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => handleSettingChange('vibrateTimer', !(localProfile.settings?.vibrateTimer ?? true))}
-            className={`w-12 h-6 rounded-full relative transition-colors ${(localProfile.settings?.vibrateTimer ?? true) ? 'bg-accent-green' : 'bg-white/10'}`}
-          >
-            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${(localProfile.settings?.vibrateTimer ?? true) ? 'left-7' : 'left-1'}`} />
-          </button>
         </div>
       </section>
 
@@ -462,11 +384,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
       <div className="grid grid-cols-2 gap-3">
         <button onClick={handleExport} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
           <Download size={20} className="text-accent-blue" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Full Backup</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Lokal Backup</span>
         </button>
         <button onClick={() => fileInputRef.current?.click()} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
           <Upload size={20} className="text-accent-green" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Återställ Allt</span>
+          <span className="text-[10px] font-black uppercase tracking-widest">Lokal Återställning</span>
         </button>
       </div>
       <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />

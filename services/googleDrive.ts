@@ -1,150 +1,180 @@
-import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, WorkoutRoutine, UserMission, GoalTarget } from '../types';
-import { GOOGLE_CLIENT_ID, DRIVE_BACKUP_FILENAME } from '../constants';
+import { GOOGLE_CLIENT_ID } from '../constants';
+
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+
+let tokenClient: any;
+let gapiInited = false;
+let gisInited = false;
 
 export interface BackupData {
-  profile: UserProfile;
-  history: WorkoutSession[];
-  zones: Zone[];
-  exercises: Exercise[];
-  routines: WorkoutRoutine[];
-  biometricLogs: BiometricLog[];
-  missions: UserMission[];
-  goalTargets: GoalTarget[];
-  exportedAt: string;
+  timestamp: string;
+  data: any;
+  device: string;
 }
 
-const STORAGE_KEY_TOKEN = 'google_access_token';
-const STORAGE_KEY_EXPIRY = 'google_token_expiry';
-
 /**
- * Checks if the currently stored token is still valid by pinging Google's token info endpoint.
+ * 1. Laddar nödvändiga Google-skript
  */
-export const isTokenValid = async (): Promise<boolean> => {
-    const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
-    const expiry = localStorage.getItem(STORAGE_KEY_EXPIRY);
-    // 5-minute safety margin (300000 ms)
-    if (storedToken && expiry && Date.now() < parseInt(expiry) - 300000) {
-        try {
-            const response = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${storedToken}`);
-            return response.ok;
-        } catch {
-            return false;
-        }
-    }
-    return false;
-};
-
-/**
- * Handles Google OAuth2 login and returns an access token, now with localStorage persistence.
- */
-export const getAccessToken = async (): Promise<string | null> => {
-  // 1. Check for a valid, non-expired token in localStorage
-  const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
-  const expiry = localStorage.getItem(STORAGE_KEY_EXPIRY);
-
-  // 5-minute safety margin (300000 ms)
-  if (storedToken && expiry && Date.now() < parseInt(expiry) - 300000) {
-    return storedToken;
-  }
-
-  // 2. If no valid token exists, request a new one
-  return new Promise((resolve, reject) => {
-    if (!(window as any).google || !(window as any).google.accounts) {
-      console.error("Google script not loaded");
-      alert("Kunde inte ladda Google-inloggning. Kontrollera din internetanslutning.");
-      resolve(null);
+export const initializeGoogleDrive = async (): Promise<void> => {
+  return new Promise((resolve) => {
+    if (gapiInited && gisInited) {
+      resolve();
       return;
     }
 
-    const client = (window as any).google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/drive.file',
-      callback: (response: any) => {
-        if (response.error) {
-          console.error("Google Auth Error:", response);
-          // Clear stale tokens if auth fails
-          localStorage.removeItem(STORAGE_KEY_TOKEN);
-          localStorage.removeItem(STORAGE_KEY_EXPIRY);
-          reject(response);
-        } else {
-          // Save the new token and calculate its expiry time
-          const expiresIn = response.expires_in || 3599; // in seconds
-          const expiryTime = Date.now() + (expiresIn * 1000);
-          
-          localStorage.setItem(STORAGE_KEY_TOKEN, response.access_token);
-          localStorage.setItem(STORAGE_KEY_EXPIRY, expiryTime.toString());
-          
-          resolve(response.access_token);
-        }
-      },
-    });
+    // Ladda GAPI (för Drive API anrop)
+    const gapiScript = document.createElement('script');
+    gapiScript.src = 'https://apis.google.com/js/api.js';
+    gapiScript.async = true;
+    gapiScript.defer = true;
+    gapiScript.onload = () => {
+      (window as any).gapi.load('client', async () => {
+        await (window as any).gapi.client.init({
+          discoveryDocs: [DISCOVERY_DOC],
+        });
+        gapiInited = true;
+        if (gisInited) resolve();
+      });
+    };
+    document.body.appendChild(gapiScript);
 
-    client.requestAccessToken();
+    // Ladda GIS (för Inloggning)
+    const gisScript = document.createElement('script');
+    gisScript.src = 'https://accounts.google.com/gsi/client';
+    gisScript.async = true;
+    gisScript.defer = true;
+    gisScript.onload = () => {
+      // @ts-ignore
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: SCOPES,
+        callback: '', // Definieras senare vid request
+      });
+      gisInited = true;
+      if (gapiInited) resolve();
+    };
+    document.body.appendChild(gisScript);
   });
 };
 
 /**
- * Finds the backup file on Google Drive.
+ * 2. Logga in och hämta Token
  */
-export const findBackupFile = async (token: string): Promise<string | null> => {
+export const getAccessToken = async (): Promise<string> => {
+  if (!gapiInited || !gisInited) await initializeGoogleDrive();
+
+  return new Promise((resolve, reject) => {
+    // Om vi redan har en giltig token, använd den (valfritt, men GIS hanterar detta bra själv)
+    
+    try {
+      tokenClient.callback = (resp: any) => {
+        if (resp.error !== undefined) {
+          reject(resp);
+        }
+        // Sätt token i gapi så att client.drive anrop fungerar
+        const token = { access_token: resp.access_token };
+        (window as any).gapi.client.setToken(token);
+        resolve(resp.access_token);
+      };
+
+      // Trigga popup/redirect
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (err) {
+      console.error("GAPI/GIS Error:", err);
+      reject(err);
+    }
+  });
+};
+
+/**
+ * 3. Hitta existerande backup
+ */
+export const listBackups = async (): Promise<any[]> => {
+  await getAccessToken(); // Säkerställ inloggning
+
   try {
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_BACKUP_FILENAME}' and trashed=false&fields=files(id, name, modifiedTime)`, {
-      headers: { Authorization: `Bearer ${token}` }
+    const response = await (window as any).gapi.client.drive.files.list({
+      pageSize: 10,
+      fields: 'files(id, name, createdTime)',
+      q: "name = 'morphfit_backup.json' and trashed = false",
     });
-    const data = await response.json();
-    return data.files && data.files.length > 0 ? data.files[0].id : null;
+    return response.result.files || [];
   } catch (error) {
-    console.error("Error finding backup file:", error);
-    return null;
+    console.error("List error:", error);
+    throw error;
   }
 };
 
 /**
- * Downloads the backup file from Google Drive.
+ * 4. Ladda upp (Skapa ny eller Uppdatera)
  */
-export const downloadBackup = async (token: string, fileId: string): Promise<BackupData | null> => {
-  try {
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    return await response.json();
-  } catch (error) {
-    console.error("Error downloading backup:", error);
-    return null;
-  }
-};
+export const uploadBackup = async (data: any): Promise<void> => {
+  const token = await getAccessToken();
 
-/**
- * Creates or updates the backup file on Google Drive.
- */
-export const uploadBackup = async (token: string, data: BackupData, existingFileId: string | null): Promise<string | null> => {
+  const fileName = 'morphfit_backup.json';
+  const fileContent = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    device: navigator.userAgent,
+    data: data
+  }, null, 2);
+
+  const file = new Blob([fileContent], { type: 'application/json' });
+  
+  // Kolla om filen finns
+  const existingFiles = await listBackups();
+  
   const metadata = {
-    name: DRIVE_BACKUP_FILENAME,
+    name: fileName,
     mimeType: 'application/json',
   };
 
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  form.append('file', file);
 
-  try {
-    let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-    let method = 'POST';
+  let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  let method = 'POST';
 
-    if (existingFileId) {
-      url = `https://www.googleapis.com/upload/drive/v3/files/${existingFileId}?uploadType=multipart`;
-      method = 'PATCH';
-    }
+  // Om filen finns, uppdatera den istället (PATCH)
+  if (existingFiles.length > 0) {
+    const fileId = existingFiles[0].id;
+    url = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
+    method = 'PATCH';
+  }
 
-    const response = await fetch(url, {
-      method,
-      headers: { Authorization: `Bearer ${token}` },
-      body: form
-    });
-    const result = await response.json();
-    return result.id;
-  } catch (error) {
-    console.error("Error uploading backup:", error);
-    return null;
+  await fetch(url, {
+    method: method,
+    headers: new Headers({ 'Authorization': 'Bearer ' + token }),
+    body: form,
+  });
+};
+
+/**
+ * 5. Ladda ner och återställ
+ */
+export const downloadBackup = async (fileId: string): Promise<BackupData> => {
+  const token = await getAccessToken(); // Behövs för fetch
+
+  // Vi använder fetch för att ladda ner innehållet (alt=media)
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+
+  if (!response.ok) throw new Error('Failed to download file');
+  
+  const data = await response.json();
+  return data as BackupData;
+};
+
+/**
+ * 6. Logga ut
+ */
+export const signOutGoogle = () => {
+  const token = (window as any).gapi?.client?.getToken();
+  if (token) {
+    // @ts-ignore
+    google.accounts.oauth2.revoke(token.access_token, () => {console.log('Revoked')});
+    (window as any).gapi.client.setToken(null);
   }
 };

@@ -1,4 +1,5 @@
 
+
 import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
@@ -83,7 +84,8 @@ export const migrateFromLocalStorage = async () => {
   ];
 
   try {
-    await (db as Dexie).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.goalTargets, db.workoutRoutines], async () => {
+    // @ts-ignore
+    await (db as Dexie).transaction('rw', db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.goalTargets, db.workoutRoutines, async () => {
       for (const { key, table } of tables) {
         const raw = localStorage.getItem(key);
         if (raw) {
@@ -106,4 +108,50 @@ export const migrateFromLocalStorage = async () => {
   } catch(e) {
     console.error("Allvarligt fel under databasmigrering: ", e);
   }
+};
+
+/**
+ * Exportera hela databasen till JSON
+ */
+export const exportDatabase = async () => {
+  const profile = await db.userProfile.get('current') || { ...DEFAULT_PROFILE, id: 'current' };
+  const allTables = {
+    profile,
+    history: await db.workoutHistory.toArray(),
+    zones: await db.zones.toArray(),
+    exercises: await db.exercises.toArray(),
+    routines: await db.workoutRoutines.toArray(),
+    biometricLogs: await db.biometricLogs.toArray(),
+    missions: await db.userMissions.toArray(),
+    goalTargets: await db.goalTargets.toArray(),
+  };
+  return {
+    ...allTables,
+    version: 1
+  };
+};
+
+/**
+ * Importera och skriv över databasen
+ */
+export const importDatabase = async (data: any) => {
+  const tablesToClear = [
+    db.userProfile, db.zones, db.exercises, db.workoutHistory,
+    db.biometricLogs, db.workoutRoutines, db.userMissions, db.goalTargets
+  ];
+  // FIX: Cast db to Dexie to access the transaction method.
+  return (db as Dexie).transaction('rw', tablesToClear, async () => {
+    for (const table of tablesToClear) {
+      await table.clear();
+    }
+    
+    if (data.profile) await db.userProfile.put(data.profile);
+    if (data.zones) await db.zones.bulkPut(data.zones);
+    if (data.exercises) await db.exercises.bulkPut(data.exercises);
+    if (data.history) await db.workoutHistory.bulkPut(data.history);
+    if (data.biometricLogs) await db.biometricLogs.bulkPut(data.biometricLogs);
+    if (data.routines) await db.workoutRoutines.bulkPut(data.routines);
+    if (data.missions) await db.userMissions.bulkPut(data.missions);
+    if (data.goalTargets) await db.goalTargets.bulkPut(data.goalTargets);
+  });
 };

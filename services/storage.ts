@@ -280,7 +280,7 @@ export const storage = {
   },
 
 
-  getFullBackupData: async (): Promise<BackupData> => {
+  getFullBackupData: async () => {
     return {
       profile: await storage.getUserProfile(),
       history: await db.workoutHistory.toArray(),
@@ -296,21 +296,21 @@ export const storage = {
 
   importFullBackup: async (data: BackupData) => {
     await (db as any).transaction('rw', [db.userProfile, db.zones, db.exercises, db.workoutHistory, db.biometricLogs, db.workoutRoutines, db.userMissions, db.goalTargets], async () => {
-      await db.userProfile.put(data.profile);
+      await db.userProfile.put(data.data.profile);
       await db.zones.clear();
-      await db.zones.bulkPut(data.zones);
+      await db.zones.bulkPut(data.data.zones);
       await db.exercises.clear();
-      await db.exercises.bulkPut(data.exercises);
+      await db.exercises.bulkPut(data.data.exercises);
       await db.workoutHistory.clear();
-      await db.workoutHistory.bulkPut(data.history);
+      await db.workoutHistory.bulkPut(data.data.history);
       await db.biometricLogs.clear();
-      await db.biometricLogs.bulkPut(data.biometricLogs);
+      await db.biometricLogs.bulkPut(data.data.biometricLogs);
       await db.workoutRoutines.clear();
-      await db.workoutRoutines.bulkPut(data.routines);
+      await db.workoutRoutines.bulkPut(data.data.routines);
       await db.userMissions.clear();
-      await db.userMissions.bulkPut(data.missions);
+      await db.userMissions.bulkPut(data.data.missions);
       await db.goalTargets.clear();
-      await db.goalTargets.bulkPut(data.goalTargets);
+      await db.goalTargets.bulkPut(data.data.goalTargets);
     });
   }
 };

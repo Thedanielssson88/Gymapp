@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile, Goal, Zone, Equipment } from '../types';
 import { storage } from '../services/storage';
-import { getAccessToken, findBackupFile, downloadBackup, BackupData } from '../services/googleDrive';
+import { getAccessToken, listBackups, downloadBackup, BackupData } from '../services/googleDrive';
 import { ChevronRight, Check, Dumbbell, Target, User, Weight, MapPin, Cloud, RefreshCw, Loader2 } from 'lucide-react';
 
 interface OnboardingWizardProps {
@@ -45,9 +45,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
         return;
       }
       
-      const fileId = await findBackupFile(token);
+      const files = await listBackups();
+      const fileId = files.length > 0 ? files[0].id : null;
       if (fileId) {
-        const backup = await downloadBackup(token, fileId);
+        const backup = await downloadBackup(fileId);
         if (backup) {
           setFoundBackup(backup);
           return; // Stay on cloud step to show "Restore" option
@@ -65,15 +66,18 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
     if (foundBackup) {
       setIsSearchingCloud(true);
       // Ensure Google Drive is linked in settings after restore
-      const restoredBackup = {
+      const restoredBackup: BackupData = {
         ...foundBackup,
-        profile: {
-          ...foundBackup.profile,
-          settings: {
-            ...foundBackup.profile.settings,
-            googleDriveLinked: true,
-            restoreOnStartup: true,
-            autoSyncMode: 'after_workout' as const
+        data: {
+          ...foundBackup.data,
+          profile: {
+            ...foundBackup.data.profile,
+            settings: {
+              ...foundBackup.data.profile.settings,
+              googleDriveLinked: true,
+              restoreOnStartup: true,
+              autoSyncMode: 'after_workout' as const
+            }
           }
         }
       };
@@ -157,10 +161,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase text-accent-green tracking-widest">Backup Hittad</p>
-                      <h4 className="text-xl font-black italic uppercase">{foundBackup.profile.name}</h4>
+                      <h4 className="text-xl font-black italic uppercase">{foundBackup.data.profile.name}</h4>
                     </div>
                  </div>
-                 <p className="text-xs text-text-dim">Exporterad: {new Date(foundBackup.exportedAt).toLocaleDateString('sv-SE')}</p>
+                 <p className="text-xs text-text-dim">Exporterad: {new Date(foundBackup.timestamp).toLocaleDateString('sv-SE')}</p>
                  <button 
                    onClick={handleRestoreBackup}
                    disabled={isSearchingCloud}

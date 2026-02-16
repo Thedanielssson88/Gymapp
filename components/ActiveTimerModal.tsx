@@ -39,15 +39,14 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({
     const unregister = registerBackHandler(onClose);
     const timer = setInterval(() => {
       setTotalElapsed(prev => prev + 1);
-      if (!isOvertime) {
-        if (timeLeft > 1) {
-          setTimeLeft(prev => prev - 1);
-          // FIX: `prev` is not defined in this scope. Use `timeLeft` instead.
-          if (vibrateEnabled && timeLeft <= 6 && timeLeft > 2) {
-            haptics.selection();
-          }
-        } else {
-          setTimeLeft(0);
+  
+      if (isOvertime) {
+        setTimeLeft(prev => prev + 1);
+        return;
+      }
+  
+      setTimeLeft(prev => {
+        if (prev <= 1) {
           if (vibrateEnabled) {
             haptics.impact();
           }
@@ -57,16 +56,23 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({
           } else {
             setIsOvertime(true);
           }
+          return 0;
         }
-      } else {
-        setTimeLeft(prev => prev + 1);
-      }
+        
+        // Haptic countdown logic
+        if (vibrateEnabled && prev <= 6 && prev > 1) {
+          haptics.selection();
+        }
+        
+        return prev - 1;
+      });
     }, 1000);
+  
     return () => {
       clearInterval(timer);
       unregister();
     };
-  }, [timeLeft, isOvertime, askForReps, initialSeconds, onClose, vibrateEnabled]);
+  }, [isOvertime, askForReps, initialSeconds, onClose, vibrateEnabled]);
 
   const handleFinish = (time: number) => {
     if (askForReps) {
