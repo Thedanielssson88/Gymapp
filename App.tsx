@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements, SetType } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -30,7 +31,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'workout' | 'body' | 'targets' | 'log' | 'library' | 'gyms' | 'ai'>('workout');
   const [bodySubTab, setBodySubTab] = useState<'recovery' | 'measurements' | 'analytics' | 'settings'>('recovery');
   
-  // Historik för flik-navigering
   const [tabHistory, setTabHistory] = useState<string[]>([]);
 
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -73,30 +73,21 @@ export default function App() {
     }
   `;
 
-  // --- NAVIGERING MED HISTORIK ---
   const navigateToTab = (newTab: typeof activeTab, options?: { fromNav?: boolean }) => {
     if (newTab === activeTab && newTab !== 'library') return;
-
     if (newTab === 'library' && options?.fromNav) {
         setTargetExerciseId(null);
     }
-    
-    // Only add to history if it's a real tab change
     if (newTab !== activeTab) {
       setTabHistory(prev => [...prev, activeTab]);
       setActiveTab(newTab);
     }
   };
 
-  // --- ANDROID BACK BUTTON LOGIC ---
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-
     const handleBackButton = async () => {
-      // 1. Prioritet: Interna back handlers (modaler, AI-subvyer etc)
       if (executeBackHandler()) return;
-
-      // 2. Prioritet: Start-menyn i App.tsx
       if (showStartMenu) {
         if (selectedZoneForStart) {
           setSelectedZoneForStart(null);
@@ -105,8 +96,6 @@ export default function App() {
         }
         return;
       }
-
-      // 3. Prioritet: Flikhistorik
       if (tabHistory.length > 0) {
         const historyCopy = [...tabHistory];
         const prevTab = historyCopy.pop();
@@ -114,20 +103,16 @@ export default function App() {
         if (prevTab) setActiveTab(prevTab as any);
         return;
       }
-
-      // 4. Prioritet: Gå hem eller stäng appen
       if (activeTab !== 'workout') {
         setActiveTab('workout');
       } else {
         CapacitorApp.exitApp();
       }
     };
-
     const listener = CapacitorApp.addListener('backButton', handleBackButton);
     return () => { listener.then(l => l.remove()); };
   }, [showStartMenu, selectedZoneForStart, activeTab, tabHistory]);
 
-  // --- HANTERA BODY SUB-TABS BACK BEHAVIOR ---
   useEffect(() => {
     if (activeTab === 'body' && bodySubTab !== 'recovery') {
       return registerBackHandler(() => setBodySubTab('recovery'));
@@ -146,7 +131,6 @@ export default function App() {
         }
       }
     };
-
     initNativeHardware();
   }, []);
 
@@ -220,10 +204,8 @@ export default function App() {
       try {
         setLoadingStatus('Ansluter till databas...');
         await storage.init();
-        
         setLoadingStatus('Kollar molnsynkronisering...');
         const initialProfile = await storage.getUserProfile();
-        
         if (initialProfile.settings?.googleDriveLinked && initialProfile.settings?.restoreOnStartup) {
            try {
              const token = await getAccessToken();
@@ -246,7 +228,6 @@ export default function App() {
              console.warn("Startup cloud restore failed:", e);
            }
         }
-
         setLoadingStatus('Synkroniserar övningsbibliotek...');
         try {
           await db.syncExercises(); 
@@ -254,13 +235,10 @@ export default function App() {
           console.warn("Kunde inte synka övningar vid start:", e);
           setLoadingStatus('Synk misslyckades, laddar lokalt...');
         }
-
         setLoadingStatus('Läser in användardata...');
         await refreshData();
         const activeSess = await storage.getActiveSession();
-        if (activeSess) {
-          setActiveTab('workout');
-        }
+        if (activeSess) setActiveTab('workout');
         setLoadingStatus('Slutför...');
       } catch (error) {
         console.error("Kritisk fel vid start:", error);
@@ -328,15 +306,17 @@ export default function App() {
       const historySession = { ...session, isCompleted: true, duration, locationName: activeZone.name };
       await storage.saveToHistory(historySession);
 
-      // FIX: Explicitly update the source scheduled activity
+      // FIX: Markera det planerade passet som slutfört så det försvinner från loggen/kalendern
       if (session.sourceActivityId) {
         await db.scheduledActivities.update(session.sourceActivityId, {
           isCompleted: true,
           linkedSessionId: historySession.id
         });
+        console.log("Markerade käll-aktivitet som slutförd:", session.sourceActivityId);
       }
 
       storage.setActiveSession(null);
+      setCurrentSession(null);
       
       if (user?.settings?.googleDriveLinked && user?.settings?.autoSyncMode === 'after_workout') {
         getAccessToken().then(async (token) => {
@@ -373,37 +353,24 @@ export default function App() {
   const handleFinalizeSessionStart = async (zone: Zone, filteredExercises?: PlannedExercise[]) => {
     if (!pendingActivity) return;
     setShowZonePicker(false);
-
     let finalExercises = (filteredExercises || pendingActivity.exercises || []).map(pe => ({
       ...pe,
       sets: pe.sets.map(s => ({...s, completed: false}))
     }));
-
     if (finalExercises.length === 0) {
         alert("Inga övningar kvar i passet efter filtrering. Passet startas ej.");
         setPendingActivity(null);
         return;
     }
-
     const isScoutOrManual = !pendingActivity.programId;
     if (isScoutOrManual) {
         const historyData = await storage.getHistory();
         finalExercises = finalExercises.map(ex => {
             const targetReps = ex.sets[0]?.reps || 10;
             const suggestedWeight = suggestWeightForReps(ex.exerciseId, targetReps, historyData);
-            
-            return {
-                ...ex,
-                sets: ex.sets.map(s => ({
-                    ...s,
-                    reps: targetReps,
-                    weight: suggestedWeight > 0 ? suggestedWeight : (s.weight || 0),
-                    completed: false
-                }))
-            };
+            return { ...ex, sets: ex.sets.map(s => ({ ...s, reps: targetReps, weight: suggestedWeight > 0 ? suggestedWeight : (s.weight || 0), completed: false })) };
         });
     }
-
     const newSess: WorkoutSession = { 
       id: 'w-' + Date.now(), 
       date: new Date().toISOString(),
@@ -413,9 +380,8 @@ export default function App() {
       exercises: finalExercises, 
       isCompleted: false, 
       isManual: false,
-      sourceActivityId: pendingActivity.id // FIX: Store the original activity ID
+      sourceActivityId: pendingActivity.id 
     };
-    
     storage.setActiveSession(newSess);
     setCurrentSession(newSess);
     setActiveTab('workout');
@@ -425,15 +391,7 @@ export default function App() {
   const handleStartWorkout = (exercises: PlannedExercise[], name: string) => {
     const zone = selectedZoneForStart || zones[0];
     const sessionDate = pendingManualDate ? new Date(pendingManualDate).toISOString() : new Date().toISOString();
-    const newSess: WorkoutSession = { 
-      id: 'w-' + Date.now(), 
-      date: sessionDate, 
-      name, 
-      zoneId: zone.id, 
-      exercises, 
-      isCompleted: false, 
-      isManual: !!pendingManualDate
-    };
+    const newSess: WorkoutSession = { id: 'w-' + Date.now(), date: sessionDate, name, zoneId: zone.id, exercises, isCompleted: false, isManual: !!pendingManualDate };
     storage.setActiveSession(newSess);
     setCurrentSession(newSess);
     setActiveTab('workout');
@@ -497,30 +455,7 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'workout':
-        return <WorkoutView 
-                  key={currentSession?.id || 'no-session'}
-                  session={currentSession}
-                  allExercises={allExercises}
-                  userProfile={user}
-                  allZones={zones}
-                  history={history}
-                  activeZone={activeZone}
-                  onZoneChange={(z) => {
-                    if (currentSession) {
-                      const newSession = {...currentSession, zoneId: z.id};
-                      setCurrentSession(newSession);
-                      storage.setActiveSession(newSession);
-                    }
-                  }} 
-                  onComplete={handleFinishWorkout} 
-                  onCancel={handleCancelWorkout} 
-                  plannedActivities={plannedActivities}
-                  onStartActivity={handleStartSession}
-                  onStartEmptyWorkout={handleStartEmptyWorkout}
-                  onUpdate={refreshData}
-                  isManualMode={currentSession?.isManual}
-                  userMissions={userMissions}
-               />;
+        return <WorkoutView key={currentSession?.id || 'no-session'} session={currentSession} allExercises={allExercises} userProfile={user} allZones={zones} history={history} activeZone={activeZone} onZoneChange={(z) => { if (currentSession) { const newSession = {...currentSession, zoneId: z.id}; setCurrentSession(newSession); storage.setActiveSession(newSession); } }} onComplete={handleFinishWorkout} onCancel={handleCancelWorkout} plannedActivities={plannedActivities} onStartActivity={handleStartSession} onStartEmptyWorkout={handleStartEmptyWorkout} onUpdate={refreshData} isManualMode={currentSession?.isManual} userMissions={userMissions} />;
       case 'body':
         return (
           <div className="space-y-6 animate-in fade-in px-2 pb-32 min-h-screen pt-[calc(env(safe-area-inset-top)+2rem)]">
@@ -549,7 +484,6 @@ export default function App() {
       <style>{globalStyles}</style>
       {showOnboarding && isReady && ( <OnboardingWizard onComplete={() => { setShowOnboarding(false); refreshData(); }} /> )}
       {renderContent()}
-      
       {showStartMenu && (
         <div className="fixed inset-0 bg-[#0f0d15] z-[150] p-8 pt-[calc(env(safe-area-inset-top)+2rem)] flex flex-col overflow-y-auto scrollbar-hide">
           <header className="flex justify-between items-center mb-10"><h3 className="text-3xl font-black italic uppercase tracking-tighter">{selectedZoneForStart ? 'Välj Rutin' : 'Vart tränar du?'}</h3><button onClick={() => { setShowStartMenu(false); setSelectedZoneForStart(null); setPendingManualDate(null); }} className="text-text-dim p-2"><X size={32}/></button></header>
@@ -560,17 +494,9 @@ export default function App() {
           ) : ( <RoutinePicker onStart={handleStartWorkout} activeZone={selectedZoneForStart} allExercises={allExercises} userProfile={user} routines={routines} onUpdate={refreshData} history={history} /> )}
         </div>
       )}
-
       {showZonePicker && pendingActivity && (
-          <ZonePickerModal 
-            onClose={() => setShowZonePicker(false)}
-            zones={zones}
-            plannedExercises={pendingActivity.exercises || []}
-            allExercises={allExercises}
-            onSelect={handleFinalizeSessionStart}
-          />
+          <ZonePickerModal onClose={() => setShowZonePicker(false)} zones={zones} plannedExercises={pendingActivity.exercises || []} allExercises={allExercises} onSelect={handleFinalizeSessionStart} />
       )}
-
       {!isWorkoutActive && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pt-4 bg-gradient-to-t from-[#0f0d15] via-[#0f0d15] to-transparent fixed-bottom-nav">
           <div className="max-w-md mx-auto flex gap-1 items-center bg-[#1a1721]/80 backdrop-blur-xl border border-white/10 p-2 rounded-[32px] shadow-2xl overflow-x-auto scrollbar-hide">

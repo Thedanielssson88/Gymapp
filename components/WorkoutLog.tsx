@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   WorkoutSession, ScheduledActivity, ActivityType, 
@@ -223,7 +224,6 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
                         );
                         return isScheduledForDay && !hasConcreteInstance;
                     } else {
-                        // This is a single activity. It should only appear if it is NOT completed.
                         return p.date === dKey && !p.isCompleted;
                     }
                 });
@@ -231,8 +231,9 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
                 return (<div key={dKey} className="space-y-3"><div className="flex items-center gap-3 px-2"><div className={`h-[1px] flex-1 ${isToday ? 'bg-accent-pink/30' : 'bg-white/5'}`} /><h4 className={`text-[10px] font-black uppercase tracking-[0.2em] ${isToday ? 'text-accent-pink' : 'text-text-dim'}`}>{day.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' })}</h4><div className={`h-[1px] flex-1 ${isToday ? 'bg-accent-pink/30' : 'bg-white/5'}`} /></div>
                 {dayPlans.map(p => (<div key={p.id} className="bg-accent-blue/5 border border-accent-blue/20 rounded-[28px] p-4 flex justify-between items-center group animate-in zoom-in-95"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-accent-blue/10 rounded-xl flex items-center justify-center text-accent-blue">{'isTemplate' in p ? <Repeat size={18} /> : <CalIcon size={18} />}</div><div><p className="text-xs font-black text-white uppercase italic leading-none mb-1">{p.title}</p><p className="text-[9px] font-bold text-accent-blue/60 uppercase tracking-widest">{'isTemplate' in p ? 'Återkommande' : 'Planerat'} • {p.exercises?.length || 0} övningar</p></div></div><div className="flex items-center gap-1.5">{!('isTemplate' in p) && (<button onClick={() => onStartActivity(p as ScheduledActivity)} className="w-10 h-10 bg-accent-blue text-white rounded-xl flex items-center justify-center shadow-lg shadow-accent-blue/20 active:scale-90 transition-transform"><Play size={18} fill="currentColor" /></button>)}{!('isTemplate' in p) && (<button onClick={() => {const tomorrow = new Date(day); tomorrow.setDate(tomorrow.getDate() + 1); setConfirmMove({ id: p.id, date: tomorrow.toISOString().split('T')[0], name: p.title });}} className="p-2.5 text-text-dim hover:text-white transition-colors"><CalendarClock size={18} /></button>)}<button onClick={() => setConfirmDelete({ id: p.id, isHistory: false, isTemplate: 'isTemplate' in p })} className="p-2.5 text-text-dim hover:text-red-500 transition-colors"><Trash2 size={18} /></button></div></div>))}
                 {dayHistory.map(session => {
-                  const endTime = session.duration ? new Date(new Date(session.date).getTime() + session.duration * 1000) : null;
-                  const endTimeString = endTime ? endTime.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '';
+                  const startTime = new Date(session.date);
+                  const endTime = session.duration ? new Date(startTime.getTime() + session.duration * 1000) : null;
+                  const timeString = startTime.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 
                   return (
                     <div key={session.id} className="bg-[#1a1721] rounded-[32px] border border-white/5 overflow-hidden transition-all shadow-xl">
@@ -244,12 +245,10 @@ export const WorkoutLog: React.FC<WorkoutLogProps> = ({
                           <div>
                             <h3 className="text-sm font-black italic uppercase text-white leading-tight mb-1">{session.name}</h3>
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="text-[9px] text-green-500/70 font-black uppercase tracking-widest">Slutfört</span>
+                              <span className="text-[9px] text-green-500/70 font-black uppercase tracking-widest">Klar {timeString}</span>
                               <span className="text-[9px] text-text-dim font-bold uppercase tracking-widest">• {Math.round((session.duration || 0)/60)} min</span>
-                              {session.isManual ? (
+                              {session.isManual && (
                                 <span className="text-[9px] text-text-dim font-bold uppercase tracking-widest">• Efterhand</span>
-                              ) : endTimeString && (
-                                <span className="text-[9px] text-text-dim font-bold uppercase tracking-widest flex items-center gap-1"><Clock size={8} /> {endTimeString}</span>
                               )}
                               {session.locationName && (
                                 <span className="text-[9px] text-accent-blue font-black uppercase tracking-widest flex items-center gap-1 bg-accent-blue/5 px-2 py-0.5 rounded-full border border-accent-blue/10">

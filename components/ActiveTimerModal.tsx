@@ -8,20 +8,35 @@ interface ActiveTimerModalProps {
   onClose: () => void;
   onComplete: (actualSeconds: number) => void;
   exerciseName: string;
+  vibrateEnabled?: boolean;
 }
 
 export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({
-  initialSeconds, onClose, onComplete, exerciseName
+  initialSeconds, onClose, onComplete, exerciseName, vibrateEnabled = true
 }) => {
   const [timeLeft, setTimeLeft] = useState(initialSeconds);
   const [totalElapsed, setTotalElapsed] = useState(0);
   const [isOvertime, setIsOvertime] = useState(false);
 
-  // Centrerad och säker radie för att rymmas på alla skärmar
   const radius = 110; 
   const circumference = 2 * Math.PI * radius;
   const progress = isOvertime ? 1 : (initialSeconds > 0 ? timeLeft / initialSeconds : 0);
   const strokeDashoffset = circumference - progress * circumference;
+
+  // Haptisk feedback-logik
+  useEffect(() => {
+    if (!vibrateEnabled || !("vibrate" in navigator)) return;
+
+    // Vibrera kort varje sekund när det är 5 sekunder kvar (5, 4, 3, 2, 1)
+    if (!isOvertime && timeLeft <= 5 && timeLeft > 0) {
+      navigator.vibrate(40); 
+    } 
+    
+    // Kraftig vibration när timern når 0
+    if (!isOvertime && timeLeft === 0) {
+      navigator.vibrate([200, 100, 200]);
+    }
+  }, [timeLeft, isOvertime, vibrateEnabled]);
 
   useEffect(() => {
     const unregister = registerBackHandler(onClose);
@@ -29,20 +44,22 @@ export const ActiveTimerModal: React.FC<ActiveTimerModalProps> = ({
       setTotalElapsed(prev => prev + 1);
       if (!isOvertime) {
         if (timeLeft > 0) setTimeLeft(prev => prev - 1);
-        else { setIsOvertime(true); haptics.impact(); }
+        else { 
+          setIsOvertime(true); 
+          haptics.impact(); // Trigger backup haptics at zero point
+        }
       } else {
         setTimeLeft(prev => prev + 1);
       }
     }, 1000);
     return () => { clearInterval(timer); unregister(); };
-  }, [timeLeft, isOvertime]);
+  }, [timeLeft, isOvertime, onClose]);
 
   return (
     <div className="fixed inset-0 z-[500] bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
       <div className="w-full max-w-sm flex flex-col items-center">
         <h3 className="text-sm font-black uppercase tracking-[0.2em] text-text-dim mb-12">{exerciseName}</h3>
         
-        {/* Centrerad Cirkel-container */}
         <div className="relative flex items-center justify-center w-64 h-64 mb-16">
           <svg className="transform -rotate-90 w-full h-full overflow-visible">
             <circle cx="50%" cy="50%" r={radius} stroke="currentColor" strokeWidth="12" fill="transparent" className="text-white/5" />

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Search, Loader2, Plus, ArrowRight, Trash2, History, Dumbbell, Save, Info, Sparkles, Play, AlertTriangle, X } from 'lucide-react';
 import { recommendExercises, ExerciseRecommendation, ExerciseSearchResponse } from '../services/geminiService';
@@ -134,14 +135,12 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
   };
 
   const getExistingExerciseId = (rec: ExerciseRecommendation): string | null => {
-    // UPPDATERING: Kolla först om vi precis lagt till den lokalt
     const cleanId = sanitizeId(rec.data.id || rec.data.name);
     if (locallyAdded.includes(cleanId)) return cleanId;
 
     const exactMatch = allExercises.find(e => e.id === rec.data.id);
     if (exactMatch) return exactMatch.id;
 
-    // cleanId räknas redan ut ovan, så vi återanvänder den variabeln
     const slugMatch = allExercises.find(e => e.id === cleanId);
     if (slugMatch) return slugMatch.id;
 
@@ -205,8 +204,6 @@ export const AIExerciseRecommender: React.FC<AIExerciseRecommenderProps> = ({ on
             const handleCardClick = () => {
                 if (exists) {
                     const exerciseToShow = allExercises.find(e => e.id === existingId);
-                    // Om vi precis lagt till den finns den kanske inte i allExercises än,
-                    // men vi vill inte krascha. Vi kan visa en fallback eller bara låta bli om den saknas.
                     if (exerciseToShow) setViewingExercise(exerciseToShow);
                 }
             };

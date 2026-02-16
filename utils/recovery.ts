@@ -1,3 +1,4 @@
+
 import { WorkoutSession, MuscleGroup, Exercise, WorkoutSet, UserProfile } from '../types';
 
 export type MuscleStatus = {
@@ -29,13 +30,20 @@ export const calculateExerciseImpact = (
     switch (trackingType) {
         case 'time_only':
         case 'time_distance':
-            // Basera påverkan på varaktighet. Anta att 1 sekund av en svår kroppsviktsövning motsvarar att lyfta kroppsvikten för 0.1 "reps".
+            // JUSTERING: Sänkt koefficient från 0.1 till 0.04 för att balansera mot styrketräning.
+            // Plankan 60s @ 80kg: 60 * 80 * 0.5 * 0.04 = 96 (Motsvarar ca 1 rep @ 100kg)
+            const duration = s.duration || 0;
             const timeBasedBwFactor = exData.bodyweightCoefficient || 0.5;
-            const timeVolume = (s.duration || 0) * userBodyWeight * timeBasedBwFactor * 0.1;
+            // Dämpningsfaktor för extremt långa set (logaritmisk avtagande avkastning)
+            const effectiveDuration = duration > 60 ? 60 + (duration - 60) * 0.5 : duration;
+            const timeVolume = effectiveDuration * userBodyWeight * timeBasedBwFactor * 0.04;
             return sum + timeVolume;
+            
         case 'reps_only':
+            // JUSTERING: Sänkt rep-koefficient för att undvika överdriven belastning vid högvolym-calisthenics
             const repBasedBwFactor = exData.bodyweightCoefficient || 0.7;
-            return sum + (userBodyWeight * repBasedBwFactor * (s.reps || 0));
+            return sum + (userBodyWeight * repBasedBwFactor * (s.reps || 0) * 0.8);
+            
         case 'reps_weight':
         default:
             const bodyweightLoad = userBodyWeight * (exData.bodyweightCoefficient || 0);
@@ -44,6 +52,7 @@ export const calculateExerciseImpact = (
     }
   }, 0);
   
+  // Bas-fatigue som skalar med volym men har ett tak per set
   let fatigue = (totalVolume / 250) + (validSets.length * 1.5);
   
   return fatigue * exData.difficultyMultiplier;

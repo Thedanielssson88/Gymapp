@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserMission, Exercise, ProgressionStrategy, SmartGoalTarget, BodyMeasurements, UserProfile, WorkoutSession } from '../types';
 import { X, Trophy, TrendingUp, Dumbbell, Scale, Ruler, Search, Check } from 'lucide-react';
@@ -103,6 +104,14 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
     };
     
     onSave(newMission);
+  };
+
+  const handleNumericFocus = (currentVal: number, setter: (v: number) => void) => {
+    if (currentVal === 0) setter("" as any);
+  };
+
+  const handleNumericBlur = (currentVal: any, setter: (v: number) => void) => {
+    if (currentVal === "" || isNaN(Number(currentVal))) setter(0);
   };
 
   return (
@@ -239,11 +248,25 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-text-dim">Start ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
-                  <input type="number" onFocus={e => e.target.select()} value={startValue} onChange={e => setStartValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
+                  <input 
+                    type="number" 
+                    onFocus={() => handleNumericFocus(startValue, setStartValue)}
+                    onBlur={(e) => handleNumericBlur(e.target.value, setStartValue)}
+                    value={startValue} 
+                    onChange={e => setStartValue(Number(e.target.value))} 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" 
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-text-dim">Mål ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
-                  <input type="number" onFocus={e => e.target.select()} value={targetValue} onChange={e => setTargetValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
+                  <input 
+                    type="number" 
+                    onFocus={() => handleNumericFocus(targetValue, setTargetValue)}
+                    onBlur={(e) => handleNumericBlur(e.target.value, setTargetValue)}
+                    value={targetValue} 
+                    onChange={e => setTargetValue(Number(e.target.value))} 
+                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" 
+                  />
                 </div>
             </div>
 
@@ -276,7 +299,15 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-text-dim">Mål-antal</label>
-                <input type="number" onFocus={e => e.target.select()} value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" placeholder="T.ex. 10" />
+                <input 
+                  type="number" 
+                  onFocus={() => handleNumericFocus(targetCount, setTargetCount)}
+                  onBlur={(e) => handleNumericBlur(e.target.value, setTargetCount)}
+                  value={targetCount} 
+                  onChange={e => setTargetCount(Number(e.target.value))} 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" 
+                  placeholder="T.ex. 10" 
+                />
               </div>
           </div>
         )}

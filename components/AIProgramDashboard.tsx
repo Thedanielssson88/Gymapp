@@ -82,6 +82,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
           setSelectedProgram(null);
           setProgramToDelete(null);
           onUpdate();
+          loadData();
       }
   };
 
@@ -141,20 +142,19 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
           />
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
             <button onClick={() => setSelectedProgram(null)} className="text-text-dim hover:text-white flex items-center gap-1 bg-white/5 px-3 py-2 rounded-xl text-xs font-bold uppercase transition-colors">
                 <ArrowLeft size={16}/> Tillbaka
+            </button>
+            <button onClick={() => handleDeleteRequest(selectedProgram)} className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-colors">
+                <Trash2 size={20} />
             </button>
         </div>
 
         <div className="bg-gradient-to-br from-[#1a1721] to-[#2a2435] p-6 rounded-[32px] border border-accent-blue/20 shadow-lg">
-            <div className="flex justify-between items-start">
-              <div className="min-w-0">
-                  <h2 className="text-2xl font-black italic uppercase text-white mb-2 leading-none pr-4">{selectedProgram.name}</h2>
-              </div>
-              <button onClick={() => handleDeleteRequest(selectedProgram)} className="bg-red-500/10 text-red-500 font-bold py-3 px-4 rounded-2xl flex items-center justify-center hover:bg-red-500/20 transition-colors shrink-0">
-                  <Trash2 size={20} />
-              </button>
+            <div className="flex justify-between items-start mb-2">
+              <h2 className="text-2xl font-black italic uppercase text-white leading-none pr-4">{selectedProgram.name}</h2>
+              <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-full tracking-widest border bg-accent-blue/10 text-accent-blue border-accent-blue/20`}>Aktiv</span>
             </div>
             <p className="text-sm text-text-dim italic border-l-2 border-accent-blue pl-3 mb-4 leading-relaxed">"{selectedProgram.motivation}"</p>
             {selectedProgram.status === 'active' && (
@@ -191,7 +191,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
                 <h3 className="text-text-dim font-black text-xs uppercase tracking-[0.2em] flex items-center gap-2 mt-8 border-b border-white/5 pb-3">
                     <CheckCircle2 size={12}/> Historik ({completedActivities.length})
                 </h3>
-                {completedActivities.reverse().map(activity => (
+                {completedActivities.slice().reverse().map(activity => (
                     <div key={activity.id} className="bg-green-500/5 p-5 rounded-[28px] border border-green-500/10 flex justify-between items-center">
                         <div>
                             <span className="text-green-400 font-black italic uppercase text-sm block line-through">{activity.title}</span>

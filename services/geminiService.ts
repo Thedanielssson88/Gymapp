@@ -223,11 +223,11 @@ export const generateProfessionalPlan = async (
     const contents = `
       Du är en expert-PT och träningsfysiolog. Skapa ett detaljerat träningsprogram.
       
+      DAGENS DATUM: ${today}
+
       VIKTIGT: Använd ENDAST övningar från listan nedan. Svara med det exakta ID:t för varje övning.
       TILLGÄNGLIGA ÖVNINGAR:
       ${exerciseIndex}
-
-      DAGENS DATUM: ${today}
 
       MÅL: "${userRequest}"
       TIDSPERSPEKTIV: ${durationWeeks} veckor, ${daysPerWeek} pass/vecka, ${durationMinutes} min/pass.

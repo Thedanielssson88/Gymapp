@@ -129,7 +129,6 @@ export const SetRow: React.FC<SetRowProps> = ({
         </div>
 
         <div className="pl-2">
-          {/* HÄR ÄR ÄNDRINGEN: Visa Timer-ikon för BÅDE time_only och time_distance */}
           {(trackingType === 'time_only' || trackingType === 'time_distance') && !isCompleted ? (
             <button 
               onClick={() => setShowActiveTimer(true)} 
@@ -154,6 +153,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           initialSeconds={set.duration || 60} 
           onClose={() => setShowActiveTimer(false)}
           exerciseName={exData.name}
+          vibrateEnabled={userProfile.settings?.vibrateTimer ?? true}
           onComplete={(actualSeconds) => {
             onUpdate({ 
               duration: actualSeconds, 

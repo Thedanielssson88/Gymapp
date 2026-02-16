@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   WorkoutSession, 
@@ -197,26 +198,36 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
 
       const totalXP = (totalWorkouts * 50) + (totalSets * 10) + totalImpactXP;
 
+      /**
+       * NY LEVEL LOGIK: Snabbare framsteg i början.
+       * Nivå 1-5: 200 XP per nivå
+       * Nivå 6-15: 500 XP per nivå
+       * Nivå 16+: Gradvis ökande (Math.pow kurva)
+       */
       const calculateLevelData = (xp: number) => {
         let currentLvl = 1;
         let totalXpThreshold = 0;
-        let xpRequiredForNext = Math.pow(currentLvl, 1.5) * 100;
+        let xpForNext = 200;
 
-        while (xp >= totalXpThreshold + xpRequiredForNext) {
-          totalXpThreshold += xpRequiredForNext;
-          currentLvl++;
-          xpRequiredForNext = Math.pow(currentLvl, 1.5) * 100;
+        while (true) {
+            if (currentLvl < 6) xpForNext = 200;
+            else if (currentLvl < 16) xpForNext = 500;
+            else xpForNext = Math.round(Math.pow(currentLvl, 1.5) * 100);
+
+            if (xp < totalXpThreshold + xpForNext) break;
+
+            totalXpThreshold += xpForNext;
+            currentLvl++;
         }
 
-        xpRequiredForNext = Math.round(xpRequiredForNext);
         const xpEarnedInLevel = Math.round(xp - totalXpThreshold);
-        const progress = (xpRequiredForNext > 0) ? (xpEarnedInLevel / xpRequiredForNext) * 100 : 0;
+        const progress = (xpForNext > 0) ? (xpEarnedInLevel / xpForNext) * 100 : 0;
 
         return {
           level: currentLvl,
           xpProgress: progress,
           currentLevelXP: xpEarnedInLevel,
-          xpToNextLevel: xpRequiredForNext,
+          xpToNextLevel: xpForNext,
         };
       };
 
