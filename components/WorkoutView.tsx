@@ -361,7 +361,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     if (newSets.length === 0) {
       const lastSetData = getLastPerformance(ex.id, history || []);
       newSets = lastSetData && lastSetData.length > 0 
-        ? createSmartSets(lastSetData, true) 
+        ? createSmartSets(lastSetData, true, ex) 
         : [{ reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }, { reps: 10, weight: 0, completed: false, type: 'normal' }];
       notes = lastSetData ? 'Smart laddat från historik' : '';
     }

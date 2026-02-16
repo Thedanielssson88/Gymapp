@@ -81,7 +81,31 @@ const RecoveryMapBody = ({p}: {p: (m: MuscleGroup) => any}) => (
 
 export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercises, userProfile, onAddExercise }) => {
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  const stats = useMemo(() => {
+    if (!session) return { totalLoad: 0, totalSets: 0, totalReps: 0 };
+
+    let totalLoad = 0;
+    let totalSets = 0;
+    let totalReps = 0;
+
+    session.exercises.forEach(plannedEx => {
+      const exData = allExercises.find(e => e.id === plannedEx.exerciseId);
+      const completedSets = plannedEx.sets.filter(s => s.completed);
+
+      if (exData && completedSets.length > 0) {
+        totalLoad += calculateExerciseImpact(exData, completedSets, userProfile.weight);
+      }
+      
+      completedSets.forEach(set => {
+        totalSets++;
+        totalReps += set.reps || 0;
+      });
+    });
+
+    return { totalLoad, totalSets, totalReps };
+  }, [session, allExercises, userProfile]);
 
   // Lås scroll på bakgrunden när modalen är öppen
   useEffect(() => {
@@ -96,7 +120,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
   }, [selectedMuscle]);
 
   // --- AVANCERAD BELASTNINGSBERÄKNING ---
-  const stats = useMemo(() => {
+  const muscleStats = useMemo(() => {
     if (!session) return { muscleLoad: {}, totalLoadScore: 0 };
     
     const muscleLoad: Record<string, { 
@@ -144,11 +168,11 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
   }, [session, allExercises, userProfile]);
 
   // FIX: Explicitly typed 'm' to prevent type inference to 'unknown'
-  const maxScoreInSession = useMemo(() => Math.max(...Object.values(stats.muscleLoad).map((m: { score: number }) => m.score), 1), [stats]);
+  const maxScoreInSession = useMemo(() => Math.max(...Object.values(muscleStats.muscleLoad).map((m: { score: number }) => m.score), 1), [muscleStats]);
 
   // Färglogik baserat på Score
   const getMuscleColor = (muscleId: MuscleGroup) => {
-    const data = stats.muscleLoad[muscleId];
+    const data = muscleStats.muscleLoad[muscleId];
     if (!data || data.score === 0) return '#ffffff10'; 
     
     const percentageOfMax = (data.score / maxScoreInSession) * 100;
@@ -180,8 +204,8 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
   const renderMuscleGroup = (category: MuscleCategory) => {
     const group = MUSCLE_DEFS.filter(m => m.category === category);
     const activeMuscles = group
-        .filter(m => stats.muscleLoad[m.id])
-        .sort((a,b) => (stats.muscleLoad[b.id]?.score || 0) - (stats.muscleLoad[a.id]?.score || 0));
+        .filter(m => muscleStats.muscleLoad[m.id])
+        .sort((a,b) => (muscleStats.muscleLoad[b.id]?.score || 0) - (muscleStats.muscleLoad[a.id]?.score || 0));
 
     if (activeMuscles.length === 0) return null;
 
@@ -192,9 +216,9 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
         </h4>
         <div className="space-y-2">
             {activeMuscles.map(m => {
-                const data = stats.muscleLoad[m.id];
-                const percentage = stats.totalLoadScore > 0 
-                    ? Math.round((data.score / stats.totalLoadScore) * 100) 
+                const data = muscleStats.muscleLoad[m.id];
+                const percentage = muscleStats.totalLoadScore > 0 
+                    ? Math.round((data.score / muscleStats.totalLoadScore) * 100) 
                     : 0;
                 
                 return (
@@ -222,92 +246,114 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
   };
 
   return (
-    <div className="bg-[#1a1721] rounded-2xl border border-white/5 overflow-hidden transition-all duration-300">
-        <button 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors"
-        >
-            <div className="flex items-center gap-2">
-                <Activity size={16} className="text-accent-blue" />
-                <span className="text-sm font-black text-white uppercase tracking-widest">Muskelfördelning</span>
-            </div>
-            {isExpanded ? <ChevronUp size={20} className="text-text-dim" /> : <ChevronDown size={20} className="text-text-dim" />}
-        </button>
+    <>
+      <div className="bg-[#1a1721] rounded-2xl border border-white/5 p-4 flex justify-around items-center">
+        <div className="flex-1 text-center">
+          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Total Belastning</p>
+          <div className="flex items-baseline justify-center gap-2">
+            <span className="text-4xl font-black italic text-white tracking-tighter">{Math.round(stats.totalLoad)}</span>
+            <span className="text-sm font-bold uppercase">Poäng</span>
+          </div>
+        </div>
+        <div className="w-px h-12 bg-white/5" />
+        <div className="flex-1 text-center">
+          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Totala Set</p>
+          <span className="text-4xl font-black italic text-white tracking-tighter">{stats.totalSets}</span>
+        </div>
+        <div className="w-px h-12 bg-white/5" />
+        <div className="flex-1 text-center">
+          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Totala Reps</p>
+          <span className="text-4xl font-black italic text-white tracking-tighter">{stats.totalReps}</span>
+        </div>
+      </div>
 
-        {isExpanded && (
-            <div className="p-4 animate-in slide-in-from-top-2 duration-300">
-                <div className="relative w-full flex justify-center mb-6 border-b border-white/5 pb-4">
-                    <RecoveryMapBody p={p} />
-                    <div className="absolute top-0 right-0 flex flex-col gap-1 text-[9px] font-bold uppercase text-text-dim">
-                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#2563eb]"/>Hög Belastning</div>
-                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#3b82f6]"/>Medel Belastning</div>
-                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#3b82f660]"/>Låg Belastning</div>
+      <div className="bg-[#1a1721] rounded-2xl border border-white/5 overflow-hidden transition-all duration-300">
+          <button 
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full p-4 flex justify-between items-center bg-white/5 hover:bg-white/10 transition-colors"
+          >
+              <div className="flex items-center gap-2">
+                  <Activity size={16} className="text-accent-blue" />
+                  <span className="text-sm font-black text-white uppercase tracking-widest">Muskelfördelning</span>
+              </div>
+              {isExpanded ? <ChevronUp size={20} className="text-text-dim" /> : <ChevronDown size={20} className="text-text-dim" />}
+          </button>
+
+          {isExpanded && (
+              <div className="p-4 animate-in slide-in-from-top-2 duration-300">
+                  <div className="relative w-full flex justify-center mb-6 border-b border-white/5 pb-4">
+                      <RecoveryMapBody p={p} />
+                      <div className="absolute top-0 right-0 flex flex-col gap-1 text-[9px] font-bold uppercase text-text-dim">
+                          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#2563eb]"/>Hög Belastning</div>
+                          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#3b82f6]"/>Medel Belastning</div>
+                          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-[#3b82f660]"/>Låg Belastning</div>
+                      </div>
+                  </div>
+
+                  {renderMuscleGroup('main')}
+                  {renderMuscleGroup('accessory')}
+                  
+                  {muscleStats.totalLoadScore === 0 && (
+                      <p className="text-center text-xs text-text-dim italic py-2">
+                          Logga set med vikt och reps för att se fördelning.
+                      </p>
+                  )}
+              </div>
+          )}
+
+          {selectedMuscle && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-start justify-center pt-16 p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setSelectedMuscle(null); }}>
+                <div className="bg-[#1a1721] w-full max-w-md max-h-[85vh] flex flex-col rounded-3xl border border-white/10 shadow-2xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+                    <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#1a1721] rounded-t-3xl shrink-0">
+                        <div>
+                            <p className="text-[10px] text-text-dim uppercase tracking-widest">Analys</p>
+                            <h3 className="text-xl font-black italic text-white uppercase">{MUSCLE_DEFS.find(m => m.id === selectedMuscle)?.name}</h3>
+                        </div>
+                        <button onClick={() => setSelectedMuscle(null)} className="p-2 bg-white/5 rounded-full"><X className="text-white" size={20} /></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto flex-1 space-y-8 overscroll-contain">
+                        <div>
+                            <h4 className="text-xs font-black text-text-dim uppercase mb-3 flex items-center gap-2"><Activity size={14} /> Bidragande Övningar</h4>
+                            <div className="space-y-2">
+                                {muscleStats.muscleLoad[selectedMuscle]?.exercises.length > 0 ? (
+                                    muscleStats.muscleLoad[selectedMuscle]?.exercises.map((ex, idx) => (
+                                        <div key={idx} className="bg-white/5 p-3 rounded-xl flex justify-between items-center">
+                                            <div>
+                                                <span className="text-sm font-bold text-white block">{ex.name}</span>
+                                                <span className="text-[10px] text-text-dim">{ex.weight}kg x {ex.reps} totala reps</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs font-black text-white">{ex.sets} set</p>
+                                                <p className="text-[10px] text-text-dim">{ex.role}</p>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : <p className="text-xs text-text-dim italic">Inga set loggade för denna muskel än.</p>}
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-black text-text-dim uppercase mb-3 flex items-center gap-2"><Dumbbell size={14} className="text-accent-blue" /> Rekommenderade Övningar</h4>
+                            <div className="space-y-2">
+                                {recommendedExercises.length > 0 ? (
+                                    recommendedExercises.map(ex => (
+                                        <div key={ex.id} className="bg-white/5 p-3 rounded-xl border border-white/5 flex justify-between items-center group hover:border-accent-blue/50 transition-colors">
+                                            <span className="text-sm font-bold text-white">{ex.name}</span>
+                                            {onAddExercise && (
+                                                <button 
+                                                    onClick={() => { onAddExercise(ex); setSelectedMuscle(null); }}
+                                                    className="flex items-center gap-1 bg-accent-blue/10 hover:bg-accent-blue/20 text-accent-blue px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                                                ><Plus size={14} /> Lägg till</button>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : <p className="text-xs text-text-dim italic">Inga fler övningar hittades.</p>}
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                {renderMuscleGroup('main')}
-                {renderMuscleGroup('accessory')}
-                
-                {stats.totalLoadScore === 0 && (
-                    <p className="text-center text-xs text-text-dim italic py-2">
-                        Logga set med vikt och reps för att se fördelning.
-                    </p>
-                )}
             </div>
-        )}
-
-        {selectedMuscle && (
-          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-start justify-center pt-16 p-4 animate-in fade-in duration-200" onClick={(e) => { e.stopPropagation(); setSelectedMuscle(null); }}>
-              <div className="bg-[#1a1721] w-full max-w-md max-h-[85vh] flex flex-col rounded-3xl border border-white/10 shadow-2xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-                  <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#1a1721] rounded-t-3xl shrink-0">
-                      <div>
-                          <p className="text-[10px] text-text-dim uppercase tracking-widest">Analys</p>
-                          <h3 className="text-xl font-black italic text-white uppercase">{MUSCLE_DEFS.find(m => m.id === selectedMuscle)?.name}</h3>
-                      </div>
-                      <button onClick={() => setSelectedMuscle(null)} className="p-2 bg-white/5 rounded-full"><X className="text-white" size={20} /></button>
-                  </div>
-                  <div className="p-6 overflow-y-auto flex-1 space-y-8 overscroll-contain">
-                      <div>
-                          <h4 className="text-xs font-black text-text-dim uppercase mb-3 flex items-center gap-2"><Activity size={14} /> Bidragande Övningar</h4>
-                          <div className="space-y-2">
-                              {stats.muscleLoad[selectedMuscle]?.exercises.length > 0 ? (
-                                  stats.muscleLoad[selectedMuscle]?.exercises.map((ex, idx) => (
-                                      <div key={idx} className="bg-white/5 p-3 rounded-xl flex justify-between items-center">
-                                          <div>
-                                              <span className="text-sm font-bold text-white block">{ex.name}</span>
-                                              <span className="text-[10px] text-text-dim">{ex.weight}kg x {ex.reps} totala reps</span>
-                                          </div>
-                                          <div className="text-right">
-                                              <p className="text-xs font-black text-white">{ex.sets} set</p>
-                                              <p className="text-[10px] text-text-dim">{ex.role}</p>
-                                          </div>
-                                      </div>
-                                  ))
-                              ) : <p className="text-xs text-text-dim italic">Inga set loggade för denna muskel än.</p>}
-                          </div>
-                      </div>
-                      <div>
-                          <h4 className="text-xs font-black text-text-dim uppercase mb-3 flex items-center gap-2"><Dumbbell size={14} className="text-accent-blue" /> Rekommenderade Övningar</h4>
-                          <div className="space-y-2">
-                              {recommendedExercises.length > 0 ? (
-                                  recommendedExercises.map(ex => (
-                                      <div key={ex.id} className="bg-white/5 p-3 rounded-xl border border-white/5 flex justify-between items-center group hover:border-accent-blue/50 transition-colors">
-                                          <span className="text-sm font-bold text-white">{ex.name}</span>
-                                          {onAddExercise && (
-                                              <button 
-                                                  onClick={() => { onAddExercise(ex); setSelectedMuscle(null); }}
-                                                  className="flex items-center gap-1 bg-accent-blue/10 hover:bg-accent-blue/20 text-accent-blue px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                                              ><Plus size={14} /> Lägg till</button>
-                                          )}
-                                      </div>
-                                  ))
-                              ) : <p className="text-xs text-text-dim italic">Inga fler övningar hittades.</p>}
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          </div>
-        )}
-    </div>
+          )}
+      </div>
+    </>
   );
 };

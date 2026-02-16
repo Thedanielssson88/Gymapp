@@ -1,3 +1,4 @@
+
 import { Exercise, WorkoutSession, WorkoutSet, PlannedExercise, Zone, MuscleGroup, Equipment, Goal, UserProfile, ExerciseTier, MovementPattern } from '../types';
 import { calculateMuscleRecovery } from './recovery';
 
@@ -70,25 +71,62 @@ export const getLastPerformance = (exerciseId: string, history: WorkoutSession[]
 /**
  * Skapar set med progressiv överbelastning.
  */
-export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean): WorkoutSet[] => {
+export const createSmartSets = (lastSets: WorkoutSet[], applyOverload: boolean, exercise: Exercise): WorkoutSet[] => {
   return lastSets.map(s => {
     let newWeight = s.weight;
     let newReps = s.reps;
+    let newDuration = s.duration;
+    let newDistance = s.distance;
 
     if (applyOverload && s.completed && s.type !== 'warmup') {
       const rpe = s.rpe || 8;
-      if (rpe < 7) {
-        newWeight += 2.5; 
+      const trackingType = exercise.trackingType || 'reps_weight';
+      
+      // Low RPE means we can increase the load
+      if (rpe < 7) { 
+        switch (trackingType) {
+          case 'time_only':
+            newDuration = (s.duration || 0) + 5; // Add 5 seconds
+            break;
+          case 'time_distance':
+            newDistance = (s.distance || 0) + Math.max(50, (s.distance || 0) * 0.05); // Add 50m or 5%
+            newDuration = s.duration;
+            break;
+          case 'reps_only':
+            newReps = (s.reps || 0) + 1; // Add 1 rep
+            break;
+          case 'reps_weight':
+          default:
+            newWeight = (s.weight || 0) + 2.5; // Add 2.5kg
+            break;
+        }
       } else if (rpe >= 9) {
-        // Behåll vikt, fokusera på teknik/reps
-      } else {
-        newWeight += 1.25; 
+        // High RPE, maintain load
+      } else { // RPE 7-8, standard small progression
+        switch (trackingType) {
+          case 'time_only':
+            newDuration = (s.duration || 0) + 2; // Add 2 seconds
+            break;
+          case 'time_distance':
+            newDistance = (s.distance || 0) + Math.max(25, (s.distance || 0) * 0.025); // Add 25m or 2.5%
+            newDuration = s.duration;
+            break;
+          case 'reps_only':
+            newReps = s.reps; // no change, focus on form
+            break; 
+          case 'reps_weight':
+          default:
+            newWeight = (s.weight || 0) + 1.25; // Add 1.25kg
+            break;
+        }
       }
     }
 
     return { 
       reps: newReps, 
-      weight: newWeight, 
+      weight: newWeight,
+      duration: newDuration,
+      distance: newDistance,
       type: s.type || 'normal', 
       completed: false 
     };

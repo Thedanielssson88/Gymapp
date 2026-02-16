@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserMission, Exercise, ProgressionStrategy, SmartGoalTarget, BodyMeasurements, UserProfile, WorkoutSession } from '../types';
-import { X, Trophy, TrendingUp, Dumbbell, Scale, Ruler, Search, Check } from 'lucide-react';
+import { X, Trophy, TrendingUp, Dumbbell, Scale, Ruler, Search, Check, Target, Calendar, ListTodo, Hash } from 'lucide-react';
 import { calculate1RM, getLastPerformance } from '../utils/fitness';
 
 interface AddMissionModalProps {
@@ -13,9 +13,9 @@ interface AddMissionModalProps {
 }
 
 export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSave, allExercises, userProfile, history }) => {
-  const [missionType, setMissionType] = useState<'quest' | 'smart_goal'>('smart_goal');
+  const [missionType, setMissionType] = useState<'smart_goal' | 'quest'>('smart_goal');
   
-  // Data för Quest
+  // Data for Quest
   const [title, setTitle] = useState('');
   const [targetCount, setTargetCount] = useState(10);
 
@@ -38,14 +38,12 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    // LÅS BAKGRUNDSSCROLL NÄR MODALEN ÄR ÖPPEN
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = 'unset';
     };
   }, []);
 
-  // Autofyll Startvärde
   useEffect(() => {
     const fetchCurrent = () => {
       if (targetType === 'exercise' && selectedExerciseId) {
@@ -105,15 +103,15 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
     
     onSave(newMission);
   };
-
-  const handleNumericFocus = (currentVal: number, setter: (v: number) => void) => {
-    if (currentVal === 0) setter("" as any);
+  
+  const handleNumericFocus = (currentVal: number, setter: (v: any) => void) => {
+    if (currentVal === 0) setter('');
   };
 
   const handleNumericBlur = (currentVal: any, setter: (v: number) => void) => {
     if (currentVal === "" || isNaN(Number(currentVal))) setter(0);
   };
-
+  
   return (
     <div className="fixed inset-0 z-[60] bg-[#1a1721] flex flex-col h-full w-full animate-in fade-in duration-300">
       
@@ -131,24 +129,24 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 overscroll-contain pb-32">
         
+        <div className="flex bg-white/5 p-1 rounded-xl">
+            <button onClick={() => setMissionType('smart_goal')} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 transition-colors ${missionType === 'smart_goal' ? 'bg-accent-blue text-white shadow-lg' : 'text-text-dim'}`}>
+              <TrendingUp size={16} /> Mätbart
+            </button>
+            <button onClick={() => setMissionType('quest')} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 transition-colors ${missionType === 'quest' ? 'bg-accent-blue text-white shadow-lg' : 'text-text-dim'}`}>
+              <Trophy size={16} /> Uppdrag
+            </button>
+        </div>
+
         <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-text-dim">Namn (Valfritt)</label>
+          <label className="text-[10px] font-black uppercase text-text-dim">Namn</label>
           <input 
               type="text" 
               value={title} 
               onChange={e => setTitle(e.target.value)} 
-              placeholder={missionType === 'smart_goal' ? "T.ex. Bli stark i bänk" : "T.ex. 100 Pullups"}
+              placeholder={missionType === 'smart_goal' ? "T.ex. Bli stark i bänkpress" : "T.ex. Stretcha varje morgon"}
               className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold placeholder:text-white/20" 
           />
-        </div>
-
-        <div className="flex bg-white/5 p-1 rounded-xl">
-            <button onClick={() => setMissionType('smart_goal')} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 transition-colors ${missionType === 'smart_goal' ? 'bg-accent-blue text-white' : 'text-text-dim'}`}>
-              <TrendingUp size={16} /> Progression
-            </button>
-            <button onClick={() => setMissionType('quest')} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase flex items-center justify-center gap-2 transition-colors ${missionType === 'quest' ? 'bg-accent-blue text-white' : 'text-text-dim'}`}>
-              <Trophy size={16} /> Uppdrag
-            </button>
         </div>
 
         {missionType === 'smart_goal' ? (
@@ -248,25 +246,11 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-text-dim">Start ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
-                  <input 
-                    type="number" 
-                    onFocus={() => handleNumericFocus(startValue, setStartValue)}
-                    onBlur={(e) => handleNumericBlur(e.target.value, setStartValue)}
-                    value={startValue} 
-                    onChange={e => setStartValue(Number(e.target.value))} 
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" 
-                  />
+                  <input type="number" onFocus={(e) => handleNumericFocus(startValue, setStartValue)} onBlur={(e) => handleNumericBlur(e.target.value, setStartValue)} value={startValue} onChange={e => setStartValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-text-dim">Mål ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
-                  <input 
-                    type="number" 
-                    onFocus={() => handleNumericFocus(targetValue, setTargetValue)}
-                    onBlur={(e) => handleNumericBlur(e.target.value, setTargetValue)}
-                    value={targetValue} 
-                    onChange={e => setTargetValue(Number(e.target.value))} 
-                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" 
-                  />
+                  <input type="number" onFocus={(e) => handleNumericFocus(targetValue, setTargetValue)} onBlur={(e) => handleNumericBlur(e.target.value, setTargetValue)} value={targetValue} onChange={e => setTargetValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
                 </div>
             </div>
 
@@ -279,47 +263,25 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
                 <label className="text-[10px] font-black uppercase text-text-dim">Strategi</label>
                 <div className="flex gap-2">
                     {['linear', 'undulating', 'peaking'].map((s) => (
-                      <button 
-                        key={s}
-                        onClick={() => setStrategy(s as any)} 
-                        className={`flex-1 p-3 rounded-xl text-[10px] font-black uppercase border transition-all ${strategy === s ? 'bg-white text-black border-white' : 'border-white/10 text-text-dim hover:bg-white/5'}`}
-                      >
+                      <button key={s} onClick={() => setStrategy(s as any)} className={`flex-1 p-3 rounded-xl text-[10px] font-black uppercase border transition-all ${strategy === s ? 'bg-white text-black border-white' : 'border-white/10 text-text-dim hover:bg-white/5'}`}>
                         {s === 'linear' ? 'Linjär' : s === 'undulating' ? 'Vågform' : 'Toppning'}
                       </button>
                     ))}
                 </div>
-                <p className="text-[10px] text-text-dim italic px-1">
-                  {strategy === 'linear' && "Ökar stadigt varje pass."}
-                  {strategy === 'undulating' && "Varierar tunga och lätta veckor."}
-                  {strategy === 'peaking' && "Accelererar mot slutet för maxning."}
-                </p>
             </div>
           </div>
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-text-dim">Mål-antal</label>
-                <input 
-                  type="number" 
-                  onFocus={() => handleNumericFocus(targetCount, setTargetCount)}
-                  onBlur={(e) => handleNumericBlur(e.target.value, setTargetCount)}
-                  value={targetCount} 
-                  onChange={e => setTargetCount(Number(e.target.value))} 
-                  className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" 
-                  placeholder="T.ex. 10" 
-                />
+                <label className="text-[10px] font-black uppercase text-text-dim">Mål-antal (om uppdraget ska repeteras)</label>
+                <input type="number" onFocus={(e) => handleNumericFocus(targetCount, setTargetCount)} onBlur={(e) => handleNumericBlur(e.target.value, setTargetCount)} value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" placeholder="T.ex. 10" />
               </div>
           </div>
         )}
       </div>
 
       <div className="shrink-0 p-4 border-t border-white/5 bg-[#1a1721] pb-[calc(env(safe-area-inset-bottom)+1rem)] z-50">
-          <button 
-            onClick={handleSave} 
-            className="w-full py-4 bg-white text-black rounded-xl font-black uppercase tracking-widest hover:bg-gray-200 active:scale-[0.98] transition-all"
-          >
-              Spara Mål
-          </button>
+          <button onClick={handleSave} className="w-full py-4 bg-white text-black rounded-xl font-black uppercase tracking-widest hover:bg-gray-200 active:scale-[0.98] transition-all">Spara Mål</button>
       </div>
     </div>
   );

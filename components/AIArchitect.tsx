@@ -88,16 +88,8 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
                 isCompleted: false, progress: 0, total: g.targetValue,
                 createdAt: new Date().toISOString(),
                 exerciseId: g.exerciseId,
-                smartConfig: { ...g, startValue: 0 }
+                smartConfig: { ...g, startValue: g.startValue || 0 } // Använd AI:s startvärde
             };
-            if (newMission.smartConfig?.targetType === 'exercise' && newMission.smartConfig.exerciseId) {
-                const lastPerf = getLastPerformance(newMission.smartConfig.exerciseId, fullHistory);
-                const max1RM = lastPerf ? Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0))) : 0;
-                newMission.smartConfig.startValue = max1RM;
-            } else if (newMission.smartConfig?.targetType === 'body_weight') {
-                const profile = await storage.getUserProfile();
-                newMission.smartConfig.startValue = profile.weight;
-            }
             newMissions.push(newMission);
             newProgram.goalIds.push(newMission.id);
         }

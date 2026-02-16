@@ -337,6 +337,7 @@ export interface AIProgram {
 // NYTT: DATAMODELLER FÖR AI-PLANERINGS-SVAR
 export interface AIPlanSmartGoal {
   title: string;
+  startValue: number;
   targetValue: number;
   targetType: 'exercise' | 'body_weight' | 'body_measurement';
   exerciseId?: string;
