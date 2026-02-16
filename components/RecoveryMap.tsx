@@ -19,6 +19,13 @@ interface RecoveryMapProps {
   allExercises: Exercise[];
 }
 
+const formatSeconds = (totalSeconds: number | undefined) => {
+    if (totalSeconds === undefined || isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 // --- DETAIL MODAL COMPONENT ---
 const RecoveryDetailModal: React.FC<{
   muscle: MuscleGroup;
@@ -83,12 +90,27 @@ const RecoveryDetailModal: React.FC<{
                       </div>
                     </div>
                     <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
-                        {item.sets.map((set, setIdx) => (
-                            <div key={setIdx} className="flex justify-between items-center text-xs text-text-dim bg-black/20 px-3 py-1.5 rounded-md">
-                                <span className="font-bold">Set {setIdx + 1}</span>
-                                <span className="text-white font-mono font-black">{set.weight}kg x {set.reps} reps</span>
-                            </div>
-                        ))}
+                        {item.sets.map((set, setIdx) => {
+                            const historicalType = item.trackingType || 'reps_weight';
+                            return (
+                                <div key={setIdx} className="flex justify-between items-center text-xs text-text-dim bg-black/20 px-3 py-1.5 rounded-md">
+                                    <span className="font-bold">Set {setIdx + 1}</span>
+                                    <span className="text-white font-mono font-black">
+                                        {historicalType === 'time_only' ? (
+                                            `${formatSeconds(set.duration)}`
+                                        ) : historicalType === 'time_distance' ? (
+                                            `${set.distance}m @ ${formatSeconds(set.duration)}`
+                                        ) : historicalType === 'reps_only' ? (
+                                            `${set.reps} reps`
+                                        ) : historicalType === 'reps_time_weight' ? (
+                                            `${set.reps} reps (${formatSeconds(set.duration)})`
+                                        ) : (
+                                            `${set.reps} x ${set.weight}kg`
+                                        )}
+                                    </span>
+                                </div>
+                            );
+                        })}
                     </div>
                   </div>
                 ))

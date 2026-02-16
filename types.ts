@@ -305,7 +305,7 @@ export interface UserMission {
   id: string;
   title: string;
   // Vi lägger till 'smart_goal' som en giltig typ
-  type: 'quest' | 'habit' | 'smart_goal'; 
+  type: 'quest' | 'smart_goal'; 
   
   // Detta fält finns bara om type === 'smart_goal'
   smartConfig?: SmartGoalConfig;

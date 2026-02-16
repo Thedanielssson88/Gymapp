@@ -86,12 +86,13 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
       .filter(s => s.exercises.some(e => e.exerciseId === exercise.id))
       .map(s => {
         const ex = s.exercises.find(e => e.exerciseId === exercise.id);
+        const historicalType = ex?.trackingTypeOverride || exercise.trackingType || 'reps_weight';
         return {
           date: s.date,
           sessionName: s.name,
           sets: ex?.sets || [],
           notes: ex?.notes,
-          trackingType: exercise.trackingType || 'reps_weight'
+          trackingType: historicalType
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Most recent first

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutSession, Exercise, MuscleGroup, UserProfile } from '../types';
 import { calculateExerciseImpact } from '../utils/recovery';
@@ -81,7 +80,7 @@ const RecoveryMapBody = ({p}: {p: (m: MuscleGroup) => any}) => (
 
 export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercises, userProfile, onAddExercise }) => {
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const stats = useMemo(() => {
     if (!session) return { totalLoad: 0, totalSets: 0, totalReps: 0 };

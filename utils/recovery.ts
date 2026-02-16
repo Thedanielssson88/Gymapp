@@ -1,4 +1,3 @@
-
 import { WorkoutSession, MuscleGroup, Exercise, WorkoutSet, UserProfile } from '../types';
 
 export type MuscleStatus = {
@@ -140,6 +139,7 @@ export interface WorkloadDetail {
   sets: WorkoutSet[];
   role: 'Primär' | 'Sekundär';
   impactScore: number;
+  trackingType?: 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only' | 'reps_time_weight';
 }
 
 export const getMuscleWorkloadDetails = (
@@ -179,7 +179,8 @@ export const getMuscleWorkloadDetails = (
             exerciseName: exDef.name,
             sets: completedSets,
             role: hitsPrimary ? 'Primär' : 'Sekundär',
-            impactScore: decayedScore
+            impactScore: decayedScore,
+            trackingType: sessionEx.trackingTypeOverride || exDef.trackingType
           });
         }
       }

@@ -109,7 +109,7 @@ export const HistoryItemModal: React.FC<HistoryItemModalProps> = ({ session, all
                                 <div key={idx} className="space-y-3">
                                 <div className="flex justify-between items-baseline gap-4"><span className="text-sm font-black uppercase italic text-accent-pink tracking-tight shrink-0">{exData?.name || 'Övning'}</span>{ex.notes && (<div className="flex items-center gap-1.5 opacity-60 min-w-0 text-right"><MessageSquare size={10} className="text-text-dim shrink-0" /><span className="text-[9px] font-bold text-text-dim italic truncate">{ex.notes}</span></div>)}</div>
                                 <div className="space-y-1.5">
-                                    {ex.sets.filter(s => s.completed).map((set, sIdx) => (<HistoryLogSetRow key={sIdx} set={set} type={exData?.trackingType} isPR={checkIsPR(ex.exerciseId, set.weight, set.reps, session.date)} />))}
+                                    {ex.sets.filter(s => s.completed).map((set, sIdx) => (<HistoryLogSetRow key={sIdx} set={set} type={ex.trackingTypeOverride || exData?.trackingType} isPR={checkIsPR(ex.exerciseId, set.weight, set.reps, session.date)} />))}
                                 </div>
                                 </div>
                             );
