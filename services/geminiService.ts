@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone, ProgressionRate } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
@@ -217,12 +218,16 @@ export const generateProfessionalPlan = async (
     const { daysPerWeek, durationMinutes, durationWeeks, progressionRate } = preferences;
     const exerciseIndex = availableExercises.map(e => `ID: ${e.id}, Namn: ${e.name}, Utrustning: [${e.equipment.join(', ')}]`).join('\n');
 
+    const today = new Date().toISOString().split('T')[0];
+
     const contents = `
       Du är en expert-PT och träningsfysiolog. Skapa ett detaljerat träningsprogram.
       
       VIKTIGT: Använd ENDAST övningar från listan nedan. Svara med det exakta ID:t för varje övning.
       TILLGÄNGLIGA ÖVNINGAR:
       ${exerciseIndex}
+
+      DAGENS DATUM: ${today}
 
       MÅL: "${userRequest}"
       TIDSPERSPEKTIV: ${durationWeeks} veckor, ${daysPerWeek} pass/vecka, ${durationMinutes} min/pass.
@@ -235,11 +240,12 @@ export const generateProfessionalPlan = async (
       - normal: Standard linjär progression. (+2.5kg/vecka för överkropp, +5kg/vecka för ben).
       - aggressive: Utmana användaren. Utnyttja "newbie gains" eller tuff periodisering. Öka snabbare om det är fysiologiskt möjligt (t.ex. +2.5kg per pass istället för per vecka för en nybörjare).
       
-      VIKTIGT - REALISM:
+      VIKTIGT - REALISM & DATUM:
       1. Bedöm om målet är fysiologiskt nåbart på ${durationWeeks} veckor med vald takt.
       2. Även vid 'aggressive', om målet är orealistiskt (t.ex. +60kg på 4v), designa programmet som "Fas 1" av en längre plan.
       3. Maximera då ökningen under denna fas (t.ex. gå från 40kg -> 55kg istället för 43kg) och skriv i 'motivation' att detta är en ambitiös start på en längre resa.
       4. Sätt målet (smartGoals) för sista veckan i detta program till en realistisk delvinst.
+      5. ALLA deadlines MÅSTE vara i framtiden, relativt till DAGENS DATUM. Använd ALLTID formatet 'YYYY-MM-DD'.
     `;
 
     const response = await ai.models.generateContent({

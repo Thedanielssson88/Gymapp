@@ -218,6 +218,7 @@ const MeasurementDetailModal: React.FC<DetailModalProps> = ({ field, history, on
             <div className="relative">
               <input 
                 autoFocus
+                onFocus={(e) => e.target.select()}
                 type="number" 
                 step="0.1"
                 placeholder="0.0"

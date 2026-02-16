@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { AIProgram, ScheduledActivity, WorkoutSession, Exercise, PlannedExercise, SetType } from '../types';
 import { storage } from '../services/storage';
-import { ChevronRight, Calendar, Activity, XCircle, PlusCircle, TrendingUp, CheckCircle, ArrowLeft, Sparkles, Loader2, Circle, CheckCircle2, Plus, List, Dumbbell } from 'lucide-react';
+import { ChevronRight, Calendar, Activity, XCircle, PlusCircle, TrendingUp, CheckCircle, ArrowLeft, Sparkles, Loader2, Circle, CheckCircle2, Plus, List, Dumbbell, Trash2 } from 'lucide-react';
 import { AIArchitect } from './AIArchitect';
 import { WorkoutDetailsModal } from './WorkoutDetailsModal';
 import { AIExerciseRecommender } from './AIExerciseRecommender';
 import { registerBackHandler } from '../utils/backHandler';
 import { NextPhaseModal } from './NextPhaseModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface AIProgramDashboardProps {
   onStartSession: (activity: ScheduledActivity) => void;
@@ -25,14 +27,18 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
   
   const [viewingActivity, setViewingActivity] = useState<ScheduledActivity | null>(null);
   const [showNextPhaseModal, setShowNextPhaseModal] = useState(false);
+  const [programToDelete, setProgramToDelete] = useState<AIProgram | null>(null);
+
 
   useEffect(() => {
     if (showGenerator) return registerBackHandler(() => setShowGenerator(false));
   }, [showGenerator]);
 
   useEffect(() => {
-    if (selectedProgram && !viewingActivity && !showNextPhaseModal) return registerBackHandler(() => setSelectedProgram(null));
-  }, [selectedProgram, viewingActivity, showNextPhaseModal]);
+    if (selectedProgram && !viewingActivity && !showNextPhaseModal && !programToDelete) {
+        return registerBackHandler(() => setSelectedProgram(null));
+    }
+  }, [selectedProgram, viewingActivity, showNextPhaseModal, programToDelete]);
 
   useEffect(() => {
     if (viewingActivity) return registerBackHandler(() => setViewingActivity(null));
@@ -66,6 +72,19 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
     onStartSession(activity);
   };
 
+  const handleDeleteRequest = (program: AIProgram) => {
+    setProgramToDelete(program);
+  };
+  
+  const confirmDeleteProgram = async () => {
+      if (programToDelete) {
+          await storage.deleteAIProgram(programToDelete.id);
+          setSelectedProgram(null);
+          setProgramToDelete(null);
+          onUpdate();
+      }
+  };
+
   if (showGenerator) {
     return (
         <div>
@@ -86,16 +105,18 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
     const completedActivities = programActivities.filter(a => a.isCompleted || (a.date < todayStr && a.linkedSessionId));
     const upcomingActivities = programActivities.filter(a => !completedActivities.some(c => c.id === a.id));
 
-    const handleCancel = async () => {
-        if(confirm("Är du säker? Detta tar bort alla kommande pass och mål kopplade till programmet.")) {
-            await storage.cancelAIProgram(selectedProgram.id);
-            setSelectedProgram(null);
-            onUpdate();
-        }
-    };
-
     return (
       <div className="pb-24 pt-8 px-4 space-y-6 animate-in fade-in">
+        {programToDelete && (
+            <ConfirmModal
+                title="Radera Program?"
+                message="Är du säker? Detta tar bort programmet, alla kommande pass och kopplade mål permanent."
+                confirmLabel="Ja, Radera"
+                isDestructive={true}
+                onConfirm={confirmDeleteProgram}
+                onCancel={() => setProgramToDelete(null)}
+            />
+        )}
         {viewingActivity && (
             <WorkoutDetailsModal 
                 activity={viewingActivity}
@@ -127,7 +148,14 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
         </div>
 
         <div className="bg-gradient-to-br from-[#1a1721] to-[#2a2435] p-6 rounded-[32px] border border-accent-blue/20 shadow-lg">
-            <h2 className="text-2xl font-black italic uppercase text-white mb-2 leading-none">{selectedProgram.name}</h2>
+            <div className="flex justify-between items-start">
+              <div className="min-w-0">
+                  <h2 className="text-2xl font-black italic uppercase text-white mb-2 leading-none pr-4">{selectedProgram.name}</h2>
+              </div>
+              <button onClick={() => handleDeleteRequest(selectedProgram)} className="bg-red-500/10 text-red-500 font-bold py-3 px-4 rounded-2xl flex items-center justify-center hover:bg-red-500/20 transition-colors shrink-0">
+                  <Trash2 size={20} />
+              </button>
+            </div>
             <p className="text-sm text-text-dim italic border-l-2 border-accent-blue pl-3 mb-4 leading-relaxed">"{selectedProgram.motivation}"</p>
             {selectedProgram.status === 'active' && (
                 <div className="flex gap-3 mt-4">
@@ -137,7 +165,6 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
                     >
                         <PlusCircle size={16} strokeWidth={3} /> Nästa Fas
                     </button>
-                    <button onClick={handleCancel} className="bg-red-500/10 text-red-500 font-bold py-3 px-4 rounded-2xl flex items-center justify-center hover:bg-red-500/20 transition-colors"><XCircle size={20} /></button>
                 </div>
             )}
         </div>
@@ -219,7 +246,7 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
                 </div>
             ) : (
                 <div className="grid gap-4">
-                    {programs.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(p => (
+                    {programs.filter(p => p.status !== 'cancelled').sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(p => (
                         <button key={p.id} onClick={() => setSelectedProgram(p)} className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 text-left group hover:border-accent-blue/40 transition-all relative overflow-hidden shadow-xl active:scale-[0.98]">
                             <div className="flex justify-between items-start mb-3 relative z-10">
                                 <h3 className="text-xl font-black italic uppercase text-white group-hover:text-accent-blue transition-colors leading-tight pr-4">{p.name}</h3>

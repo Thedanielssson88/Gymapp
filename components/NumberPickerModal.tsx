@@ -209,6 +209,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
                 <input
                     ref={inputRef}
                     type="text"
+                    onFocus={(e) => e.target.select()}
                     inputMode={precision === 0 ? "numeric" : "decimal"}
                     value={localVal}
                     onChange={handleInputChange}

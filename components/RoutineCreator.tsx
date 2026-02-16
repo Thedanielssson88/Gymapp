@@ -141,8 +141,8 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
                   {item.sets.map((set, setIdx) => (
                     <div key={setIdx} className="grid grid-cols-10 gap-2 items-center">
                       <div className="col-span-1 flex justify-center"><span className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold text-text-dim">{setIdx + 1}</span></div>
-                      <div className="col-span-4"><input type="number" value={set.weight || ''} onChange={(e) => updateSet(exIdx, setIdx, 'weight', Number(e.target.value))} placeholder="0" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-center text-white font-bold text-sm outline-none focus:border-accent-blue" /></div>
-                      <div className="col-span-4"><input type="number" value={set.reps || ''} onChange={(e) => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))} placeholder="0" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-center text-white font-bold text-sm outline-none focus:border-accent-blue" /></div>
+                      <div className="col-span-4"><input type="number" onFocus={(e) => e.target.select()} value={set.weight || ''} onChange={(e) => updateSet(exIdx, setIdx, 'weight', Number(e.target.value))} placeholder="0" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-center text-white font-bold text-sm outline-none focus:border-accent-blue" /></div>
+                      <div className="col-span-4"><input type="number" onFocus={(e) => e.target.select()} value={set.reps || ''} onChange={(e) => updateSet(exIdx, setIdx, 'reps', Number(e.target.value))} placeholder="0" className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-center text-white font-bold text-sm outline-none focus:border-accent-blue" /></div>
                       <div className="col-span-1 flex justify-center"><button onClick={() => removeSet(exIdx, setIdx)} className="text-white/20 hover:text-red-500"><X size={14} /></button></div>
                     </div>
                   ))}

@@ -15,6 +15,13 @@ interface ExerciseInfoModalProps {
   onExerciseSwap?: (idx: number, newId: string) => void;
 }
 
+const formatSeconds = (totalSeconds: number | undefined) => {
+    if (totalSeconds === undefined || isNaN(totalSeconds) || totalSeconds < 0) return '0:00';
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
 export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({ 
   exercise, 
   onClose, 
@@ -43,21 +50,36 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
       .filter(s => s.exercises && s.exercises.some(e => e.exerciseId === exercise.id))
       .map(s => {
         const ex = s.exercises.find(e => e.exerciseId === exercise.id);
-        const bestSet = ex?.sets.filter(set => set.completed).sort((a,b) => (calculate1RM(b.weight, b.reps)) - (calculate1RM(a.weight, a.reps)))[0];
+        
+        let bestSet: WorkoutSet | undefined;
+        let bestValue = 0;
+        const trackingType = exercise.trackingType || 'reps_weight';
+
+        if (trackingType === 'time_only' || trackingType === 'time_distance') {
+            bestSet = ex?.sets.filter(set => set.completed).sort((a, b) => (b.duration || 0) - (a.duration || 0))[0];
+            bestValue = bestSet?.duration || 0;
+        } else if (trackingType === 'reps_only') {
+            bestSet = ex?.sets.filter(set => set.completed).sort((a, b) => (b.reps || 0) - (a.reps || 0))[0];
+            bestValue = bestSet?.reps || 0;
+        } else { // reps_weight
+            bestSet = ex?.sets.filter(set => set.completed).sort((a,b) => (calculate1RM(b.weight || 0, b.reps || 0)) - (calculate1RM(a.weight || 0, a.reps || 0)))[0];
+            bestValue = bestSet ? calculate1RM(bestSet.weight || 0, bestSet.reps || 0) : 0;
+        }
+
         return {
           date: s.date,
-          max1RM: bestSet ? calculate1RM(bestSet.weight || 0, bestSet.reps || 0) : 0,
+          bestValue,
           bestSet
         };
       })
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     const allTimeBest = exerciseHistory.length > 0 
-      ? exerciseHistory.reduce((prev, current) => (prev.max1RM > current.max1RM) ? prev : current)
+      ? exerciseHistory.reduce((prev, current) => ((prev.bestValue || 0) > (current.bestValue || 0)) ? prev : current)
       : null;
 
     return { history: exerciseHistory, best: allTimeBest };
-  }, [history, exercise.id]);
+  }, [history, exercise.id, exercise.trackingType]);
   
   const historyItems = useMemo(() => {
     return history
@@ -68,12 +90,13 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
           date: s.date,
           sessionName: s.name,
           sets: ex?.sets || [],
-          notes: ex?.notes
+          notes: ex?.notes,
+          trackingType: exercise.trackingType || 'reps_weight'
         };
       })
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) // Most recent first
       .slice(0, 5); // Visar de 5 senaste gångerna
-  }, [history, exercise.id]);
+  }, [history, exercise.id, exercise.trackingType]);
 
   const alternatives = useMemo(() => {
     if (exercise.alternativeExIds && exercise.alternativeExIds.length > 0) {
@@ -181,21 +204,30 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
             <div className="bg-gradient-to-br from-[#1a1721] to-[#13111a] p-6 rounded-3xl border border-white/5 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><Trophy size={64} /></div>
                 <h4 className="text-[10px] font-black uppercase text-text-dim tracking-widest mb-4 flex items-center gap-2 relative z-10">
-                    <Trophy size={12} className="text-yellow-500" /> Personbästa (Est. 1RM)
+                    <Trophy size={12} className="text-yellow-500" /> Personbästa ({exercise.trackingType === 'reps_weight' ? 'Est. 1RM' : 'Max Tid/Reps'})
                 </h4>
                 
                 {stats.best ? (
                     <div className="relative z-10">
                         <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-black italic text-white tracking-tighter">{Math.round(stats.best.max1RM)}</span>
-                            <span className="text-sm font-bold text-text-dim uppercase">kg</span>
+                            <span className="text-4xl font-black italic text-white tracking-tighter">
+                                {(exercise.trackingType === 'reps_weight' || !exercise.trackingType) ? Math.round(stats.best.bestValue) : stats.best.bestValue}
+                            </span>
+                            <span className="text-sm font-bold text-text-dim uppercase">
+                                {(exercise.trackingType === 'reps_weight' || !exercise.trackingType) ? 'kg' : (exercise.trackingType === 'time_only' || exercise.trackingType === 'time_distance' ? 's' : 'reps')}
+                            </span>
                         </div>
                         <div className="mt-2 flex items-center gap-2 text-[10px] font-bold text-white/40 uppercase tracking-wide bg-white/5 w-fit px-2 py-1 rounded-lg">
                             <Calendar size={10} /> {new Date(stats.best.date).toLocaleDateString('sv-SE')}
                         </div>
                         <div className="mt-4 pt-4 border-t border-white/5">
                             <p className="text-[10px] text-text-dim uppercase tracking-widest mb-1">Bästa setet:</p>
-                            <p className="text-sm font-bold text-white">{stats.best.bestSet?.weight}kg x {stats.best.bestSet?.reps} reps</p>
+                            <p className="text-sm font-bold text-white">
+                                {(exercise.trackingType === 'reps_weight' || !exercise.trackingType) ? `${stats.best.bestSet?.weight}kg x ${stats.best.bestSet?.reps} reps` :
+                                 exercise.trackingType === 'time_only' ? `${formatSeconds(stats.best.bestSet?.duration)}` :
+                                 exercise.trackingType === 'reps_only' ? `${stats.best.bestSet?.reps} reps` :
+                                 `${stats.best.bestSet?.distance}m @ ${formatSeconds(stats.best.bestSet?.duration)}`}
+                            </p>
                         </div>
                     </div>
                 ) : (
@@ -240,14 +272,31 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
                           <span className="text-[10px] font-black text-text-dim w-4">{sIdx + 1}</span>
                         </div>
                         <div className="flex gap-4">
-                          <div className="text-right">
-                            <span className="text-sm font-black italic text-white">{set.weight}</span>
-                            <span className="text-[9px] font-bold text-text-dim uppercase ml-1">kg</span>
-                          </div>
-                          <div className="text-right min-w-[40px]">
-                            <span className="text-sm font-black italic text-white">{set.reps}</span>
-                            <span className="text-[9px] font-bold text-text-dim uppercase ml-1">reps</span>
-                          </div>
+                          {item.trackingType === 'time_only' ? (
+                            <div className="text-right">
+                              <span className="text-sm font-black italic text-white">{formatSeconds(set.duration)}</span>
+                            </div>
+                          ) : item.trackingType === 'time_distance' ? (
+                            <div className="text-right">
+                                <span className="text-sm font-black italic text-white">{set.distance}m @ {formatSeconds(set.duration)}</span>
+                            </div>
+                          ) : item.trackingType === 'reps_only' ? (
+                            <div className="text-right min-w-[40px]">
+                                <span className="text-sm font-black italic text-white">{set.reps}</span>
+                                <span className="text-[9px] font-bold text-text-dim uppercase ml-1">reps</span>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-right">
+                                <span className="text-sm font-black italic text-white">{set.weight}</span>
+                                <span className="text-[9px] font-bold text-text-dim uppercase ml-1">kg</span>
+                              </div>
+                              <div className="text-right min-w-[40px]">
+                                <span className="text-sm font-black italic text-white">{set.reps}</span>
+                                <span className="text-[9px] font-bold text-text-dim uppercase ml-1">reps</span>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -48,6 +48,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({ durati
               <Clock className="text-accent-blue" size={24} />
               <input 
                 type="number" 
+                onFocus={(e) => e.target.select()}
                 value={manualDuration}
                 onChange={(e) => setManualDuration(Math.max(0, Number(e.target.value)))}
                 className="bg-transparent text-3xl font-black text-white w-full outline-none"

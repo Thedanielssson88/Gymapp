@@ -1,5 +1,4 @@
 
-
 import { db, migrateFromLocalStorage } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
@@ -47,12 +46,6 @@ export const storage = {
       duration: session.duration
     };
     await db.workoutHistory.put(completedSession);
-    
-    const dateStr = completedSession.date.split('T')[0];
-    const scheduled = await db.scheduledActivities.where('date').equals(dateStr).and(a => !a.isCompleted).first();
-    if (scheduled) {
-      await db.scheduledActivities.update(scheduled.id, { isCompleted: true, linkedSessionId: completedSession.id });
-    }
   },
 
   deleteWorkoutFromHistory: async (sessionId: string) => {
@@ -247,7 +240,6 @@ export const storage = {
     window.dispatchEvent(new Event('storage-update'));
   },
   
-  // FIX: Added missing clearUpcomingProgramActivities function to storage object.
   clearUpcomingProgramActivities: async (programId: string): Promise<void> => {
     const today = new Date().toISOString().split('T')[0];
     const activitiesToDelete = await db.scheduledActivities
@@ -260,27 +252,30 @@ export const storage = {
     }
   },
 
-  cancelAIProgram: async (programId: string): Promise<void> => {
-    // 1. Uppdatera programstatus
+  deleteAIProgram: async (programId: string): Promise<void> => {
     const program = await db.aiPrograms.get(programId);
     if (!program) return;
-    await db.aiPrograms.update(programId, { status: 'cancelled' });
-
-    // 2. Ta bort framtida schemalagda pass kopplade till programmet
-    const today = new Date().toISOString().split('T')[0];
-    const activitiesToDelete = await db.scheduledActivities
-      .where('programId').equals(programId)
-      .filter(act => !act.isCompleted && act.date >= today)
-      .primaryKeys();
-
-    if (activitiesToDelete.length > 0) {
-      await db.scheduledActivities.bulkDelete(activitiesToDelete);
-    }
-    
-    // 3. Ta bort kopplade mål
-    if (program.goalIds && program.goalIds.length > 0) {
-        await db.userMissions.where('id').anyOf(program.goalIds).delete();
-    }
+  
+    await (db as any).transaction('rw', db.aiPrograms, db.scheduledActivities, db.userMissions, async () => {
+      // 1. Delete future, non-completed scheduled activities for this program
+      const today = new Date().toISOString().split('T')[0];
+      const activitiesToDelete = await db.scheduledActivities
+        .where('programId').equals(programId)
+        .filter(act => !act.isCompleted && act.date >= today)
+        .primaryKeys();
+  
+      if (activitiesToDelete.length > 0) {
+        await db.scheduledActivities.bulkDelete(activitiesToDelete);
+      }
+      
+      // 2. Delete associated smart goals
+      if (program.goalIds && program.goalIds.length > 0) {
+          await db.userMissions.where('id').anyOf(program.goalIds).delete();
+      }
+  
+      // 3. Delete the program itself
+      await db.aiPrograms.delete(programId);
+    });
     
     window.dispatchEvent(new Event('storage-update'));
   },

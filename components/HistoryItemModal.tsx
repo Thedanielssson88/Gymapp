@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { WorkoutSession, Exercise, WorkoutSet, TrackingType } from '../types';
-import { X, MapPin, Activity, Zap, Trophy, MessageSquare, Calendar } from 'lucide-react';
+import { X, MapPin, Activity, Zap, Trophy, MessageSquare, Calendar, Clock } from 'lucide-react';
 import { calculate1RM } from '../utils/fitness';
 
 const formatSeconds = (totalSeconds: number) => {
@@ -73,6 +73,9 @@ export const HistoryItemModal: React.FC<HistoryItemModalProps> = ({ session, all
         return true;
     }, [history]);
 
+    const endTime = session.duration ? new Date(new Date(session.date).getTime() + session.duration * 1000) : null;
+    const endTimeString = endTime ? endTime.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '';
+
     return (
         <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-[#1a1721] w-full max-w-md max-h-[85vh] flex flex-col rounded-[40px] border border-white/10 shadow-2xl animate-in zoom-in-95">
@@ -82,6 +85,11 @@ export const HistoryItemModal: React.FC<HistoryItemModalProps> = ({ session, all
                         <h3 className="text-2xl font-black italic text-white uppercase leading-tight pr-4">{session.name}</h3>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3">
                             <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest flex items-center gap-1.5"><Calendar size={12}/> {new Date(session.date).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' })}</span>
+                            {session.isManual ? (
+                                <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest flex items-center gap-1.5"><Clock size={12}/> Efterhand</span>
+                            ) : endTimeString && (
+                                <span className="text-[10px] text-text-dim font-bold uppercase tracking-widest flex items-center gap-1.5"><Clock size={12}/> {endTimeString}</span>
+                            )}
                             {session.locationName && (<span className="text-[10px] text-text-dim font-bold uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12}/> {session.locationName}</span>)}
                         </div>
                     </div>

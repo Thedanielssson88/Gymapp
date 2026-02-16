@@ -62,6 +62,7 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ title, totalSe
               <input
                 type="number"
                 autoFocus
+                onFocus={(e) => e.target.select()}
                 className="w-20 bg-transparent text-6xl font-black italic text-accent-blue text-center outline-none border-b-2 border-accent-blue"
                 value={manualMinInput}
                 onChange={(e) => setManualMinInput(e.target.value)}

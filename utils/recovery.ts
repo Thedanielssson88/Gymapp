@@ -1,4 +1,3 @@
-
 import { WorkoutSession, MuscleGroup, Exercise, WorkoutSet, UserProfile } from '../types';
 
 export type MuscleStatus = {
@@ -22,19 +21,29 @@ export const calculateExerciseImpact = (
   sets: WorkoutSet[], 
   userBodyWeight: number
 ): number => {
-  // 1. Filtrera bort set som inte är relevanta (0 reps)
-  const validSets = sets.filter(s => s.reps > 0);
+  const validSets = sets.filter(s => (s.reps || 0) > 0 || (s.duration || 0) > 0 || (s.distance || 0) > 0);
   if (validSets.length === 0) return 0;
 
-  // 2. Räkna ut total volym (inkl kroppsvikt för övningar som Chins)
   const totalVolume = validSets.reduce((sum, s) => {
-    const bodyweightLoad = userBodyWeight * (exData.bodyweightCoefficient || 0);
-    const effectiveLoad = bodyweightLoad + s.weight;
-    return sum + (effectiveLoad * s.reps);
+    const trackingType = exData.trackingType || 'reps_weight';
+    switch (trackingType) {
+        case 'time_only':
+        case 'time_distance':
+            // Basera påverkan på varaktighet. Anta att 1 sekund av en svår kroppsviktsövning motsvarar att lyfta kroppsvikten för 0.1 "reps".
+            const timeBasedBwFactor = exData.bodyweightCoefficient || 0.5;
+            const timeVolume = (s.duration || 0) * userBodyWeight * timeBasedBwFactor * 0.1;
+            return sum + timeVolume;
+        case 'reps_only':
+            const repBasedBwFactor = exData.bodyweightCoefficient || 0.7;
+            return sum + (userBodyWeight * repBasedBwFactor * (s.reps || 0));
+        case 'reps_weight':
+        default:
+            const bodyweightLoad = userBodyWeight * (exData.bodyweightCoefficient || 0);
+            const effectiveLoad = bodyweightLoad + (s.weight || 0);
+            return sum + (effectiveLoad * (s.reps || 0));
+    }
   }, 0);
-
-  // 3. Beräkna Fatigue (Trötthet)
-  // Formel: (Volym / 250 + Bonus för antal set) * Svårighetsgrad
+  
   let fatigue = (totalVolume / 250) + (validSets.length * 1.5);
   
   return fatigue * exData.difficultyMultiplier;

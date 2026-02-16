@@ -168,11 +168,29 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
           totalSets += completedSets.length;
 
           completedSets.forEach(set => {
-            const reps = set.reps || 0;
-            const weight = set.weight || 0;
-            const baseImpact = (reps * weight * (exData.difficultyMultiplier || 1));
-            const bodyweightImpact = ((exData.bodyweightCoefficient || 0) * (userProfile?.weight || 80) * reps);
-            totalImpactXP += (baseImpact + bodyweightImpact) / 100;
+            const trackingType = exData.trackingType || 'reps_weight';
+            let setImpact = 0;
+            const userWeight = userProfile?.weight || 80;
+            
+            switch(trackingType) {
+                case 'time_only':
+                case 'time_distance':
+                    const timeBasedBwFactor = exData.bodyweightCoefficient || 0.5;
+                    const timeVolume = (set.duration || 0) * userWeight * timeBasedBwFactor * 0.1;
+                    setImpact = timeVolume * (exData.difficultyMultiplier || 1);
+                    break;
+                case 'reps_only':
+                    const repBasedBwFactor = exData.bodyweightCoefficient || 0.7;
+                    setImpact = userWeight * repBasedBwFactor * (set.reps || 0) * (exData.difficultyMultiplier || 1);
+                    break;
+                case 'reps_weight':
+                default:
+                    const bodyweightLoad = (exData.bodyweightCoefficient || 0) * userWeight;
+                    const effectiveLoad = bodyweightLoad + (set.weight || 0);
+                    setImpact = effectiveLoad * (set.reps || 0) * (exData.difficultyMultiplier || 1);
+                    break;
+            }
+            totalImpactXP += setImpact / 100;
           });
         });
       });
@@ -181,23 +199,24 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
 
       const calculateLevelData = (xp: number) => {
         let currentLvl = 1;
-        let xpRequiredForNext = 500; 
         let totalXpThreshold = 0;
-      
+        let xpRequiredForNext = Math.pow(currentLvl, 1.5) * 100;
+
         while (xp >= totalXpThreshold + xpRequiredForNext) {
           totalXpThreshold += xpRequiredForNext;
           currentLvl++;
-          xpRequiredForNext = Math.round(xpRequiredForNext * 1.25); 
+          xpRequiredForNext = Math.pow(currentLvl, 1.5) * 100;
         }
-      
+
+        xpRequiredForNext = Math.round(xpRequiredForNext);
         const xpEarnedInLevel = Math.round(xp - totalXpThreshold);
         const progress = (xpRequiredForNext > 0) ? (xpEarnedInLevel / xpRequiredForNext) * 100 : 0;
-      
-        return { 
-          level: currentLvl, 
-          xpProgress: progress, 
-          currentLevelXP: xpEarnedInLevel, 
-          xpToNextLevel: xpRequiredForNext 
+
+        return {
+          level: currentLvl,
+          xpProgress: progress,
+          currentLevelXP: xpEarnedInLevel,
+          xpToNextLevel: xpRequiredForNext,
         };
       };
 

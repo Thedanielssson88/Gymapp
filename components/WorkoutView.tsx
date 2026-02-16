@@ -12,7 +12,7 @@ import { ExerciseCard } from './ExerciseCard';
 import { ExerciseLibrary } from './ExerciseLibrary';
 import { registerBackHandler } from '../utils/backHandler';
 import { Search, X, Plus, RefreshCw, Info, Sparkles, History, BookOpen, ArrowDownToLine, MapPin, Check, ArrowRightLeft, Dumbbell, Play, Pause, Timer as TimerIcon, AlertCircle, Thermometer, Zap, Activity, Shuffle, Calendar, Trophy, ArrowRight, Repeat, MessageSquare } from 'lucide-react';
-import { Haptics, NotificationType } from '@capacitor/haptics';
+import { Haptics, NotificationType, ImpactStyle } from '@capacitor/haptics';
 import { triggerHaptic } from '../utils/haptics';
 import { ConfirmModal } from './ConfirmModal';
 import { calculateSmartProgression } from '../utils/progression';
@@ -117,6 +117,12 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   useEffect(() => {
     let interval: any;
     if (restTimer !== null && restTimer > 0) {
+      // Countdown haptics logic
+      if (!isManualMode && (userProfile.settings?.vibrateTimer ?? true)) {
+        if (restTimer <= 5 && restTimer > 0) {
+          Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+        }
+      }
       interval = setInterval(() => setRestTimer(r => (r !== null ? r - 1 : 0)), 1000);
     } else if (restTimer === 0) {
       if (!isManualMode && (userProfile.settings?.vibrateTimer ?? true)) {

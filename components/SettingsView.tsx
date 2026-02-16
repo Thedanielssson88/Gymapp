@@ -181,6 +181,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
                   <label className="text-[10px] font-black uppercase text-text-dim">Vikt (kg)</label>
                   <input 
                     type="number" 
+                    onFocus={(e) => e.target.select()}
                     value={localProfile.weight} 
                     onChange={e => setLocalProfile({...localProfile, weight: Number(e.target.value)})}
                     className="bg-white/5 border border-white/10 rounded-xl p-3 text-white font-bold outline-none focus:border-accent-pink"
@@ -405,6 +406,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             </div>
             <input 
               type="number"
+              onFocus={(e) => e.target.select()}
               value={localProfile.settings?.barbellWeight || 20}
               onChange={(e) => handleSettingChange('barbellWeight', Number(e.target.value))}
               className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right font-black text-accent-blue outline-none focus:border-accent-blue"
@@ -422,6 +424,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             </div>
             <input 
               type="number"
+              onFocus={(e) => e.target.select()}
               value={localProfile.settings?.dumbbellBaseWeight || 2}
               onChange={(e) => handleSettingChange('dumbbellBaseWeight', Number(e.target.value))}
               className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-right font-black text-accent-pink outline-none focus:border-accent-pink"

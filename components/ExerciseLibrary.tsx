@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Exercise, MovementPattern, Equipment, MuscleGroup, ExerciseTier, TrackingType, Zone, WorkoutSession, UserProfile } from '../types';
 import { storage } from '../services/storage';
@@ -240,6 +241,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ allExercises: 
             <AIExerciseRecommender 
               onClose={() => setShowAIScout(false)}
               allExercises={exercises}
+              history={history}
               activeZone={activeZone}
               onUpdate={onUpdate}
               onEditExercise={(exerciseId) => {

@@ -51,7 +51,7 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
         const lastPerf = getLastPerformance(selectedExerciseId, history);
         let max = 0;
         if (lastPerf) {
-           max = Math.max(...lastPerf.map(s => calculate1RM(s.weight, s.reps)));
+           max = Math.max(...lastPerf.map(s => calculate1RM(s.weight || 0, s.reps || 0)));
         }
         if (max > 0) setStartValue(max);
       } else if (targetType === 'body_weight') {
@@ -227,11 +227,11 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
               <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase text-text-dim">Start Reps</label>
-                      <input type="number" value={startReps} onChange={e => setStartReps(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
+                      <input type="number" onFocus={e => e.target.select()} value={startReps} onChange={e => setStartReps(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
                   </div>
                   <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase text-text-dim">Mål Reps (1=Max)</label>
-                      <input type="number" value={targetReps} onChange={e => setTargetReps(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
+                      <input type="number" onFocus={e => e.target.select()} value={targetReps} onChange={e => setTargetReps(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
                   </div>
               </div>
             )}
@@ -239,11 +239,11 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-text-dim">Start ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
-                  <input type="number" value={startValue} onChange={e => setStartValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
+                  <input type="number" onFocus={e => e.target.select()} value={startValue} onChange={e => setStartValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-text-dim">Mål ({targetType === 'body_measurement' ? 'cm' : 'kg'})</label>
-                  <input type="number" value={targetValue} onChange={e => setTargetValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
+                  <input type="number" onFocus={e => e.target.select()} value={targetValue} onChange={e => setTargetValue(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold text-accent-green" />
                 </div>
             </div>
 
@@ -276,7 +276,7 @@ export const AddMissionModal: React.FC<AddMissionModalProps> = ({ onClose, onSav
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-text-dim">Mål-antal</label>
-                <input type="number" value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" placeholder="T.ex. 10" />
+                <input type="number" onFocus={e => e.target.select()} value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white font-bold" placeholder="T.ex. 10" />
               </div>
           </div>
         )}
