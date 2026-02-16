@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { PlannedExercise, Exercise, WorkoutSet, UserProfile, Zone } from '../types';
+import { PlannedExercise, Exercise, WorkoutSet, UserProfile, Zone, TrackingType } from '../types';
 import { SetRow } from './SetRow';
-import { MoreVertical, MessageSquare, Info, Trash2, Plus, ArrowUp, ArrowDown, Link, Unlink, CheckCircle2, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { MoreVertical, MessageSquare, Info, Trash2, Plus, ArrowUp, ArrowDown, Link, Unlink, CheckCircle2, ChevronDown, ChevronUp, TrendingUp, RefreshCw } from 'lucide-react';
 import { useExerciseImage } from '../hooks/useExerciseImage';
+import { triggerHaptic } from '../utils/haptics';
 
 interface ExerciseCardProps {
   item: PlannedExercise;
@@ -30,6 +31,7 @@ interface ExerciseCardProps {
   onMoveUp: () => void;
   onMoveDown: () => void;
   onToggleSuperset: () => void;
+  onOpenTypeSelector: () => void;
   onUpdateConfig?: (updates: Partial<PlannedExercise>) => void;
   isHighlighted?: boolean;
 }
@@ -39,11 +41,45 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   isFirst, isLast, isInSuperset, isSupersetStart, isSupersetEnd, hasActiveGoal,
   onUpdateSet, onAddSet, onRemove, 
   onToggleNotes, isNotesOpen, onUpdateNotes, onShowInfo,
-  onMoveUp, onMoveDown, onToggleSuperset, isHighlighted
+  onMoveUp, onMoveDown, onToggleSuperset, onOpenTypeSelector, isHighlighted
 }) => {
   const imageSrc = useExerciseImage(exData);
   const [showMenu, setShowMenu] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Long Press State
+  // FIX: Changed NodeJS.Timeout to ReturnType<typeof setTimeout> for browser compatibility.
+  const [pressTimer, setPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [isPressing, setIsPressing] = useState(false);
+
+  const handlePressStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    setIsPressing(true);
+    const timer = setTimeout(() => {
+        triggerHaptic.light();
+        onOpenTypeSelector();
+        setIsPressing(false);
+    }, 600);
+    setPressTimer(timer);
+  };
+
+  const handlePressEnd = () => {
+    if (pressTimer) clearTimeout(pressTimer);
+    setIsPressing(false);
+  };
+
+  const effectiveTrackingType = item.trackingTypeOverride || exData.trackingType || 'reps_weight';
+
+  const getTypeLabel = (type: TrackingType) => {
+    switch(type) {
+      case 'reps_weight': return 'Reps & Vikt';
+      case 'time_only': return 'Tid';
+      case 'time_distance': return 'Distans';
+      case 'reps_only': return 'Reps';
+      case 'reps_time_weight': return 'Reps på Tid';
+      default: return 'Standard';
+    }
+  };
 
   const allSetsCompleted = item.sets.length > 0 && item.sets.every(s => s.completed);
 
@@ -150,9 +186,21 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                         </div>
                     )}
                 </div>
-                <button onClick={onToggleNotes} className={`mt-2 text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${item.notes ? 'text-accent-blue' : 'text-text-dim hover:text-white'}`}>
-                  <MessageSquare size={12} /> {item.notes ? 'Visa Notering' : 'Lägg till anteckning'}
-                </button>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onMouseDown={handlePressStart}
+                    onMouseUp={handlePressEnd}
+                    onMouseLeave={handlePressEnd}
+                    onTouchStart={handlePressStart}
+                    onTouchEnd={handlePressEnd}
+                    className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest transition-all duration-300 select-none bg-white/5 px-2 py-1 rounded-md text-accent-blue/70 active:scale-105 active:bg-accent-blue/20 ${isPressing ? 'scale-105 bg-accent-blue/20 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : ''}`}
+                  >
+                    <RefreshCw size={10} className={isPressing ? 'animate-spin' : ''} /> {getTypeLabel(effectiveTrackingType)}
+                  </button>
+                  <button onClick={onToggleNotes} className={`text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors ${item.notes ? 'text-accent-blue/70' : 'text-text-dim hover:text-white'}`}>
+                    <MessageSquare size={12} />
+                  </button>
+                </div>
               </div>
 
               {/* ACTION BUTTONS (Flytta/Länka) - Fixat: Inga absoluta positioner som skjuter utanför */}
@@ -199,7 +247,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             set={set}
             isCompleted={set.completed}
             onUpdate={(updates) => onUpdateSet(i, updates)}
-            trackingType={exData.trackingType}
+            trackingType={effectiveTrackingType}
             exData={exData}
             userProfile={userProfile}
             availablePlates={activeZone?.availablePlates}

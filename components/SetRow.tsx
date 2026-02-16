@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { WorkoutSet, SetType, TrackingType, Exercise, UserProfile, Equipment } from '../types';
-import { Check, Thermometer, Zap, AlertCircle, Timer as TimerIcon } from 'lucide-react';
+import { Check, Thermometer, Zap, AlertCircle, Timer as TimerIcon, RefreshCw } from 'lucide-react';
 import { TimePickerModal } from './TimePickerModal';
 import { NumberPickerModal } from './NumberPickerModal';
 import { ActiveTimerModal } from './ActiveTimerModal';
@@ -90,6 +90,21 @@ export const SetRow: React.FC<SetRowProps> = ({
           <span className={commonLabelClass}>Reps</span>
           <span className={commonValueClass}>{set.reps || 0}</span>
         </button>;
+      case 'reps_time_weight':
+        return <>
+          <button onClick={() => !isCompleted && setActiveModal('weight')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Vikt (kg)</span>
+            <span className={commonValueClass}>{set.weight || 0}</span>
+          </button>
+          <button onClick={() => !isCompleted && setActiveModal('reps')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Reps</span>
+            <span className={commonValueClass}>{set.reps || 0}</span>
+          </button>
+          <button onClick={() => !isCompleted && setActiveModal('time')} className={`${commonButtonClass} flex-auto`}>
+            <span className={commonLabelClass}>På Tid</span>
+            <span className={commonValueClass}>{formatTime(set.duration)}</span>
+          </button>
+        </>;
       case 'reps_weight':
       default:
         return <>
@@ -129,7 +144,7 @@ export const SetRow: React.FC<SetRowProps> = ({
         </div>
 
         <div className="pl-2">
-          {(trackingType === 'time_only' || trackingType === 'time_distance') && !isCompleted ? (
+          {(trackingType === 'time_only' || trackingType === 'time_distance' || trackingType === 'reps_time_weight') && !isCompleted ? (
             <button 
               onClick={() => setShowActiveTimer(true)} 
               className="w-12 h-12 bg-accent-blue/10 border border-accent-blue/20 rounded-xl flex items-center justify-center text-accent-blue transition-all active:scale-90"

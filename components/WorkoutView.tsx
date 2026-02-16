@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise, UserMission } from '../types';
+import { WorkoutSession, Zone, Exercise, MuscleGroup, WorkoutSet, Equipment, UserProfile, SetType, ScheduledActivity, PlannedActivityForLogDisplay, RecurringPlanForDisplay, PlannedExercise, UserMission, TrackingType } from '../types';
 import { findReplacement, adaptVolume, getLastPerformance, createSmartSets, generateWorkoutSession, calculate1RM } from '../utils/fitness';
 import { storage } from '../services/storage';
+import { db } from '../services/db';
 import { calculateExerciseImpact } from '../utils/recovery';
 import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { WorkoutGenerator } from './WorkoutGenerator';
@@ -17,6 +17,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { ConfirmModal } from './ConfirmModal';
 import { calculateSmartProgression } from '../utils/progression';
 import { ExerciseInfoModal } from './ExerciseInfoModal';
+import { TypeSelectorModal } from './TypeSelectorModal';
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -57,6 +58,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   const [highlightedExIdx, setHighlightedExIdx] = useState<number | null>(null);
   const [exerciseToDelete, setExerciseToDelete] = useState<number | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [typeSelectorData, setTypeSelectorData] = useState<{ exIdx: number; currentType: TrackingType } | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -70,23 +72,13 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
   // --- NYA BACK HANDLERS ---
   useEffect(() => {
     if (showGenerator) return registerBackHandler(() => setShowGenerator(false));
-  }, [showGenerator]);
-
-  useEffect(() => {
     if (showAddModal) return registerBackHandler(() => setShowAddModal(false));
-  }, [showAddModal]);
-
-  useEffect(() => {
     if (localShowZonePicker) return registerBackHandler(() => setLocalShowZonePicker(false));
-  }, [localShowZonePicker]);
-
-  useEffect(() => {
     if (showSummary) return registerBackHandler(() => setShowSummary(false));
-  }, [showSummary]);
-
-  useEffect(() => {
     if (exerciseToDelete !== null) return registerBackHandler(() => setExerciseToDelete(null));
-  }, [exerciseToDelete]);
+    if (typeSelectorData) return registerBackHandler(() => setTypeSelectorData(null));
+  }, [showGenerator, showAddModal, localShowZonePicker, showSummary, exerciseToDelete, typeSelectorData]);
+
 
   useEffect(() => {
     setLocalSession(session);
@@ -139,6 +131,32 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
       ex.sets.some(set => set.completed)
     );
   }, [localSession]);
+
+  const handleChangeTrackingType = async (exIdx: number, newType: TrackingType) => {
+    const exerciseId = localSession?.exercises[exIdx]?.exerciseId;
+  
+    // Optimistic UI update for current session
+    setLocalSession(prev => {
+      if (!prev) return null;
+      const newExercises = [...prev.exercises];
+      newExercises[exIdx] = { ...newExercises[exIdx], trackingTypeOverride: newType };
+      const updatedSession = { ...prev, exercises: newExercises };
+      storage.setActiveSession(updatedSession);
+      return updatedSession;
+    });
+  
+    setTypeSelectorData(null);
+  
+    if (exerciseId) {
+      try {
+        await db.exercises.update(exerciseId, { trackingType: newType });
+        console.log(`Saved new default tracking type '${newType}' for exercise ${exerciseId}`);
+        onUpdate();
+      } catch (error) {
+        console.error("Could not save exercise setting globally:", error);
+      }
+    }
+  };
 
   const handleSwitchZone = (targetZone: Zone) => {
     if (targetZone.id === activeZone.id) return;
@@ -614,6 +632,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
                   onUpdateSet={(setIdx, updates) => updateSet(exIdx, setIdx, updates)} 
                   onShowInfo={() => setInfoModalData({ exercise: exData, index: exIdx })} 
                   isHighlighted={highlightedExIdx === exIdx}
+                  onOpenTypeSelector={() => setTypeSelectorData({ exIdx, currentType: item.trackingTypeOverride || exData.trackingType || 'reps_weight'})}
                 />
               </div>
             );
@@ -726,6 +745,14 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             <button onClick={() => setShowNoSetsInfo(false)} className="w-full py-4 bg-white text-black rounded-2xl font-black italic uppercase tracking-widest hover:bg-gray-200 transition-all active:scale-95">Tillbaka</button>
           </div>
         </div>
+      )}
+
+      {typeSelectorData && (
+        <TypeSelectorModal
+          currentType={typeSelectorData.currentType}
+          onClose={() => setTypeSelectorData(null)}
+          onSelect={(newType) => handleChangeTrackingType(typeSelectorData.exIdx, newType)}
+        />
       )}
     </>
   );

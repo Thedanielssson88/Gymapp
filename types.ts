@@ -1,4 +1,5 @@
 
+
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -15,7 +16,7 @@ export enum MovementPattern {
   EXPLOSIVE = 'Explosiv / Olympisk'
 }
 
-export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only';
+export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only' | 'reps_time_weight';
 
 export type ExerciseTier = 'tier_1' | 'tier_2' | 'tier_3';
 
@@ -207,6 +208,7 @@ export interface PlannedExercise {
   sets: WorkoutSet[];
   notes?: string;
   supersetId?: string; // Ett unikt ID som delas av övningar i samma superset
+  trackingTypeOverride?: TrackingType;
 }
 
 export interface WorkoutRoutine {
