@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PlannedExercise, Exercise, WorkoutSet, UserProfile, Zone, TrackingType } from '../types';
 import { SetRow } from './SetRow';
-import { MoreVertical, MessageSquare, Info, Trash2, Plus, ArrowUp, ArrowDown, Link, Unlink, CheckCircle2, ChevronDown, ChevronUp, TrendingUp, RefreshCw } from 'lucide-react';
+import { MoreVertical, MessageSquare, Info, Trash2, Plus, ArrowUp, ArrowDown, Link, Unlink, CheckCircle2, ChevronDown, ChevronUp, TrendingUp, RefreshCw, Settings2 } from 'lucide-react';
 import { useExerciseImage } from '../hooks/useExerciseImage';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -223,8 +223,9 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         </div>
         
         {showMenu && (
-          <div className="absolute right-10 top-10 bg-[#25222e] border border-white/10 rounded-xl shadow-2xl p-1 z-20 w-40 animate-in zoom-in-95 duration-100 origin-top-right">
-              <button onClick={onShowInfo} className="w-full text-left px-3 py-2.5 text-xs font-bold text-white hover:bg-white/5 rounded-lg flex items-center gap-2"><Info size={14} className="text-accent-blue"/> Info & Historik</button>
+          <div className="absolute right-10 top-10 bg-[#25222e] border border-white/10 rounded-xl shadow-2xl p-1 z-20 w-48 animate-in zoom-in-95 duration-100 origin-top-right">
+              <button onClick={() => { onShowInfo(); setShowMenu(false); }} className="w-full text-left px-3 py-2.5 text-xs font-bold text-white hover:bg-white/5 rounded-lg flex items-center gap-2"><Info size={14} className="text-accent-blue"/> Info & Historik</button>
+              <button onClick={() => { onOpenTypeSelector(); setShowMenu(false); }} className="w-full text-left px-3 py-2.5 text-xs font-bold text-white hover:bg-white/5 rounded-lg flex items-center gap-2"><Settings2 size={14} className="text-accent-blue"/> Byt mätmetod</button>
               <div className="h-px bg-white/5 my-1" />
               <button onClick={() => { onRemove(); setShowMenu(false); }} className="w-full text-left px-3 py-2.5 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg flex items-center gap-2"><Trash2 size={14} /> Ta bort övning</button>
           </div>

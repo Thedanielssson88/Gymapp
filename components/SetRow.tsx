@@ -164,16 +164,22 @@ export const SetRow: React.FC<SetRowProps> = ({
       
       {/* MODALS */}
       {showActiveTimer && (
-        <ActiveTimerModal 
-          initialSeconds={set.duration || 60} 
+        <ActiveTimerModal
+          initialSeconds={set.duration || 60}
           onClose={() => setShowActiveTimer(false)}
           exerciseName={exData.name}
           vibrateEnabled={userProfile.settings?.vibrateTimer ?? true}
-          onComplete={(actualSeconds) => {
-            onUpdate({ 
-              duration: actualSeconds, 
+          askForReps={trackingType === 'reps_time_weight'}
+          targetReps={set.reps || 0}
+          onComplete={result => {
+            const updates: Partial<WorkoutSet> = {
+              duration: result.time,
               completed: true,
-            });
+            };
+            if (result.reps !== undefined) {
+              updates.reps = result.reps;
+            }
+            onUpdate(updates);
             setShowActiveTimer(false);
           }}
         />
