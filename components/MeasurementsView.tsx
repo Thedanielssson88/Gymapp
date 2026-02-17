@@ -27,7 +27,8 @@ const MEASUREMENT_CONFIG = [
   { key: 'bicepsR', label: 'Höger Biceps', unit: 'cm', icon: '💪', pair: 'biceps' },
   { key: 'thighL', label: 'Vänster Lår', unit: 'cm', icon: '🍗', pair: 'thigh' },
   { key: 'thighR', label: 'Höger Lår', unit: 'cm', icon: '🍗', pair: 'thigh' },
-  { key: 'calves', label: 'Vader', unit: 'cm', icon: '🦵' },
+  { key: 'calvesL', label: 'Vänster Vad', unit: 'cm', icon: '🦵', pair: 'calves' },
+  { key: 'calvesR', label: 'Höger Vad', unit: 'cm', icon: '🦵', pair: 'calves' },
 ];
 
 export const MeasurementsView: React.FC<MeasurementsViewProps> = ({ profile, onUpdate }) => {

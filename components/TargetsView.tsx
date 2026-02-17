@@ -397,7 +397,7 @@ export const TargetsView: React.FC<TargetsViewProps> = ({
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isSmart ? 'bg-accent-blue/10 text-accent-blue' : 'bg-purple-500/10 text-purple-500'}`}>
                         {isSmart ? <TrendingUp size={20} /> : <Trophy size={20} />}
                       </div>
-                      <div className="min-w-0"><h3 className="text-white font-bold text-base leading-tight truncate">{mission.title}</h3>{mission.smartConfig?.deadline && (<p className="text-xs text-text-dim flex items-center gap-1 mt-1"><Calendar size={10} /> Deadline: {mission.smartConfig.deadline}</p>)}</div>
+                      <div className="min-w-0"><h3 className="text-white font-bold text-base leading-tight line-clamp-2">{mission.title}</h3>{mission.smartConfig?.deadline && (<p className="text-xs text-text-dim flex items-center gap-1 mt-1"><Calendar size={10} /> Deadline: {mission.smartConfig.deadline}</p>)}</div>
                     </div>
                     <button onClick={(e) => {e.stopPropagation(); onDeleteMission(mission.id);}} className="p-2 text-text-dim hover:text-red-500 hover:bg-white/5 rounded-full transition-colors"><Trash2 size={18} /></button>
                   </div>

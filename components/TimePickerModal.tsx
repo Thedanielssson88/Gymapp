@@ -22,7 +22,7 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ title, totalSe
   const secs = currentTotal % 60;
 
   const minOptions = Array.from({ length: 61 }, (_, i) => i);
-  const secOptions = Array.from({ length: 12 }, (_, i) => i * 5);
+  const secOptions = Array.from({ length: 60 }, (_, i) => i);
 
   useEffect(() => {
     const unregister = registerBackHandler(onClose);
@@ -36,7 +36,7 @@ export const TimePickerModal: React.FC<TimePickerModalProps> = ({ title, totalSe
 
     setTimeout(() => {
       scrollTo(minScrollRef, mins);
-      scrollTo(secScrollRef, Math.round(secs / 5) * 5);
+      scrollTo(secScrollRef, secs);
     }, 50);
 
     return unregister;

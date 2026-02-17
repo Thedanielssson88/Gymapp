@@ -103,13 +103,16 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     );
   }
 
-  // --- UI FOR KG (NEW) & REPS (OLD) ---
+  // --- UI FOR KG & REPS ---
   const quickWeights = Array.from({ length: 30 }, (_, i) => (i + 1) * 5);
+  const quickReps = Array.from({ length: 50 }, (_, i) => i + 1);
 
   const scrollToCurrent = (val: number, behavior: ScrollBehavior = 'smooth') => {
     if (scrollRef.current) {
-      const closestQuickValue = Math.round(val / 5) * 5;
-      const element = scrollRef.current.querySelector(`[id="quick-weight-${closestQuickValue}"]`);
+      const isKg = unit === 'kg';
+      const closestQuickValue = isKg ? Math.round(val / 5) * 5 : Math.round(val);
+      const elementId = isKg ? `quick-weight-${closestQuickValue}` : `quick-rep-${closestQuickValue}`;
+      const element = scrollRef.current.querySelector(`[id="${elementId}"]`);
       if (element) {
         element.scrollIntoView({ behavior, block: 'nearest', inline: 'center' });
       }
@@ -117,26 +120,18 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   };
   
   useEffect(() => {
-    if (unit === 'kg') {
-      const timer = setTimeout(() => scrollToCurrent(localVal, 'auto'), 50);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => scrollToCurrent(localVal, 'auto'), 50);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleStepChange = (delta: number) => {
     const newValue = Math.max(0, localVal + delta);
     setLocalVal(newValue);
-    if (unit === 'kg') scrollToCurrent(newValue);
+    scrollToCurrent(newValue);
     if (userProfile && newValue !== localVal) {
       triggerHaptic.tick(userProfile);
     }
   };
-
-  const quickValuesReps = useMemo(() => {
-    if(unit !== 'reps') return [];
-    if (localVal <= 5) return [1, 3, 5, 8, 10, 12, 15];
-    return [localVal - 5, localVal - 2, localVal - 1, localVal + 1, localVal + 2, localVal + 5];
-  }, [localVal, unit]);
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center px-4 animate-in fade-in duration-200">
@@ -149,49 +144,36 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
           <button onClick={onClose} className="p-2 bg-white/5 rounded-full text-text-dim hover:text-white transition-colors"><X size={20}/></button>
         </div>
 
-        {unit === 'kg' ? (
-          <div className="flex items-center justify-between mb-8">
-            <button onClick={() => handleStepChange(-step)} className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-bold text-white active:scale-90 transition-transform flex items-center justify-center">
-              -{step}
-            </button>
-            <div className="text-center">
-              <span className="text-6xl font-black text-white italic tracking-tighter">
-                {localVal % 1 === 0 ? localVal : localVal.toFixed(1)}
-              </span>
-              <span className="text-text-dim ml-2 font-bold uppercase text-xs">{unit}</span>
-            </div>
-            <button onClick={() => handleStepChange(step)} className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-bold text-white active:scale-90 transition-transform flex items-center justify-center">
-              +{step}
-            </button>
+        <div className="flex items-center justify-between mb-8">
+          <button onClick={() => handleStepChange(-step)} className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-bold text-white active:scale-90 transition-transform flex items-center justify-center">
+            -{step}
+          </button>
+          <div className="text-center">
+            <span className="text-6xl font-black text-white italic tracking-tighter">
+              {localVal % 1 === 0 ? localVal : localVal.toFixed(1)}
+            </span>
+            <span className="text-text-dim ml-2 font-bold uppercase text-xs">{unit}</span>
           </div>
-        ) : (
-          <div className="flex flex-col items-center mb-6">
-            <div className="flex items-center gap-4 w-full justify-between">
-              <button onClick={() => handleStepChange(-step)} className="p-4 bg-white/5 rounded-2xl text-accent-blue active:scale-90 transition-transform"><ChevronDown size={32} strokeWidth={3} /></button>
-              <div className="flex-1 flex flex-col items-center">
-                <input type="text" inputMode={precision === 0 ? "numeric" : "decimal"} value={localVal.toString()} onChange={(e) => setLocalVal(Number(e.target.value.replace(/[^0-9.,]/g, '').replace(',', '.')))} onFocus={(e) => e.target.select()} className="text-6xl font-black text-white w-full bg-transparent outline-none text-center py-2 select-all"/>
-                <span className="text-sm font-black italic text-accent-blue uppercase tracking-widest mt-1">{unit}</span>
-              </div>
-              <button onClick={() => handleStepChange(step)} className="p-4 bg-white/5 rounded-2xl text-accent-blue active:scale-90 transition-transform"><ChevronUp size={32} strokeWidth={3} /></button>
-            </div>
-          </div>
-        )}
+          <button onClick={() => handleStepChange(step)} className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-bold text-white active:scale-90 transition-transform flex items-center justify-center">
+            +{step}
+          </button>
+        </div>
         
         {unit === 'kg' && barWeight > 0 && <PlateDisplay weight={localVal} barWeight={barWeight} availablePlates={availablePlates} />}
         
-        {unit === 'kg' ? (
+        {(unit === 'kg' || unit === 'reps') ? (
           <div className="my-8 relative">
             <div className="flex justify-between items-center mb-3 px-1">
               <p className="text-[10px] text-text-dim font-bold uppercase tracking-wider">Dra för att snabbspola</p>
-              <span className="text-[10px] text-accent-blue font-black uppercase">5kg intervall</span>
+              <span className="text-[10px] text-accent-blue font-black uppercase">{unit === 'kg' ? '5kg intervall' : '1 rep intervall'}</span>
             </div>
             <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-6 pt-2 px-10 scrollbar-hide snap-x" style={{ scrollbarWidth: 'none' }}>
-              {quickWeights.map((w) => {
-                const isSelected = Math.round(localVal / 5) * 5 === w;
+              {(unit === 'kg' ? quickWeights : quickReps).map((val) => {
+                const isSelected = (unit === 'kg' ? Math.round(localVal / 5) * 5 : Math.round(localVal)) === val;
                 return (
-                  <button key={w} id={`quick-weight-${w}`} onClick={() => { setLocalVal(w); scrollToCurrent(w); }} className={`flex-shrink-0 w-16 h-16 rounded-2xl border-2 snap-center flex flex-col items-center justify-center transition-all duration-300 ${isSelected ? 'bg-accent-blue border-accent-blue text-white scale-110 shadow-xl shadow-accent-blue/30 z-10' : 'bg-white/5 border-white/10 text-text-dim scale-90 opacity-60'}`}>
-                    <span className="text-lg font-black">{w}</span>
-                    <span className="text-[8px] font-bold uppercase opacity-60">kg</span>
+                  <button key={val} id={unit === 'kg' ? `quick-weight-${val}` : `quick-rep-${val}`} onClick={() => { setLocalVal(val); scrollToCurrent(val); }} className={`flex-shrink-0 w-16 h-16 rounded-2xl border-2 snap-center flex flex-col items-center justify-center transition-all duration-300 ${isSelected ? 'bg-accent-blue border-accent-blue text-white scale-110 shadow-xl shadow-accent-blue/30 z-10' : 'bg-white/5 border-white/10 text-text-dim scale-90 opacity-60'}`}>
+                    <span className="text-lg font-black">{val}</span>
+                    <span className="text-[8px] font-bold uppercase opacity-60">{unit}</span>
                   </button>
                 );
               })}
@@ -199,18 +181,7 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
             <div className="absolute left-0 top-8 bottom-8 w-10 bg-gradient-to-r from-[#1a1721] to-transparent pointer-events-none z-10" />
             <div className="absolute right-0 top-8 bottom-8 w-10 bg-gradient-to-l from-[#1a1721] to-transparent pointer-events-none z-10" />
           </div>
-        ) : (
-          <div className="border-t border-white/5 pt-6 space-y-3 mb-6">
-            <p className="text-center text-[10px] font-black uppercase tracking-widest text-text-dim">Smarta Förslag</p>
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide justify-center">
-              {quickValuesReps.map(val => (
-                <button key={val} onClick={() => setLocalVal(val)} className="flex-shrink-0 px-5 py-3 bg-white/5 border border-white/10 rounded-xl text-[11px] font-black text-white hover:bg-accent-blue/20 hover:border-accent-blue/50 transition-colors">
-                  {val}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        ) : null}
 
         <div className="grid grid-cols-2 gap-4">
           <button onClick={onClose} className="py-4 rounded-2xl bg-white/5 text-text-dim font-bold uppercase tracking-widest text-xs active:bg-white/10 transition-colors">Avbryt</button>

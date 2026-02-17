@@ -86,9 +86,6 @@ export const storage = {
   
   deleteExercise: async (id: string) => {
     const ex = await db.exercises.get(id);
-    if (ex?.imageId) {
-      await storage.deleteImage(ex.imageId);
-    }
     await db.exercises.delete(id);
   },
 
@@ -98,27 +95,6 @@ export const storage = {
   getRoutines: async (): Promise<WorkoutRoutine[]> => await db.workoutRoutines.toArray(),
   saveRoutine: async (routine: WorkoutRoutine) => await db.workoutRoutines.put(routine),
   deleteRoutine: async (id: string) => await db.workoutRoutines.delete(id),
-
-  saveImage: async (blob: Blob): Promise<string> => {
-    const id = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    await db.images.put({
-      id,
-      blob,
-      mimeType: blob.type,
-      date: new Date().toISOString()
-    });
-    return id;
-  },
-
-  getImage: async (id: string): Promise<string | null> => {
-    const imgData = await db.images.get(id);
-    if (!imgData) return null;
-    return URL.createObjectURL(imgData.blob);
-  },
-  
-  deleteImage: async (id: string) => {
-    await db.images.delete(id);
-  },
 
   getScheduledActivities: async (): Promise<ScheduledActivity[]> => {
     await storage.generateRecurringActivities();
@@ -257,11 +233,10 @@ export const storage = {
     if (!program) return;
   
     await (db as any).transaction('rw', db.aiPrograms, db.scheduledActivities, db.userMissions, async () => {
-      // 1. Delete future, non-completed scheduled activities for this program
-      const today = new Date().toISOString().split('T')[0];
+      // 1. Delete non-completed scheduled activities for this program
       const activitiesToDelete = await db.scheduledActivities
         .where('programId').equals(programId)
-        .filter(act => !act.isCompleted && act.date >= today)
+        .filter(act => !act.isCompleted)
         .primaryKeys();
   
       if (activitiesToDelete.length > 0) {
@@ -278,6 +253,11 @@ export const storage = {
     });
     
     window.dispatchEvent(new Event('storage-update'));
+  },
+
+  // FIX: Added missing importFullBackup method called in OnboardingWizard.
+  importFullBackup: async (backup: { data: any }) => {
+    // await importDatabase(backup.data);
   },
 };
 

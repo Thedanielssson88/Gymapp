@@ -16,7 +16,7 @@ export enum MovementPattern {
   EXPLOSIVE = 'Explosiv / Olympisk'
 }
 
-export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only' | 'reps_time_weight';
+export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only' | 'reps_time_weight' | 'distance_weight';
 
 export type ExerciseTier = 'tier_1' | 'tier_2' | 'tier_3';
 
@@ -150,7 +150,8 @@ export interface BodyMeasurements {
   bicepsR?: number;
   thighL?: number;
   thighR?: number; 
-  calves?: number;
+  calvesL?: number;
+  calvesR?: number;
   bodyFat?: number;
 }
 

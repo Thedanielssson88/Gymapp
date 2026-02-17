@@ -37,14 +37,19 @@ export const calculateExerciseImpact = (
             break;
             
         case 'time_distance':
-            // Anta att 1 meter i en tung konditionsövning motsvarar ca 10 poäng (10kg * 1 rep)
-            const distance = s.distance || 0;
-            setImpact = distance * 10;
+            const distancePoints = (s.distance || 0) * 0.01;
+            const timePoints = (s.duration || 0) / 60 * 5;
+            setImpact = distancePoints + timePoints;
             break;
             
         case 'reps_only':
             const bodyweightLoadReps = userBodyWeight * (exData.bodyweightCoefficient || 0.7);
             setImpact = bodyweightLoadReps * (s.reps || 0);
+            break;
+
+        case 'distance_weight':
+            const carryImpact = (s.weight || 0) * (s.distance || 0) * 0.1;
+            setImpact = carryImpact;
             break;
             
         case 'reps_weight':
@@ -139,7 +144,7 @@ export interface WorkloadDetail {
   sets: WorkoutSet[];
   role: 'Primär' | 'Sekundär';
   impactScore: number;
-  trackingType?: 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only' | 'reps_time_weight';
+  trackingType?: 'reps_weight' | 'time_distance' | 'time_only' | 'reps_only' | 'reps_time_weight' | 'distance_weight';
 }
 
 export const getMuscleWorkloadDetails = (

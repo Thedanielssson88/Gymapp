@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { WorkoutSet, SetType, TrackingType, Exercise, UserProfile, Equipment } from '../types';
-import { Check, Thermometer, Zap, AlertCircle, Timer as TimerIcon, RefreshCw } from 'lucide-react';
+import { Check, Thermometer, Zap, AlertCircle, Timer as TimerIcon, RefreshCw, Ruler, Weight } from 'lucide-react';
 import { TimePickerModal } from './TimePickerModal';
 import { NumberPickerModal } from './NumberPickerModal';
 import { ActiveTimerModal } from './ActiveTimerModal';
@@ -69,6 +69,17 @@ export const SetRow: React.FC<SetRowProps> = ({
     const commonValueClass = `text-lg font-black italic ${style.text}`;
 
     switch (trackingType) {
+      case 'distance_weight':
+        return <>
+          <button onClick={() => !isCompleted && setActiveModal('weight')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Vikt (kg)</span>
+            <span className={commonValueClass}>{set.weight || 0}</span>
+          </button>
+          <button onClick={() => !isCompleted && setActiveModal('dist')} className={commonButtonClass}>
+            <span className={commonLabelClass}>Meter</span>
+            <span className={commonValueClass}>{set.distance || 0}</span>
+          </button>
+        </>;
       case 'time_distance':
         return <>
           <button onClick={() => !isCompleted && setActiveModal('dist')} className={commonButtonClass}>
@@ -125,6 +136,14 @@ export const SetRow: React.FC<SetRowProps> = ({
     if (isBarbellExercise) return userProfile.settings?.barbellWeight ?? 20;
     return 0;
   };
+
+  const minIncrement = useMemo(() => {
+    if (availablePlates && availablePlates.length > 0) {
+      return Math.min(...availablePlates);
+    }
+    return 0.25; // Fallback
+  }, [availablePlates]);
+
 
   return (
     <>
@@ -229,7 +248,7 @@ export const SetRow: React.FC<SetRowProps> = ({
           title="Ange Vikt"
           unit="kg"
           value={set.weight || 0}
-          step={2.5}
+          step={minIncrement}
           precision={2}
           min={0}
           max={999}

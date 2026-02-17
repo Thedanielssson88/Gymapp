@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Dumbbell, Timer, Ruler, Hash, X, RefreshCw } from 'lucide-react';
+import { Dumbbell, Timer, Ruler, Hash, X, RefreshCw, Scale } from 'lucide-react';
 import { TrackingType } from '../types';
 import { registerBackHandler } from '../utils/backHandler';
 
@@ -15,6 +15,7 @@ export const TypeSelectorModal: React.FC<TypeSelectorModalProps> = ({ currentTyp
     { type: 'reps_only', label: 'Enbart Reps', icon: <Hash size={20} />, desc: 'Kroppsvikt (t.ex. Armhävningar)' },
     { type: 'time_only', label: 'Enbart Tid', icon: <Timer size={20} />, desc: 'Statisk träning (t.ex. Plankan)' },
     { type: 'time_distance', label: 'Distans & Tid', icon: <Ruler size={20} />, desc: 'Cardio (t.ex. Löpning, Rodd)' },
+    { type: 'distance_weight', label: 'Distans & Vikt', icon: <Scale size={20} />, desc: 'Bärövningar (t.ex. Farmers Carry)' },
     { type: 'reps_time_weight', label: 'Reps på Tid', icon: <RefreshCw size={20} />, desc: 'AMRAP / CrossFit (t.ex. Kettlebell Swing)' },
   ];
 

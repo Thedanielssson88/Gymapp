@@ -149,7 +149,7 @@ export const recommendExercises = async (
                       },
                       description: { type: Type.STRING },
                       tier: { type: Type.STRING, enum: ['tier_1', 'tier_2', 'tier_3'] },
-                      trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only'] },
+                      trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only', 'distance_weight', 'reps_time_weight'] },
                       difficultyMultiplier: { type: Type.NUMBER },
                       bodyweightCoefficient: { type: Type.NUMBER }
                     },
@@ -236,7 +236,7 @@ INSTRUKTIONER:
             },
             pattern: { type: Type.STRING, enum: Object.values(MovementPattern) },
             tier: { type: Type.STRING, enum: ['tier_1', 'tier_2', 'tier_3'] },
-            trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only'] },
+            trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only', 'distance_weight', 'reps_time_weight'] },
             difficultyMultiplier: { type: Type.NUMBER },
             bodyweightCoefficient: { type: Type.NUMBER },
             alternativeExIds: { type: Type.ARRAY, items: { type: Type.STRING } }
@@ -280,6 +280,7 @@ export const generateProfessionalPlan = async (
       1. All new deadlines and scheduled workouts MUST be in the future relative to ${today}.
       2. NEVER use dates from past years (e.g. 2023).
       3. Format all dates as YYYY-MM-DD.
+      4. STRICT RULE: For bodyweight isometric exercises (like Plank), NEVER set a weight target. Always set a TIME target (seconds). Keep target instructions under 5 words.
 
       VIKTIGT: Använd ENDAST övningar från listan nedan. Svara med det exakta ID:t för varje övning.
       TILLGÄNGLIGA ÖVNINGAR:
