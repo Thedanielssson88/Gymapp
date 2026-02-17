@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check } from 'lucide-react';
-import { haptics } from '../utils/haptics';
 import { registerBackHandler } from '../utils/backHandler';
 
 interface TimePickerModalProps {

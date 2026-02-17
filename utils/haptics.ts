@@ -14,15 +14,15 @@ const vibrate = (pattern: number | number[]) => {
 
 export const haptics = {
   impact: () => vibrate([50, 50, 50]),
-  selection: () => vibrate(10),
+  selection: () => vibrate(20),
 };
 
 export const triggerHaptic = {
-  light: () => vibrate(10),
+  light: () => vibrate(20),
   
   tick: (user: UserProfile | null) => {
     if (user?.settings?.vibrateButtons) {
-      vibrate(10);
+      vibrate(20);
     }
   },
 

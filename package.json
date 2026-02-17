@@ -17,9 +17,9 @@
     "dexie": "^4.0.7",
     "@capacitor/status-bar": "^8.0.0",
     "@capacitor/core": "^8.0.2",
-    "@capacitor/haptics": "^8.0.0",
     "@capacitor/app": "^8.0.1",
-    "date-fns": "^3.6.0"
+    "date-fns": "^3.6.0",
+    "@capacitor/haptics": "^8.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -20,7 +20,7 @@ import { suggestWeightForReps } from './utils/progression';
 import { registerBackHandler, executeBackHandler } from './utils/backHandler';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { triggerHaptic } from './utils/haptics';
 import { App as CapacitorApp } from '@capacitor/app';
 import { Dumbbell, User2, Calendar, X, MapPin, Activity, Home, Trees, ChevronRight, Settings, Trophy, BookOpen, Cloud, Sparkles } from 'lucide-react';
 
@@ -144,7 +144,7 @@ export default function App() {
       const target = e.target as HTMLElement;
       const button = target.closest('button, a, [role="button"]');
       if (button) {
-        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+        triggerHaptic.light();
       }
     };
     window.addEventListener('click', handleGlobalClick);
