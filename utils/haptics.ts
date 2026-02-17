@@ -1,41 +1,66 @@
+
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { Capacitor } from '@capacitor/core';
 import { UserProfile } from '../types';
 
-const canVibrate = typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+const isAndroid = Capacitor.getPlatform() === 'android';
 
-const vibrate = (pattern: number | number[]) => {
-  if (canVibrate) {
-    try {
-      navigator.vibrate(pattern);
-    } catch (e) {
-      console.warn("Vibration failed", e);
-    }
-  }
-};
+// På Android är 'Light' ofta för svagt för att märkas. Vi kör 'Medium' som default för bättre feedback.
+const DEFAULT_IMPACT = isAndroid ? ImpactStyle.Medium : ImpactStyle.Light;
 
 export const haptics = {
-  impact: () => vibrate([50, 50, 50]),
-  selection: () => vibrate(20),
+  impact: async () => {
+    try {
+      await Haptics.impact({ style: ImpactStyle.Heavy });
+    } catch (e) {
+      // Ignore
+    }
+  },
+  selection: async () => {
+    try {
+      await Haptics.selectionChanged();
+    } catch (e) {
+      // Ignore
+    }
+  },
 };
 
 export const triggerHaptic = {
-  light: () => vibrate(20),
+  light: async () => {
+    try {
+      await Haptics.impact({ style: DEFAULT_IMPACT });
+    } catch (e) {
+      // Ignore
+    }
+  },
   
-  tick: (user: UserProfile | null) => {
-    if (user?.settings?.vibrateButtons) {
-      vibrate(20);
+  tick: async (user: UserProfile | null) => {
+    if (user?.settings?.vibrateButtons === false) return;
+    try {
+      await Haptics.impact({ style: DEFAULT_IMPACT });
+    } catch (e) {
+      // Ignore
     }
   },
 
-  success: (user: UserProfile | null) => {
-    if (user?.settings?.vibrateButtons) {
-      vibrate([50, 50, 50]);
+  success: async (user: UserProfile | null) => {
+    if (user?.settings?.vibrateButtons === false) return;
+    try {
+      await Haptics.notification({ type: NotificationType.Success });
+    } catch (e) {
+      // Ignore
     }
   },
 
-  double: (user: UserProfile | null) => {
-    if (user?.settings?.vibrateButtons) {
-      vibrate([50, 50, 50]);
-      setTimeout(() => vibrate([50, 50, 50]), 200);
+  double: async (user: UserProfile | null) => {
+    if (user?.settings?.vibrateButtons === false) return;
+    try {
+      await Haptics.notification({ type: NotificationType.Success });
+      setTimeout(async () => {
+        await Haptics.notification({ type: NotificationType.Success });
+      }, 150);
+    } catch (e) {
+      // Ignore
     }
   },
 };

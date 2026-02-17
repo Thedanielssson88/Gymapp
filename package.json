@@ -19,7 +19,9 @@
     "@capacitor/core": "^8.0.2",
     "@capacitor/app": "^8.0.1",
     "date-fns": "^3.6.0",
-    "@capacitor/haptics": "^8.0.0"
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capgo/capacitor-social-login": "^8.3.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

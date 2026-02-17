@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { WorkoutRoutine, Zone, Exercise, PlannedExercise, MovementPattern, MuscleGroup, Equipment, UserProfile, WorkoutSession } from '../types';
 import { storage } from '../services/storage';
@@ -27,7 +28,8 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
   // Hantera Android Back
   useEffect(() => {
     if (showAIScout) return registerBackHandler(() => setShowAIScout(false));
-  }, [showAIScout]);
+    if (editingRoutine) return registerBackHandler(() => setEditingRoutine(null));
+  }, [showAIScout, editingRoutine]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -111,48 +113,73 @@ export const RoutinePicker: React.FC<RoutinePickerProps> = ({ onStart, activeZon
   }
 
   return (
-    <div className="space-y-4 animate-in fade-in">
-      {/* AI SCOUT HÖGST UPP */}
+    <div className="space-y-4 animate-in fade-in pb-20">
+      
+      {/* 1. FRI TRÄNING - NU MED STOR DESIGN */}
       <button 
-        onClick={() => setShowAIScout(true)}
+        onClick={() => onStart([], "Fri Träning")}
         className="w-full bg-accent-blue/10 border border-accent-blue/30 p-8 rounded-[40px] flex items-center justify-between group active:scale-95 transition-all shadow-lg"
       >
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-accent-blue/20 rounded-[24px] flex items-center justify-center text-accent-blue">
-            <Sparkles size={32} />
+            <Dumbbell size={32} />
           </div>
           <div className="text-left">
-            <span className="text-2xl font-black uppercase italic tracking-tight text-white block">AI Scout</span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-accent-blue/80">Generera pass för {activeZone.name}</span>
+            <span className="text-2xl font-black uppercase italic tracking-tight text-white block">Fri Träning</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-accent-blue/80">Logga pass fritt</span>
           </div>
         </div>
         <ChevronRight size={32} className="text-accent-blue" />
       </button>
 
-      {/* FRI TRÄNING */}
+      {/* 2. AI SCOUT - NU MED STANDARD DESIGN */}
       <button 
-        onClick={() => onStart([], "Fri Träning")}
-        className="w-full bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all"
+        onClick={() => setShowAIScout(true)}
+        className="w-full bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all group hover:bg-white/10"
       >
         <div className="flex items-center gap-6">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center"><Dumbbell size={24} /></div>
-          <div className="text-left"><h4 className="text-lg font-black uppercase italic leading-none">Fri Träning</h4><p className="text-[10px] font-black text-text-dim uppercase mt-1">Logga fritt</p></div>
+          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:bg-accent-blue/20 group-hover:text-accent-blue transition-colors">
+            <Sparkles size={24} />
+          </div>
+          <div className="text-left">
+            <h4 className="text-lg font-black uppercase italic leading-none">AI Scout</h4>
+            <p className="text-[10px] font-black text-text-dim uppercase mt-1">Generera pass</p>
+          </div>
         </div>
-        <ChevronRight size={24} />
+        <ChevronRight size={24} className="text-text-dim group-hover:text-white transition-colors" />
       </button>
+
+      {/* 3. SKAPA NY RUTIN */}
+      <button 
+        onClick={() => setEditingRoutine({})}
+        className="w-full bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all group hover:bg-white/10"
+      >
+        <div className="flex items-center gap-6">
+          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:bg-accent-green/20 group-hover:text-accent-green transition-colors">
+            <Plus size={24} />
+          </div>
+          <div className="text-left">
+            <h4 className="text-lg font-black uppercase italic leading-none">Skapa Rutin</h4>
+            <p className="text-[10px] font-black text-text-dim uppercase mt-1">Designa eget pass</p>
+          </div>
+        </div>
+        <ChevronRight size={24} className="text-text-dim group-hover:text-white transition-colors" />
+      </button>
+
+      {routines.length > 0 && <div className="h-px bg-white/10 my-4" />}
 
       {routines.map(routine => (
           <div key={routine.id} className="relative group flex gap-2">
-            <button onClick={() => handleSelectRoutine(routine)} className="flex-1 bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all">
+            <button onClick={() => handleSelectRoutine(routine)} className="flex-1 bg-white/5 border border-white/10 p-6 rounded-[32px] flex items-center justify-between active:scale-95 transition-all hover:bg-white/10">
               <div className="flex items-center gap-6">
                 <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center"><Bookmark size={24} className="text-white/40" /></div>
-                <div className="text-left"><h4 className="text-lg font-black uppercase italic leading-none">{routine.name}</h4><p className="text-[10px] font-black text-text-dim uppercase mt-1 tracking-widest">{routine.exercises.length} övningar</p></div>
+                <div className="text-left"><h4 className="text-lg font-black uppercase italic leading-none truncate max-w-[150px]">{routine.name}</h4><p className="text-[10px] font-black text-text-dim uppercase mt-1 tracking-widest">{routine.exercises.length} övningar</p></div>
               </div>
               <Play size={20} className="text-white/40 group-hover:text-accent-pink" />
             </button>
             <div className="flex flex-col gap-2">
-              <button onClick={() => setEditingRoutine(routine)} className="p-4 bg-white/5 rounded-2xl text-text-dim"><Edit3 size={18} /></button>
-              <button onClick={() => deleteRoutine(routine.id)} className="p-4 bg-white/5 rounded-2xl text-text-dim"><Trash2 size={18} /></button>
+              <button onClick={() => setEditingRoutine(routine)} className="p-4 bg-white/5 rounded-2xl text-text-dim hover:text-white hover:bg-white/10 transition-colors"><Edit3 size={18} /></button>
+              <button onClick={() => deleteRoutine(routine.id)} className="p-4 bg-white/5 rounded-2xl text-text-dim hover:text-red-500 hover:bg-red-500/10 transition-colors"><Trash2 size={18} /></button>
             </div>
           </div>
         ))}

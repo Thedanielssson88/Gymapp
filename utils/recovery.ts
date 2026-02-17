@@ -1,10 +1,11 @@
+
 import { WorkoutSession, MuscleGroup, Exercise, WorkoutSet, UserProfile } from '../types';
 
 export type MuscleStatus = {
   [key in MuscleGroup]: number; // 0 to 100
 };
 
-const RECOVERY_HOURS = 48; // 48h för full återhämtning (mer responsivt)
+const RECOVERY_HOURS = 72; // Ökat till 72h för att matcha tung styrketräning
 
 export const ALL_MUSCLE_GROUPS: MuscleGroup[] = [
   'Mage', 'Rygg', 'Biceps', 'Bröst', 'Säte', 'Baksida lår', 
@@ -30,39 +31,52 @@ export const calculateExerciseImpact = (
     
     switch(trackingType) {
         case 'time_only':
+            // Tid: 1 poäng per sekund * bwFactor.
             const duration = s.duration || 0;
-            const effectiveBodyweightTime = userBodyWeight * (exData.bodyweightCoefficient || 0.5);
-            // 10 sekunders ansträngning motsvarar ungefär 1 "rep" med kroppsvikten
-            setImpact = (duration / 10) * effectiveBodyweightTime;
+            const bwFactorTime = (userBodyWeight / 60) * (exData.bodyweightCoefficient || 0.5);
+            setImpact = duration * 1.5 * Math.max(1, bwFactorTime) * (exData.difficultyMultiplier || 1);
             break;
             
         case 'time_distance':
-            const distancePoints = (s.distance || 0) * 0.01;
-            const timePoints = (s.duration || 0) / 60 * 5;
-            setImpact = distancePoints + timePoints;
+            // Cardio - Uppskruvat rejält för att matcha tunga lyft
+            // 10km = 10000m * 1.5 = 15000p.
+            // 60min = 3600s * 0.2 = 720p.
+            // Total ~15720p för 10km/h. Med divisor 300 ger detta ~52 i Strain Score (Mycket ansträngande).
+            const distancePoints = (s.distance || 0) * 1.5; 
+            const timePoints = (s.duration || 0) * 0.2;
+            setImpact = (distancePoints + timePoints) * (exData.difficultyMultiplier || 1);
             break;
             
         case 'reps_only':
+            // Kroppsvikt
             const bodyweightLoadReps = userBodyWeight * (exData.bodyweightCoefficient || 0.7);
-            setImpact = bodyweightLoadReps * (s.reps || 0);
+            setImpact = bodyweightLoadReps * (s.reps || 0) * (exData.difficultyMultiplier || 1);
             break;
 
         case 'distance_weight':
-            const carryImpact = (s.weight || 0) * (s.distance || 0) * 0.1;
-            setImpact = carryImpact;
+            // Farmers walk
+            const carryImpact = (s.weight || 0) * (s.distance || 0) * 1.0;
+            setImpact = carryImpact * (exData.difficultyMultiplier || 1);
             break;
             
         case 'reps_weight':
         default:
             const addedBodyweightLoad = userBodyWeight * (exData.bodyweightCoefficient || 0);
             const effectiveLoad = addedBodyweightLoad + (s.weight || 0);
-            setImpact = effectiveLoad * (s.reps || 0);
+            
+            // Icke-linjär skalning för tunga lyft.
+            // Tidigare: 1 + (load / 200). Nu: 1 + (load / 100).
+            // Exempel 140kg: 1 + 1.4 = 2.4 multiplier (istället för 1.7).
+            // Detta gör att tunga basövningar smäller mycket högre.
+            const heavyLoadFactor = 1 + (effectiveLoad / 100);
+            
+            setImpact = effectiveLoad * (s.reps || 0) * heavyLoadFactor * (exData.difficultyMultiplier || 1);
             break;
     }
     return sum + setImpact;
   }, 0);
   
-  return totalImpact * exData.difficultyMultiplier;
+  return totalImpact;
 };
 
 
@@ -83,7 +97,8 @@ export const calculateMuscleRecovery = (
     const sessionTime = new Date(session.date).getTime();
     const hoursSince = (now - sessionTime) / (1000 * 60 * 60);
     
-    if (hoursSince > 120) return;
+    // Använder den nya konstanten (72h)
+    if (hoursSince > (RECOVERY_HOURS * 1.5)) return;
 
     const sessionRpe = session.rpe || 7.5; 
     const intensityFactor = sessionRpe / 7.5; 
@@ -99,7 +114,12 @@ export const calculateMuscleRecovery = (
       if (setsToCount.length === 0) return;
 
       const baseFatigue = calculateExerciseImpact(exData, setsToCount, userProfile.weight);
-      const finalFatigue = (baseFatigue / 250) * intensityFactor;
+      
+      // SÄNKT DIVISOR: Från 300 till 60.
+      // Detta gör systemet 5 gånger känsligare.
+      // Exempel 140kg bänk x 8 x 4 = ~10,000 impact / 60 = 166% fatigue -> 0% återhämtning. Rätt.
+      // Exempel 40kg RDL x 10 x 3 = ~1600 impact / 60 = 26% fatigue. Rätt.
+      const finalFatigue = (baseFatigue / 60) * intensityFactor;
 
       const primaries = exData.primaryMuscles?.length ? exData.primaryMuscles : exData.muscleGroups;
       primaries?.forEach(m => applyFatigue(status, m, finalFatigue, hoursSince));
@@ -113,7 +133,11 @@ export const calculateMuscleRecovery = (
 const applyFatigue = (status: MuscleStatus, muscle: MuscleGroup, amount: number, hoursSince: number) => {
   if (status[muscle] === undefined) return;
   
+  // Återhämtningen är nu spridd över 72h
   const recoveryFactor = Math.min(1, hoursSince / RECOVERY_HOURS);
+  
+  // Icke-linjär återhämtning (går långsammare i början om man är riktigt sliten)
+  // Men vi håller det linjärt för nu för att det är mer förutsägbart för användaren.
   const remainingFatigue = amount * (1 - recoveryFactor);
 
   if (remainingFatigue > 0) {
@@ -154,7 +178,7 @@ export const getMuscleWorkloadDetails = (
 ): WorkloadDetail[] => {
   const details: WorkloadDetail[] = [];
   const now = new Date();
-  const RECOVERY_WINDOW_HOURS = 96; // 4 dagar
+  const RECOVERY_WINDOW_HOURS = 96; // 4 dagar för historik-listan
 
   const recentHistory = history.filter(h => {
       const diff = now.getTime() - new Date(h.date).getTime();
@@ -175,6 +199,7 @@ export const getMuscleWorkloadDetails = (
         
         const hoursSince = (now.getTime() - new Date(session.date).getTime()) / 3600000;
         
+        // Use a simpler calc for the list view, but decaying
         const rawScore = completedSets.length * (exDef.difficultyMultiplier || 1) * (hitsPrimary ? 10 : 5);
         const decayedScore = Math.max(0, rawScore * (1 - hoursSince / RECOVERY_WINDOW_HOURS));
 

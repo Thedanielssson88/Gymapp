@@ -269,7 +269,9 @@ export interface RecurringPlan {
 }
 
 export interface RecurringPlanForDisplay extends RecurringPlan {
-  isTemplate: true; 
+  isTemplate: true;
+  date: string;
+  isCompleted: boolean;
 }
 
 export type PlannedActivityForLogDisplay = ScheduledActivity | RecurringPlanForDisplay;

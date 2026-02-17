@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { X, Check, ChevronUp, ChevronDown, Scale } from 'lucide-react';
 import { PlateDisplay } from './PlateDisplay';
@@ -24,6 +25,8 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
   title, unit, value, step = 1, min = 0, max = 99999, precision = 2, barWeight = 0, onSave, onClose, availablePlates, userProfile
 }) => {
   const [localVal, setLocalVal] = useState(value);
+  const [isEditing, setIsEditing] = useState(false);
+  const [manualInput, setManualInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,11 +73,13 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
     };
 
     useEffect(() => {
-        if (scrollRef.current) {
-            const el = scrollRef.current.querySelector(`[data-value="${localVal}"]`);
+        if (scrollRef.current && !isEditing) {
+            // Find closest option to scroll to
+            const closest = Math.round(localVal / m_step) * m_step;
+            const el = scrollRef.current.querySelector(`[data-value="${closest}"]`);
             if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center' });
         }
-    }, [localVal]);
+    }, [localVal, isEditing]);
 
     return (
       <div className="fixed inset-0 z-[300] flex items-center justify-center px-4 animate-in fade-in duration-200">
@@ -84,10 +89,33 @@ export const NumberPickerModal: React.FC<NumberPickerModalProps> = ({
             <h3 className="text-xl font-black italic uppercase text-white tracking-tighter">{title}</h3>
             <button onClick={onClose} className="p-2 bg-white/5 rounded-full text-text-dim hover:text-white transition-colors"><X size={20}/></button>
           </div>
-          <div className="text-center text-5xl font-black italic text-accent-blue mb-10 flex items-baseline justify-center gap-2">
-            {formatDisplayValue(localVal)}
-            {localVal < 1000 && <span className="text-xl uppercase not-italic text-text-dim">m</span>}
+          
+          <div className="text-center mb-10 flex items-baseline justify-center gap-2 h-20">
+            {isEditing ? (
+              <input
+                type="number"
+                autoFocus
+                onFocus={(e) => e.target.select()}
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                onBlur={() => {
+                  const val = parseInt(manualInput);
+                  if (!isNaN(val)) setLocalVal(Math.max(min, Math.min(max, val)));
+                  setIsEditing(false);
+                }}
+                className="w-48 bg-transparent text-5xl font-black italic text-accent-blue text-center outline-none border-b-2 border-accent-blue"
+              />
+            ) : (
+              <button 
+                onClick={() => { setManualInput(localVal.toString()); setIsEditing(true); }}
+                className="text-5xl font-black italic text-accent-blue hover:scale-105 transition-transform"
+              >
+                {formatDisplayValue(localVal)}
+              </button>
+            )}
+            {!isEditing && localVal < 1000 && <span className="text-xl uppercase not-italic text-text-dim">m</span>}
           </div>
+
           <div ref={scrollRef} className="w-full flex gap-4 overflow-x-auto pb-8 scrollbar-hide snap-x snap-mandatory px-[40%] mb-6">
             {options.map((opt) => (
               <button key={opt} data-value={opt} onClick={() => setLocalVal(opt)} className={`flex-shrink-0 min-w-[64px] h-16 px-4 rounded-2xl flex items-center justify-center text-sm font-black snap-center transition-all ${opt === localVal ? 'bg-accent-blue text-black scale-125 shadow-lg' : 'bg-white/5 text-text-dim'}`}>

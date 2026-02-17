@@ -1,5 +1,4 @@
 
-
 import Dexie, { type Table } from 'dexie';
 import { 
   UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, 
@@ -48,8 +47,36 @@ export class GymDatabase extends Dexie {
 
   async syncExercises() {
     try {
-      await this.exercises.bulkPut(INITIAL_EXERCISES as readonly Exercise[]);
-      console.log("Övningsbiblioteket har synkroniserats!");
+      // 1. Hämta befintliga övningar från databasen för att inte tappa användardata (bilder, betyg, score)
+      const existingExercises = await this.exercises.toArray();
+      const existingMap = new Map<string, Exercise>(existingExercises.map(e => [e.id, e]));
+
+      // 2. Skapa en sammanslagen lista
+      const mergedExercises = INITIAL_EXERCISES.map(initEx => {
+        const saved = existingMap.get(initEx.id);
+        if (saved) {
+          // Explicit merge för att garantera att vi inte tappar bilder
+          return {
+            ...initEx, // Grunddata från kod (namn, beskrivning etc)
+            
+            // Kritisk användardata som måste bevaras
+            image: saved.image || initEx.image, 
+            score: saved.score ?? initEx.score,
+            userRating: saved.userRating ?? initEx.userRating,
+            userModified: saved.userModified ?? initEx.userModified,
+            trackingType: saved.trackingType ?? initEx.trackingType,
+            
+            // Bevara ev. ändringar i utrustning eller muskler om användaren redigerat
+            equipment: saved.userModified ? (saved.equipment || initEx.equipment) : initEx.equipment,
+            primaryMuscles: saved.userModified ? (saved.primaryMuscles || initEx.primaryMuscles) : initEx.primaryMuscles
+          };
+        }
+        return initEx;
+      });
+
+      // 3. Spara ner den sammanslagna listan
+      await this.exercises.bulkPut(mergedExercises);
+      console.log("Övningsbiblioteket har synkroniserats (Bilder & Data bevarad)!");
     } catch (error) {
       console.error("Fel vid synkronisering av övningar:", error);
     }

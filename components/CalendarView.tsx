@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isToday } from 'date-fns';
 import { sv } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { WorkoutSession, PlannedActivityForLogDisplay } from '../types';
+import { WorkoutSession, PlannedActivityForLogDisplay, ScheduledActivity, RecurringPlanForDisplay } from '../types';
 
 interface CalendarViewProps {
   history: WorkoutSession[];
@@ -21,7 +21,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ history, plannedActi
 
   const handleDayClick = (day: Date) => {
     const historyItem = history.find(h => isSameDay(new Date(h.date), day));
-    const plannedItem = plannedActivities.find(p => !p.isCompleted && isSameDay(new Date(p.date), day));
+    
+    const plannedItem = plannedActivities.find(p => {
+        if ('isTemplate' in p) {
+            const rp = p as RecurringPlanForDisplay;
+            if (!rp.daysOfWeek.includes(day.getDay())) return false;
+            
+            const start = new Date(rp.startDate); start.setHours(0,0,0,0);
+            if (day < start) return false;
+            
+            if (rp.endDate) {
+                const end = new Date(rp.endDate); end.setHours(23,59,59,999);
+                if (day > end) return false;
+            }
+            
+            const hasConcrete = plannedActivities.some(other => 
+                !('isTemplate' in other) && 
+                (other as ScheduledActivity).recurrenceId === rp.id && 
+                isSameDay(new Date(other.date), day)
+            );
+            return !hasConcrete;
+        }
+        return !p.isCompleted && isSameDay(new Date(p.date), day);
+    });
     
     if (historyItem) {
       onDayClick(historyItem);
@@ -51,7 +73,30 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ history, plannedActi
       <div className="grid grid-cols-7 gap-1">
         {days.map((day, i) => {
           const dayHistory = history.filter(h => isSameDay(new Date(h.date), day));
-          const dayPlanned = plannedActivities.filter(p => !p.isCompleted && isSameDay(new Date(p.date), day));
+          
+          const dayPlanned = plannedActivities.filter(p => {
+             if ('isTemplate' in p) {
+                const rp = p as RecurringPlanForDisplay;
+                if (!rp.daysOfWeek.includes(day.getDay())) return false;
+                
+                const start = new Date(rp.startDate); start.setHours(0,0,0,0);
+                if (day < start) return false;
+                
+                if (rp.endDate) {
+                    const end = new Date(rp.endDate); end.setHours(23,59,59,999);
+                    if (day > end) return false;
+                }
+                
+                const hasConcrete = plannedActivities.some(other => 
+                    !('isTemplate' in other) && 
+                    (other as ScheduledActivity).recurrenceId === rp.id && 
+                    isSameDay(new Date(other.date), day)
+                );
+                return !hasConcrete;
+             }
+             return !p.isCompleted && isSameDay(new Date(p.date), day);
+          });
+
           const hasActivity = dayHistory.length > 0 || dayPlanned.length > 0;
           
           const isCurrentMonthDay = isSameMonth(day, monthStart);

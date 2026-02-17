@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Send, Loader2, Save, Calendar, Repeat, Clock, Dumbbell } from 'lucide-react';
 import { generateProfessionalPlan } from '../services/geminiService';
@@ -19,6 +18,7 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
 
   // Settings
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [daysPerWeek, setDaysPerWeek] = useState(3);
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [weeksToSchedule, setWeeksToSchedule] = useState(4); // Default 4 veckor
@@ -58,12 +58,8 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
     try {
       const fullHistory = await storage.getHistory();
       
-      const today = new Date();
-      const dayOfWeek = today.getDay(); // 0=Sön, 1=Mån
-      const daysUntilMonday = (dayOfWeek === 1) ? 0 : (8 - dayOfWeek) % 7;
-      const nextMonday = new Date(today);
-      nextMonday.setDate(today.getDate() + daysUntilMonday);
-      nextMonday.setHours(0, 0, 0, 0);
+      const startObj = new Date(startDate);
+      startObj.setHours(0, 0, 0, 0);
 
       const programId = `ai-prog-${Date.now()}`;
       const newProgram: AIProgram = {
@@ -99,8 +95,9 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
         const weekNum = r.weekNumber || 1;
         const dayNum = r.scheduledDay || 1;
         
-        const sessionDate = new Date(nextMonday);
-        sessionDate.setDate(nextMonday.getDate() + ((weekNum - 1) * 7) + (dayNum - 1));
+        const sessionDate = new Date(startObj);
+        // Calculate date: Start Date + ((Week - 1) * 7) + (Day - 1)
+        sessionDate.setDate(startObj.getDate() + ((weekNum - 1) * 7) + (dayNum - 1));
 
         const exercisesWithWeights: PlannedExercise[] = r.exercises.map((ex) => {
             const repsString = ex.targetReps.toString();
@@ -130,7 +127,7 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
       await storage.saveAIProgram(newProgram);
       for (const mission of newMissions) { await storage.addUserMission(mission); }
       
-      alert(`Program sparat! ${plan.routines.length} pass har lagts till i din kalender över ${weeksToSchedule} veckor.`);
+      alert(`Program sparat! ${plan.routines.length} pass har lagts till i din kalender över ${weeksToSchedule} veckor med start ${startDate}.`);
       setPlan(null);
       setRequest('');
       onClose();
@@ -151,6 +148,19 @@ export const AIArchitect: React.FC<AIArchitectProps> = ({ onClose }) => {
         </div>
         
         <div className="space-y-3 mb-4">
+            {/* Start Date Selection */}
+            <div className="bg-black/40 p-3 rounded-xl border border-white/5">
+                <label className="text-[10px] text-text-dim font-bold uppercase mb-2 flex items-center gap-1">
+                    <Calendar size={12}/> Startdatum
+                </label>
+                <input 
+                    type="date" 
+                    value={startDate} 
+                    onChange={(e) => setStartDate(e.target.value)} 
+                    className="w-full bg-transparent text-white font-bold outline-none text-sm placeholder-text-dim"
+                />
+            </div>
+
             <div className="bg-black/40 p-3 rounded-xl border border-white/5">
                 <label className="text-[10px] text-text-dim font-bold uppercase mb-2 flex items-center gap-1"><Repeat size={12}/> Programlängd</label>
                 <div className="flex gap-2">

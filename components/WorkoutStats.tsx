@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { WorkoutSession, Exercise, MuscleGroup, UserProfile } from '../types';
 import { calculateExerciseImpact } from '../utils/recovery';
-import { X, Dumbbell, Activity, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Dumbbell, Activity, Plus, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 
 interface WorkoutStatsProps {
   session: WorkoutSession | null;
@@ -82,8 +83,11 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // SCALING FACTOR: Förvandlar råa poäng (t.ex. 20 000) till en "Strain Score" (0-100)
+  const POINTS_DIVISOR = 300;
+
   const stats = useMemo(() => {
-    if (!session) return { totalLoad: 0, totalSets: 0, totalReps: 0 };
+    if (!session) return { totalLoad: 0, totalSets: 0, totalReps: 0, strainScore: 0 };
 
     let totalLoad = 0;
     let totalSets = 0;
@@ -103,7 +107,9 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
       });
     });
 
-    return { totalLoad, totalSets, totalReps };
+    const strainScore = Math.round(totalLoad / POINTS_DIVISOR);
+
+    return { totalLoad, totalSets, totalReps, strainScore };
   }, [session, allExercises, userProfile]);
 
   // Lås scroll på bakgrunden när modalen är öppen
@@ -166,7 +172,6 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
     return { muscleLoad, totalLoadScore };
   }, [session, allExercises, userProfile]);
 
-  // FIX: Explicitly typed 'm' to prevent type inference to 'unknown'
   const maxScoreInSession = useMemo(() => Math.max(...Object.values(muscleStats.muscleLoad).map((m: { score: number }) => m.score), 1), [muscleStats]);
 
   // Färglogik baserat på Score
@@ -179,6 +184,13 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
     if (percentageOfMax < 33) return '#3b82f660'; 
     if (percentageOfMax < 66) return '#3b82f6';
     return '#2563eb';
+  };
+
+  const getStrainColor = (score: number) => {
+    if (score < 20) return 'text-accent-green'; // Lätt
+    if (score < 45) return 'text-accent-blue';  // Medel
+    if (score < 70) return 'text-yellow-500';   // Hårt
+    return 'text-accent-pink';                  // Extremt
   };
   
   const p = (muscle: MuscleGroup) => ({
@@ -248,10 +260,20 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ session, allExercise
     <>
       <div className="bg-[#1a1721] rounded-2xl border border-white/5 p-4 flex justify-around items-center">
         <div className="flex-1 text-center">
-          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1">Total Belastning</p>
-          <div className="flex items-baseline justify-center gap-2">
-            <span className="text-4xl font-black italic text-white tracking-tighter">{Math.round(stats.totalLoad)}</span>
-            <span className="text-sm font-bold uppercase">Poäng</span>
+          <p className="text-[10px] font-black text-text-dim uppercase tracking-widest mb-1 flex items-center justify-center gap-1">
+            <Zap size={10} /> Belastning
+          </p>
+          <div className="flex flex-col items-center">
+            <div className="flex items-baseline justify-center gap-2">
+                <span className={`text-4xl font-black italic tracking-tighter ${getStrainColor(stats.strainScore)}`}>{stats.strainScore}</span>
+                <span className="text-sm font-bold uppercase text-white/40">Strain</span>
+            </div>
+            <div className="w-24 h-1.5 bg-white/10 rounded-full mt-2 overflow-hidden">
+                <div 
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${getStrainColor(stats.strainScore).replace('text-', 'bg-')}`} 
+                    style={{ width: `${Math.min(100, stats.strainScore)}%` }} 
+                />
+            </div>
           </div>
         </div>
         <div className="w-px h-12 bg-white/5" />

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Zone, WorkoutSession, Exercise, BiometricLog, PlannedExercise, GoalTarget, WorkoutRoutine, ScheduledActivity, RecurringPlan, PlannedActivityForLogDisplay, UserMission, BodyMeasurements, SetType } from './types';
 import { WorkoutView } from './components/WorkoutView';
@@ -141,14 +142,21 @@ export default function App() {
     const handleGlobalClick = (e: MouseEvent) => {
       const isVibrationEnabled = user?.settings?.vibrateButtons ?? true;
       if (!isVibrationEnabled) return;
+      
       const target = e.target as HTMLElement;
       const button = target.closest('button, a, [role="button"]');
-      if (button) {
+      
+      // Kontrollera om knappen är disabled
+      const isDisabled = button && ((button as HTMLButtonElement).disabled || button.getAttribute('aria-disabled') === 'true');
+
+      if (button && !isDisabled) {
         triggerHaptic.light();
       }
     };
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
+    
+    // Använd capture: true för att fånga eventet innan stopPropagation() kan stoppa det i barn-komponenter
+    window.addEventListener('click', handleGlobalClick, true);
+    return () => window.removeEventListener('click', handleGlobalClick, true);
   }, [user?.settings?.vibrateButtons]);
 
   const refreshData = async () => {
@@ -365,11 +373,18 @@ export default function App() {
       ...pe,
       sets: pe.sets.map(s => ({...s, completed: false}))
     }));
-    if (finalExercises.length === 0) {
-        alert("No exercises left after filtering for this zone. Workout not started.");
+
+    // KONTROLL: Hade ursprungspasset övningar?
+    const originalHasExercises = pendingActivity.exercises && pendingActivity.exercises.length > 0;
+
+    // Om ursprungspasset hade övningar, men alla filtrerades bort => Varna.
+    // Om ursprungspasset var tomt (0 övningar) => Tillåt start (finalExercises är tomt).
+    if (originalHasExercises && finalExercises.length === 0) {
+        alert("Inga övningar kvar efter filtrering för denna zon. Passet startades inte.");
         setPendingActivity(null);
         return;
     }
+
     const isScoutOrManual = !pendingActivity.programId;
     if (isScoutOrManual) {
         const historyData = await storage.getHistory();

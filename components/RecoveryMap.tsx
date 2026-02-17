@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { MuscleGroup, WorkoutSession, Exercise, WorkoutSet } from '../types';
 import { getMuscleWorkloadDetails, WorkloadDetail } from '../utils/recovery';
@@ -57,7 +58,7 @@ const RecoveryDetailModal: React.FC<{
           <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X className="text-white" /></button>
         </header>
 
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="p-6 overflow-y-auto flex-1 space-y-6 pb-24">
           <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl">
             <Activity className="text-text-dim" />
             <div>
