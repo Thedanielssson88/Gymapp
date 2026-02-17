@@ -1,40 +1,20 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Camera, X, Loader2 } from 'lucide-react';
 import { compressImage } from '../utils/image';
-import { storage } from '../services/storage';
 
 interface ImageUploadProps {
-  onImageSaved: (imageId: string) => void;
-  currentImageId?: string;
+  onImageSaved: (base64: string) => void;
+  currentImage?: string;
 }
 
-export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSaved, currentImageId }) => {
-  const [preview, setPreview] = useState<string | null>(null);
+export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSaved, currentImage }) => {
+  const [preview, setPreview] = useState<string | null>(currentImage || null);
   const [isUploading, setIsUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // If the component opens without a pre-existing image, trigger the file picker immediately.
-    if (!currentImageId && inputRef.current) {
-      inputRef.current.click();
-    }
-  }, []); // Empty dependency array ensures this runs only on mount.
-
-  useEffect(() => {
-    if (currentImageId) {
-      storage.getImage(currentImageId).then(url => {
-        if (url) setPreview(url);
-      });
-    } else {
-      setPreview(null);
-    }
-
-    return () => {
-      if (preview && preview.startsWith('blob:')) {
-        URL.revokeObjectURL(preview);
-      }
-    };
-  }, [currentImageId]);
+    setPreview(currentImage || null);
+  }, [currentImage]);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -43,12 +23,9 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({ onImageSaved, currentI
     try {
       setIsUploading(true);
       
-      const compressedBlob = await compressImage(file);
-      const imageId = await storage.saveImage(compressedBlob);
-      
-      const url = URL.createObjectURL(compressedBlob);
-      setPreview(url);
-      onImageSaved(imageId);
+      const base64String = await compressImage(file);
+      setPreview(base64String);
+      onImageSaved(base64String);
       
     } catch (error) {
       alert("Kunde inte spara bilden.");

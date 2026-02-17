@@ -143,29 +143,32 @@ export const ExerciseInfoModal: React.FC<ExerciseInfoModalProps> = ({
             
             <div className="w-full bg-white/5 rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative group">
               {imageSrc ? (
-                <button
-                  onClick={handleEditImage}
-                  className="relative w-full block group"
-                  disabled={!onGoToExercise && !onEditImage}
+                <div 
+                  onClick={(onGoToExercise || onEditImage) ? handleEditImage : undefined} 
+                  className={`relative overflow-hidden ${(onGoToExercise || onEditImage) ? 'cursor-pointer' : ''}`}
                 >
                   <img
                     src={imageSrc}
                     alt={exercise.name}
-                    className="w-full h-auto max-h-[60vh] object-contain mx-auto" 
+                    className="w-full h-auto max-h-[60vh] object-contain mx-auto transition-transform duration-300 group-hover:scale-105" 
                   />
                   {(onGoToExercise || onEditImage) && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <Camera size={32} className="text-white" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-black/60 p-3 rounded-full">
+                        <Camera size={24} className="text-white" />
+                      </div>
                     </div>
                   )}
-                </button>
+                </div>
               ) : (
                 <div 
                   onClick={(onGoToExercise || onEditImage) ? handleEditImage : undefined} 
-                  className={`h-64 flex flex-col items-center justify-center text-text-dim ${(onGoToExercise || onEditImage) ? 'cursor-pointer hover:bg-white/5 transition-colors' : ''}`}
+                  className={`h-64 flex flex-col items-center justify-center text-text-dim ${(onGoToExercise || onEditImage) ? 'cursor-pointer hover:bg-white/5 hover:text-accent-blue transition-all' : ''}`}
                 >
-                  <Camera size={48} className="mb-2 opacity-50" />
-                  <span className="text-sm font-medium">Klicka för att välja bild</span>
+                  <div className="p-4 rounded-full bg-white/5 mb-3 group-hover:scale-110 transition-transform">
+                    <Camera size={40} className="opacity-50 group-hover:opacity-100" />
+                  </div>
+                  <span className="text-sm font-medium tracking-wide uppercase">Klicka för att lägga till bild</span>
                 </div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-[#0f0d15] via-transparent to-transparent opacity-60 pointer-events-none" />

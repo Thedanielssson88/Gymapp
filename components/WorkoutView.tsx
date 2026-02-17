@@ -136,11 +136,11 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
     );
   }, [localSession]);
 
-  const handleImageSaved = async (imageId: string) => {
+  const handleImageSaved = async (base64: string) => {
     if (!imageUploadTarget) return;
 
     try {
-        await db.exercises.update(imageUploadTarget.id, { imageId: imageId });
+        await db.exercises.update(imageUploadTarget.id, { image: base64 });
         onUpdate();
         setImageUploadTarget(null);
     } catch (error) {
@@ -796,7 +796,7 @@ export const WorkoutView: React.FC<WorkoutViewProps> = ({
             </header>
             <div className="flex-1 flex items-center justify-center p-6">
                 <ImageUpload
-                    currentImageId={imageUploadTarget.imageId}
+                    currentImage={imageUploadTarget.image}
                     onImageSaved={handleImageSaved}
                 />
             </div>

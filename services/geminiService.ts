@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone, ProgressionRate } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
@@ -95,14 +96,26 @@ export const recommendExercises = async (
         1. Skriv en kort motivation (max 2 meningar) till varför övningarna valts.
         2. Identifiera de 5-8 bästa övningarna för användarens önskemål.
         3. Sök först i biblioteket. Om en övning finns, använd dess exakta ID.
-        4. Om en viktig övning SAKNAS, skapa den som en ny övning med ALL teknisk data.
-        
-        VIKTIGT FÖR NYA ÖVNINGAR:
-        - id: Skapa ett unikt slug-id (t.ex. 'hyrox-sled-push').
-        - description: MÅSTE vara steg-för-steg instruktioner (1. Gör så, 2. Gör så).
-        - muscleGroups: Breda kategorier (t.ex. 'Rygg', 'Ben').
-        - equipmentRequirements: Array av arrayer. Ex: för Skivstång och Bänk: [["Skivstång"], ["Träningsbänk"]].
-        - tier: 'tier_1' (Tung bas), 'tier_2' (Komplement), 'tier_3' (Isolering/Mobilitet).`,
+        4. Om en viktig övning SAKNAS, skapa den som en ny övning med ALL teknisk data enligt reglerna nedan.
+
+        REGLER FÖR NYA ÖVNINGAR:
+        1. ID: Skapa ett unikt slug-id (t.ex. 'hyrox-sled-push').
+        2. BESKRIVNING: Skriv en tydlig steg-för-steg instruktion på SVENSKA. Fokusera på rörelsen ("Sänk stången till bröstet", "Håll ryggen rak"). Undvik för mycket medicinska termer.
+        3. MUSKLER: Identifiera 'primaryMuscles' (de som gör grovjobbet) och 'secondaryMuscles' (hjälpmuskler).
+        4. KATEGORISERING: 
+          - Pattern: Välj ett passande rörelsemönster.
+          - Tier: Tier 1 (Tunga basövningar), Tier 2 (Komplement), Tier 3 (Isolering/Småövningar).
+        5. BALANSERING AV POÄNG (KRITISKT):
+          - bodyweightCoefficient: Hur mycket av kroppsvikten som räknas. 
+            * 0.0: För alla övningar med externa vikter (Bänkpress, Knäböj med stång).
+            * 0.2 - 0.4: För lätta kroppsviktsövningar på golvet (Ab-wheel, Rygglyft, Situps). 
+            * 0.6 - 0.7: För medeltunga kroppsviktsövningar (Armhävningar, Benböj utan vikt).
+            * 1.0: Endast för övningar där man lyfter hela sin vikt (Chins, Pullups, Dips).
+          - difficultyMultiplier: Sätt mellan 0.5 (lätt) och 1.5 (krävande). En tung basövning bör ligga runt 1.0-1.2. Ab-wheel bör vara ca 0.8.
+        6. UTRUSTNINGSLOGIK:
+          - equipmentRequirements: En array av grupper (arrays). Varje inre grupp är ett 'ELLER'-krav. Flera grupper är 'OCH'-krav.
+            Exempel 1: Kräver Skivstång OCH Bänk: [["Skivstång"], ["Träningsbänk"]].
+            Exempel 2: Kräver Skivstång ELLER Hantlar: [["Skivstång", "Hantlar"]].`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -168,15 +181,42 @@ export const recommendExercises = async (
  * Genererar detaljerad övningsdata från ett namn.
  */
 export const generateExerciseDetailsFromGemini = async (
-  exerciseName: string
+  exerciseName: string,
+  allExercises: Exercise[]
 ): Promise<Partial<Exercise>> => {
   try {
     const apiKey = await getApiKey();
     const ai = new GoogleGenAI({ apiKey });
+    const exerciseIndex = allExercises.map(e => `ID: ${e.id}, Namn: ${e.name}`).join('\n');
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analysera övningen "${exerciseName}" och generera JSON-data.`,
+      contents: `Fyll i data för övningen: "${exerciseName}"
+      
+      EXISTERANDE BIBLIOTEK:
+      ${exerciseIndex}`,
       config: {
+        systemInstruction: `Du är en expert på biomekanik och styrketräning. Din uppgift är att fylla i data för en träningsövning i en app.
+
+INSTRUKTIONER:
+1. BESKRIVNING: Skriv en tydlig steg-för-steg instruktion på SVENSKA. Fokusera på rörelsen ("Sänk stången till bröstet", "Håll ryggen rak").
+2. MUSKLER: Identifiera 'primaryMuscles' (de som gör grovjobbet) och 'secondaryMuscles' (hjälpmuskler).
+3. KATEGORISERING: 
+   - Pattern: Välj ett rörelsemönster.
+   - Tier: Tier 1 (Tunga basövningar), Tier 2 (Komplement), Tier 3 (Isolering/Småövningar).
+4. BALANSERING AV POÄNG (KRITISKT):
+   - bodyweightCoefficient: Detta avgör hur mycket av användarens vikt som räknas. 
+     * 0.0: För alla övningar med externa vikter (Bänkpress, Knäböj med stång).
+     * 0.2 - 0.4: För lätta kroppsviktsövningar på golvet (Ab-wheel, Rygglyft, Situps). 
+     * 0.6 - 0.7: För medeltunga övningar (Armhävningar, Benböj utan vikt).
+     * 1.0: Endast för övningar där man lyfter hela sin vikt (Chins, Pullups, Dips).
+   - difficultyMultiplier: Sätt mellan 0.5 (mycket enkelt) och 1.5 (extremt krävande). En tung basövning bör ligga runt 1.0-1.2. Ab-wheel bör vara ca 0.8.
+5. UTRUSTNINGSLOGIK:
+   - equipment: En platt lista på all utrustning som kan användas (för visning).
+   - equipmentRequirements: En array av grupper (arrays). Varje inre grupp är ett 'ELLER'-krav. Flera grupper är 'OCH'-krav.
+     Exempel 1: Kräver Skivstång OCH Bänk: [["Skivstång"], ["Träningsbänk"]].
+     Exempel 2: Kräver Skivstång ELLER Hantlar: [["Skivstång", "Hantlar"]].
+6. ALTERNATIVA ÖVNINGAR: Hitta 3-4 alternativa övningar från det existerande biblioteket som tränar samma primära muskler och har liknande rörelsemönster. Returnera deras exakta ID:n i fältet 'alternativeExIds'.`,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -185,11 +225,21 @@ export const generateExerciseDetailsFromGemini = async (
             description: { type: Type.STRING },
             primaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
             secondaryMuscles: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
+            muscleGroups: { type: Type.ARRAY, items: { type: Type.STRING, enum: ALL_MUSCLE_GROUPS } },
+            equipment: { type: Type.ARRAY, items: { type: Type.STRING, enum: Object.values(Equipment) } },
+            equipmentRequirements: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING, enum: Object.values(Equipment) } 
+              } 
+            },
             pattern: { type: Type.STRING, enum: Object.values(MovementPattern) },
             tier: { type: Type.STRING, enum: ['tier_1', 'tier_2', 'tier_3'] },
             trackingType: { type: Type.STRING, enum: ['reps_weight', 'time_distance', 'reps_only', 'time_only'] },
             difficultyMultiplier: { type: Type.NUMBER },
-            bodyweightCoefficient: { type: Type.NUMBER }
+            bodyweightCoefficient: { type: Type.NUMBER },
+            alternativeExIds: { type: Type.ARRAY, items: { type: Type.STRING } }
           }
         }
       }

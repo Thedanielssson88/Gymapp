@@ -22,12 +22,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     setLocalProfile(prev => ({
         ...prev,
         settings: {
+            // Provide defaults for all settings to ensure type safety
             includeWarmupInStats: prev.settings?.includeWarmupInStats ?? false,
+            restTimer: prev.settings?.restTimer,
+            keepAwake: prev.settings?.keepAwake,
             bodyViewMode: prev.settings?.bodyViewMode ?? 'list',
+            barbellWeight: prev.settings?.barbellWeight ?? 20,
+            dumbbellBaseWeight: prev.settings?.dumbbellBaseWeight ?? 2,
             vibrateButtons: prev.settings?.vibrateButtons ?? true,
             vibrateTimer: prev.settings?.vibrateTimer ?? true,
             googleDriveLinked: prev.settings?.googleDriveLinked ?? false,
+            autoSyncMode: prev.settings?.autoSyncMode,
+            restoreOnStartup: prev.settings?.restoreOnStartup,
+            lastCloudSync: prev.settings?.lastCloudSync,
+            geminiApiKey: prev.settings?.geminiApiKey,
+            // Then spread the existing settings to keep any other values
             ...prev.settings,
+            // Finally, apply the new value
             [key]: value
         }
     }));
@@ -109,19 +120,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   };
 
   const handleExport = async () => {
-    const allData = await exportDatabase();
-    const backupObject = {
-        timestamp: new Date().toISOString(),
-        device: 'local_export',
-        data: allData
-    };
-    const blob = new Blob([JSON.stringify(backupObject, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `morphfit_backup.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const allData = await exportDatabase();
+      const backupObject = {
+          timestamp: new Date().toISOString(),
+          device: 'local_export',
+          data: allData
+      };
+      const blob = new Blob([JSON.stringify(backupObject, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `morphfit_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch(err) {
+      console.error("Export failed:", err);
+      alert("Kunde inte exportera data.");
+    }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,6 +341,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               Hämta nyckel här
             </a>
           </p>
+        </div>
+      </section>
+
+      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/10 space-y-6">
+        <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
+          <Smartphone className="text-accent-blue" /> Appbeteende
+        </h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white font-medium">Vibration (Haptik)</p>
+              <p className="text-xs text-text-dim">Vibrera vid knapptryck</p>
+            </div>
+            <button
+              onClick={() => handleSettingChange('vibrateButtons', !(localProfile.settings?.vibrateButtons ?? true))}
+              className={`w-12 h-6 rounded-full transition-colors relative ${localProfile.settings?.vibrateButtons ?? true ? 'bg-accent-blue' : 'bg-white/10'}`}
+            >
+              <div className={`w-4 h-4 bg-white rounded-full transition-all absolute top-1 ${localProfile.settings?.vibrateButtons ?? true ? 'left-7' : 'left-1'}`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white font-medium">Timer-vibration</p>
+              <p className="text-xs text-text-dim">Vibrera vid nedräkning</p>
+            </div>
+            <button
+              onClick={() => handleSettingChange('vibrateTimer', !(localProfile.settings?.vibrateTimer ?? true))}
+              className={`w-12 h-6 rounded-full transition-colors relative ${localProfile.settings?.vibrateTimer ?? true ? 'bg-accent-blue' : 'bg-white/10'}`}
+            >
+              <div className={`w-4 h-4 bg-white rounded-full transition-all absolute top-1 ${localProfile.settings?.vibrateTimer ?? true ? 'left-7' : 'left-1'}`} />
+            </button>
+          </div>
         </div>
       </section>
 

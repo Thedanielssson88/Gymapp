@@ -1,4 +1,3 @@
-
 // FIX: Import `importDatabase` to be used in the new `importFullBackup` method.
 import { db, migrateFromLocalStorage, importDatabase } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
@@ -85,10 +84,6 @@ export const storage = {
   },
   
   deleteExercise: async (id: string) => {
-    const ex = await db.exercises.get(id);
-    if (ex?.imageId) {
-      await storage.deleteImage(ex.imageId);
-    }
     await db.exercises.delete(id);
   },
 
@@ -98,27 +93,6 @@ export const storage = {
   getRoutines: async (): Promise<WorkoutRoutine[]> => await db.workoutRoutines.toArray(),
   saveRoutine: async (routine: WorkoutRoutine) => await db.workoutRoutines.put(routine),
   deleteRoutine: async (id: string) => await db.workoutRoutines.delete(id),
-
-  saveImage: async (blob: Blob): Promise<string> => {
-    const id = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    await db.images.put({
-      id,
-      blob,
-      mimeType: blob.type,
-      date: new Date().toISOString()
-    });
-    return id;
-  },
-
-  getImage: async (id: string): Promise<string | null> => {
-    const imgData = await db.images.get(id);
-    if (!imgData) return null;
-    return URL.createObjectURL(imgData.blob);
-  },
-  
-  deleteImage: async (id: string) => {
-    await db.images.delete(id);
-  },
 
   getScheduledActivities: async (): Promise<ScheduledActivity[]> => {
     await storage.generateRecurringActivities();

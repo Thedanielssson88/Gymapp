@@ -131,7 +131,7 @@ export interface Exercise {
   bodyweightCoefficient: number;
   trackingType?: TrackingType;
   imageUrl?: string;
-  imageId?: string;
+  image?: string;
   description?: string;
   instructions?: string[];
   alternativeExIds?: string[];

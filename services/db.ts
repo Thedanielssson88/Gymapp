@@ -8,13 +8,6 @@ import {
 import { INITIAL_EXERCISES } from '../data/initialExercises';
 import { INITIAL_ZONES, INITIAL_GOAL_TARGETS, DEFAULT_PROFILE } from '../constants';
 
-export interface StoredImage {
-  id: string;
-  blob: Blob;
-  mimeType: string;
-  date: string;
-}
-
 export class GymDatabase extends Dexie {
   userProfile!: Table<UserProfile, string>; 
   zones!: Table<Zone, string>;
@@ -23,7 +16,6 @@ export class GymDatabase extends Dexie {
   biometricLogs!: Table<BiometricLog, string>;
   goalTargets!: Table<GoalTarget, string>;
   workoutRoutines!: Table<WorkoutRoutine, string>;
-  images!: Table<StoredImage, string>;
   scheduledActivities!: Table<ScheduledActivity, string>;
   recurringPlans!: Table<RecurringPlan, string>;
   userMissions!: Table<UserMission, string>;
@@ -32,7 +24,7 @@ export class GymDatabase extends Dexie {
   constructor() {
     super('MorphFitDB');
     
-    (this as Dexie).version(6).stores({
+    (this as Dexie).version(7).stores({
       userProfile: 'id',
       zones: 'id',
       exercises: 'id, name, muscleGroups',
@@ -40,7 +32,6 @@ export class GymDatabase extends Dexie {
       biometricLogs: 'id, date',
       goalTargets: 'id',
       workoutRoutines: 'id',
-      images: 'id',
       scheduledActivities: 'id, date, type, recurrenceId, programId',
       recurringPlans: 'id',
       userMissions: 'id, type, isCompleted, exerciseId',

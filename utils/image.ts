@@ -1,7 +1,7 @@
 /**
- * Komprimerar en bildfil och returnerar en Blob redo för lagring.
+ * Komprimerar en bildfil och returnerar en Base64-kodad Data URL redo för lagring.
  */
-export const compressImage = async (file: File, maxWidth = 1000, quality = 0.7): Promise<Blob> => {
+export const compressImage = async (file: File, maxWidth = 1000, quality = 0.7): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -33,10 +33,8 @@ export const compressImage = async (file: File, maxWidth = 1000, quality = 0.7):
         ctx.drawImage(img, 0, 0, width, height);
 
         // Konvertera till Blob (JPEG)
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error("Komprimering misslyckades"));
-        }, 'image/jpeg', quality);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
       };
       
       img.onerror = (err) => reject(err);
@@ -44,11 +42,4 @@ export const compressImage = async (file: File, maxWidth = 1000, quality = 0.7):
     
     reader.onerror = (err) => reject(err);
   });
-};
-
-/**
- * Hjälpfunktion för att skapa en URL som kan visas i <img src="...">
- */
-export const blobToUrl = (blob: Blob): string => {
-  return URL.createObjectURL(blob);
 };
