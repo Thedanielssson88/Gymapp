@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Exercise, WorkoutRoutine, PlannedExercise, WorkoutSet, WorkoutSession } from '../types';
 import { ExerciseLibrary } from './ExerciseLibrary';
@@ -105,7 +106,7 @@ export const RoutineCreator: React.FC<RoutineCreatorProps> = ({
         <button onClick={onCancel} className="p-2 bg-white/5 rounded-full"><X size={20}/></button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide overscroll-contain">
         <div>
           <label className="text-xs font-bold text-text-dim uppercase mb-2 block">Rutinens Namn</label>
           <input 

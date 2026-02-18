@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Zone, Equipment } from '../types';
 import { storage } from '../services/storage';
@@ -185,6 +186,13 @@ const PLATE_OPTIONS = [25, 20, 15, 10, 5, 2.5, 1.25, 0.5, 0.25];
 const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, onDelete }) => {
   const [localZone, setLocalZone] = useState<Zone>(zone);
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
+
   const toggleEquipment = (eq: Equipment) => {
     const hasIt = localZone.inventory.includes(eq);
     let newInv = [];
@@ -224,7 +232,7 @@ const LocationEditor: React.FC<LocationEditorProps> = ({ zone, onClose, onSave, 
         <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X size={24}/></button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32 overscroll-contain">
         
         {/* NAMN INPUT */}
         <div className="space-y-2">

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AIProgram, AIPlanResponse, ScheduledActivity, ProgressionRate, SetType, PlannedExercise, WorkoutSession, Exercise } from '../types';
 import { storage } from '../services/storage';
 import { generateNextPhase } from '../services/geminiService';
@@ -22,6 +22,13 @@ export const NextPhaseModal: React.FC<NextPhaseModalProps> = ({ program, onClose
   const [progressionRate, setProgressionRate] = useState<ProgressionRate>('normal');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+        document.body.style.overflow = 'auto';
+    };
+  }, []);
 
   const handleGenerate = async () => {
     setError(null);

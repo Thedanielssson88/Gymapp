@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { UserProfile, BiometricLog, BodyMeasurements } from '../types';
 import { storage } from '../services/storage';
@@ -182,7 +183,7 @@ const MeasurementDetailModal: React.FC<DetailModalProps> = ({ field, history, on
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 overscroll-contain">
         {/* GRAPH SECTION */}
         <div className="bg-[#1a1721] p-4 rounded-[32px] border border-white/5 h-64 shadow-inner">
           {chartData.length > 1 ? (

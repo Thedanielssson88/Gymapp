@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { UserMission, WorkoutSession, BiometricLog } from '../types';
 import { calculateSmartProgression, getHistoryForGoal } from '../utils/progression';
@@ -18,6 +19,13 @@ export const MissionStatusModal: React.FC<Props> = ({ mission, onClose }) => {
   useEffect(() => {
     return registerBackHandler(onClose);
   }, [onClose]);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+        document.body.style.overflow = 'auto';
+    };
+  }, []);
   
   useEffect(() => {
     const loadData = async () => {
@@ -129,7 +137,7 @@ export const MissionStatusModal: React.FC<Props> = ({ mission, onClose }) => {
          <button onClick={onClose} className="p-2 bg-white/5 rounded-full"><X className="text-white" size={20}/></button>
        </div>
 
-       <div className="p-6 space-y-6 overflow-y-auto">
+       <div className="p-6 space-y-6 overflow-y-auto overscroll-contain">
          {mission.smartConfig.deadline && stats ? (
              <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#1a1721] p-4 rounded-2xl border border-white/5">

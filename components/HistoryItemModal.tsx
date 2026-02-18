@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+
+import React, { useMemo, useEffect } from 'react';
 import { WorkoutSession, Exercise, WorkoutSet, TrackingType } from '../types';
 import { X, MapPin, Activity, Zap, Trophy, MessageSquare, Calendar, Clock } from 'lucide-react';
 import { calculate1RM } from '../utils/fitness';
@@ -58,6 +59,13 @@ interface HistoryItemModalProps {
 
 export const HistoryItemModal: React.FC<HistoryItemModalProps> = ({ session, allExercises, history, onClose }) => {
     
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, []);
+    
     const checkIsPR = useMemo(() => (exerciseId: string, weight: number, reps: number, sessionDate: string) => {
         const current1RM = calculate1RM(weight, reps);
         if (current1RM === 0) return false;
@@ -95,7 +103,7 @@ export const HistoryItemModal: React.FC<HistoryItemModalProps> = ({ session, all
                     </div>
                     <button onClick={onClose} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 text-white shrink-0"><X size={24} /></button>
                 </div>
-                <div className="p-8 pt-4 overflow-y-auto flex-1 space-y-6 scrollbar-hide">
+                <div className="p-8 pt-4 overflow-y-auto flex-1 space-y-6 scrollbar-hide overscroll-contain">
                     {(session.feeling || session.rpe) && (
                         <div className="flex flex-wrap gap-4 p-4 bg-black/20 rounded-2xl border border-white/5">
                             {session.feeling && (<div className="flex items-center gap-2"><Activity size={14} className="text-accent-pink" /><span className="text-[10px] font-black uppercase text-white tracking-widest">{session.feeling}</span></div>)}

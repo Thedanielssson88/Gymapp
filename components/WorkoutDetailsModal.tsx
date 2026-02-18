@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Play, Calendar, Repeat, ArrowRightLeft } from 'lucide-react';
 import { ScheduledActivity, Exercise } from '../types';
 import { storage } from '../services/storage';
@@ -15,6 +15,13 @@ interface WorkoutDetailsModalProps {
 export const WorkoutDetailsModal: React.FC<WorkoutDetailsModalProps> = ({ activity, allExercises, onClose, onStart, onUpdate }) => {
   const [showReschedule, setShowReschedule] = useState(false);
   const [newDate, setNewDate] = useState(activity.date);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
 
   const getExerciseName = (exerciseId: string) => {
     return allExercises.find(ex => ex.id === exerciseId)?.name || exerciseId;
@@ -93,7 +100,7 @@ export const WorkoutDetailsModal: React.FC<WorkoutDetailsModalProps> = ({ activi
         </div>
 
         {/* Content (Scrollable) */}
-        <div className="p-8 overflow-y-auto flex-1 space-y-4 scrollbar-hide">
+        <div className="p-8 overflow-y-auto flex-1 space-y-4 scrollbar-hide overscroll-contain">
           <p className="text-[10px] font-black uppercase text-text-dim tracking-[0.2em] mb-4">Övningslista</p>
           {(activity.exercises || []).map((plannedEx, idx) => (
             <div key={idx} className="bg-white/5 p-5 rounded-2xl border border-white/5 flex items-center justify-between group hover:border-white/10 transition-colors">

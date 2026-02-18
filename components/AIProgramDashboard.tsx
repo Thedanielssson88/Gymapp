@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { AIProgram, ScheduledActivity, WorkoutSession, Exercise, PlannedExercise, SetType } from '../types';
+import { AIProgram, ScheduledActivity, WorkoutSession, Exercise, PlannedExercise, SetType, UserProfile, BiometricLog, UserMission } from '../types';
 import { storage } from '../services/storage';
-import { ChevronRight, Calendar, Activity, XCircle, PlusCircle, TrendingUp, CheckCircle, ArrowLeft, Sparkles, Loader2, Circle, CheckCircle2, Plus, List, Dumbbell, Trash2 } from 'lucide-react';
+import { ChevronRight, Calendar, Activity, XCircle, PlusCircle, TrendingUp, CheckCircle, ArrowLeft, Sparkles, Loader2, Circle, CheckCircle2, Plus, List, Dumbbell, Trash2, BookOpen } from 'lucide-react';
 import { AIArchitect } from './AIArchitect';
 import { WorkoutDetailsModal } from './WorkoutDetailsModal';
 import { AIExerciseRecommender } from './AIExerciseRecommender';
 import { registerBackHandler } from '../utils/backHandler';
 import { NextPhaseModal } from './NextPhaseModal';
 import { ConfirmModal } from './ConfirmModal';
+import { AIArticleGenerator } from './AIArticleGenerator';
 
 interface AIProgramDashboardProps {
   onStartSession: (activity: ScheduledActivity) => void;
@@ -21,14 +22,17 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
   const [scheduled, setScheduled] = useState<ScheduledActivity[]>([]);
   const [history, setHistory] = useState<WorkoutSession[]>([]);
   const [allExercises, setAllExercises] = useState<Exercise[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>([]);
+  const [userMissions, setUserMissions] = useState<UserMission[]>([]);
+
   const [selectedProgram, setSelectedProgram] = useState<AIProgram | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
-  const [activeTab, setActiveTab] = useState<'programs' | 'exercises'>('programs');
+  const [activeTab, setActiveTab] = useState<'programs' | 'exercises' | 'articles'>('programs');
   
   const [viewingActivity, setViewingActivity] = useState<ScheduledActivity | null>(null);
   const [showNextPhaseModal, setShowNextPhaseModal] = useState(false);
   const [programToDelete, setProgramToDelete] = useState<AIProgram | null>(null);
-
 
   useEffect(() => {
     if (showGenerator) return registerBackHandler(() => setShowGenerator(false));
@@ -49,7 +53,8 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
   }, [showNextPhaseModal]);
 
   useEffect(() => {
-    if (activeTab === 'exercises' && !showGenerator && !selectedProgram && !viewingActivity) {
+    const isModalOpen = showGenerator || !!selectedProgram || !!viewingActivity;
+    if (activeTab !== 'programs' && !isModalOpen) {
       return registerBackHandler(() => setActiveTab('programs'));
     }
   }, [activeTab, showGenerator, selectedProgram, viewingActivity]);
@@ -59,6 +64,9 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
     setScheduled(await storage.getScheduledActivities());
     setHistory(await storage.getHistory());
     setAllExercises(await storage.getAllExercises());
+    setUserProfile(await storage.getUserProfile());
+    setBiometricLogs(await storage.getBiometricLogs());
+    setUserMissions(await storage.getUserMissions());
   };
 
   useEffect(() => {
@@ -205,35 +213,10 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
     );
   }
 
-  return (
-    <div className="pb-24 pt-8 px-4 space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col gap-5">
-          <div className="flex justify-between items-center">
-            <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">AI PT</h2>
-            {activeTab === 'programs' && (
-                <button onClick={() => setShowGenerator(true)} className="bg-accent-blue text-black p-3.5 rounded-full hover:bg-white transition-all shadow-lg shadow-accent-blue/30 active:scale-90">
-                    <Plus size={24} strokeWidth={3} />
-                </button>
-            )}
-          </div>
-
-          <div className="flex bg-[#1a1721] p-1.5 rounded-2xl border border-white/5 shadow-inner">
-              <button 
-                onClick={() => setActiveTab('programs')}
-                className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all ${activeTab === 'programs' ? 'bg-white text-black shadow-lg' : 'text-text-dim hover:text-white'}`}
-              >
-                  <List size={16} strokeWidth={3} /> Program
-              </button>
-              <button 
-                onClick={() => setActiveTab('exercises')}
-                className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all ${activeTab === 'exercises' ? 'bg-white text-black shadow-lg' : 'text-text-dim hover:text-white'}`}
-              >
-                  <Dumbbell size={16} strokeWidth={3} /> Scout
-              </button>
-          </div>
-      </div>
-
-      {activeTab === 'programs' ? (
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case 'programs':
+        return (
           <>
             {programs.length === 0 ? (
                 <div className="text-center py-16 border-2 border-dashed border-white/5 rounded-[40px] bg-[#1a1721]/30">
@@ -273,7 +256,9 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
                 </div>
             )}
           </>
-      ) : (
+        );
+      case 'exercises':
+        return (
           <AIExerciseRecommender 
             allExercises={allExercises}
             history={history}
@@ -281,7 +266,45 @@ export const AIProgramDashboard: React.FC<AIProgramDashboardProps> = ({ onStartS
             onEditExercise={onGoToExercise} 
             onStartSession={onStartSession}
           />
-      )}
+        );
+      case 'articles':
+        return userProfile && (
+            <AIArticleGenerator
+                history={history}
+                biometricLogs={biometricLogs}
+                userProfile={userProfile}
+                userMissions={userMissions}
+                aiPrograms={programs}
+                allExercises={allExercises}
+            />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="pb-24 pt-8 px-4 space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col gap-5">
+          <div className="flex justify-between items-center">
+            <h2 className="text-3xl font-black italic uppercase text-white tracking-tighter">AI PT</h2>
+            {activeTab === 'programs' && (
+                <button onClick={() => setShowGenerator(true)} className="bg-accent-blue text-black p-3.5 rounded-full hover:bg-white transition-all shadow-lg shadow-accent-blue/30 active:scale-90">
+                    <Plus size={24} strokeWidth={3} />
+                </button>
+            )}
+          </div>
+
+          <div className="flex bg-[#1a1721] p-1.5 rounded-2xl border border-white/5 shadow-inner">
+              <button onClick={() => setActiveTab('programs')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all ${activeTab === 'programs' ? 'bg-white text-black shadow-lg' : 'text-text-dim hover:text-white'}`}><List size={16} strokeWidth={3} /> Program</button>
+              <button onClick={() => setActiveTab('exercises')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all ${activeTab === 'exercises' ? 'bg-white text-black shadow-lg' : 'text-text-dim hover:text-white'}`}><Dumbbell size={16} strokeWidth={3} /> Scout</button>
+              <button onClick={() => setActiveTab('articles')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all ${activeTab === 'articles' ? 'bg-white text-black shadow-lg' : 'text-text-dim hover:text-white'}`}><BookOpen size={16} strokeWidth={3} /> Artiklar</button>
+          </div>
+      </div>
+      
+      <div className="animate-in fade-in duration-300">
+        {renderActiveTab()}
+      </div>
     </div>
   );
 };

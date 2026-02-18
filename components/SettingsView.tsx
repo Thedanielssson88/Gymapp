@@ -1,9 +1,10 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { UserProfile, Goal, UserSettings } from '../types';
+import { UserProfile, Goal, UserSettings, MagazineTone } from '../types';
 import { storage, exportExerciseLibrary, importExerciseLibrary } from '../services/storage';
 import { db, exportDatabase, importDatabase } from '../services/db';
 import { uploadBackup, listBackups, downloadBackup } from '../services/googleDrive';
-import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2, Timer, Key } from 'lucide-react';
+import { Save, Download, Upload, Smartphone, LayoutList, Map, Thermometer, Dumbbell, Scale, Cloud, RefreshCw, CloudOff, AlertCircle, CheckCircle2, Loader2, Timer, Key, Edit, Users, BarChart, BrainCircuit } from 'lucide-react';
 
 interface SettingsViewProps {
   userProfile: UserProfile;
@@ -36,6 +37,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
             restoreOnStartup: prev.settings?.restoreOnStartup,
             lastCloudSync: prev.settings?.lastCloudSync,
             geminiApiKey: prev.settings?.geminiApiKey,
+            magazineTone: prev.settings?.magazineTone ?? 'friend',
             // Then spread the existing settings to keep any other values
             ...prev.settings,
             // Finally, apply the new value
@@ -121,21 +123,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
 
   const handleExport = async () => {
     try {
-      const allData = await exportDatabase();
-      const backupObject = {
-          timestamp: new Date().toISOString(),
-          device: 'local_export',
-          data: allData
-      };
-      const blob = new Blob([JSON.stringify(backupObject, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `morphfit_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Use the new robust export function in storage service
+      const success = await storage.exportFullBackup();
+      if (!success) {
+        alert("Kunde inte exportera data.");
+      }
     } catch(err) {
       console.error("Export failed:", err);
       alert("Kunde inte exportera data.");
@@ -174,9 +166,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
   
   const handleExportLibrary = async () => {
     const success = await exportExerciseLibrary();
-    if (success) {
-      alert("Ditt övningsbibliotek (inkl. bilder) har exporterats!");
-    }
+    // Success/fail message is handled by native share sheet or the function itself in some cases,
+    // but for web fallback we might want a confirm.
+    // In Native mode, the share sheet IS the confirmation.
   };
 
   const handleImportLibrary = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -192,6 +184,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
     }
   };
   
+  const currentTone = localProfile.settings?.magazineTone || 'friend';
+
   return (
     <div className="space-y-8 pb-32 px-2 animate-in fade-in">
       
@@ -321,7 +315,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
       </section>
 
       {/* AI INSTÄLLNINGAR SEKTION */}
-      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-4">
+      <section className="bg-[#1a1721] p-6 rounded-[32px] border border-white/5 space-y-6">
         <h3 className="text-xl font-black italic uppercase text-white flex items-center gap-2">
           <Key size={18} className="text-accent-blue" /> AI Konfiguration
         </h3>
@@ -341,6 +335,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdat
               Hämta nyckel här
             </a>
           </p>
+        </div>
+        <div>
+            <label className="text-[10px] text-text-dim font-bold uppercase block mb-3">AI-Redaktör Ton</label>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => handleSettingChange('magazineTone', 'friend')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${currentTone === 'friend' ? 'bg-white/10 border-white/20 text-white' : 'border-transparent text-text-dim'}`}>
+                  <Users size={20} /> <span className="text-[9px] font-black uppercase">Peppig Vän</span>
+              </button>
+              <button onClick={() => handleSettingChange('magazineTone', 'coach')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${currentTone === 'coach' ? 'bg-white/10 border-white/20 text-white' : 'border-transparent text-text-dim'}`}>
+                  <BarChart size={20} /> <span className="text-[9px] font-black uppercase">Hård Coach</span>
+              </button>
+              <button onClick={() => handleSettingChange('magazineTone', 'scientist')} className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${currentTone === 'scientist' ? 'bg-white/10 border-white/20 text-white' : 'border-transparent text-text-dim'}`}>
+                  <BrainCircuit size={20} /> <span className="text-[9px] font-black uppercase">Analytiker</span>
+              </button>
+            </div>
         </div>
       </section>
 

@@ -1,9 +1,64 @@
+
 // FIX: Import `importDatabase` to be used in the new `importFullBackup` method.
-import { db, migrateFromLocalStorage, importDatabase } from './db';
+import { db, migrateFromLocalStorage, importDatabase, exportDatabase } from './db';
 import { UserProfile, Zone, Exercise, WorkoutSession, BiometricLog, GoalTarget, WorkoutRoutine, Goal, ScheduledActivity, RecurringPlan, UserMission, AIProgram } from '../types';
 import { DEFAULT_PROFILE } from '../constants';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 
 const ACTIVE_SESSION_KEY = 'morphfit_active_session';
+
+/**
+ * Hjälpfunktion för att spara JSON-filer.
+ * På Android/iOS: Sparar till cachen och öppnar systemets "Dela"-dialog.
+ * På Webb: Skapar en blob och laddar ner via webbläsaren.
+ */
+const saveJsonFile = async (fileName: string, data: any): Promise<boolean> => {
+  const jsonString = JSON.stringify(data, null, 2);
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      // 1. Skriv filen till cachen
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: jsonString,
+        directory: Directory.Cache,
+        encoding: Encoding.UTF8
+      });
+
+      // 2. Dela filen (användaren kan välja att spara till filer, drive, maila etc.)
+      await Share.share({
+        title: 'MorphFit Export',
+        text: `Här är din export: ${fileName}`,
+        url: result.uri,
+        dialogTitle: 'Spara eller dela din fil'
+      });
+      return true;
+    } catch (e) {
+      console.error("Native export failed:", e);
+      alert("Kunde inte spara filen på enheten: " + (e as Error).message);
+      return false;
+    }
+  } else {
+    // Webb-fallback
+    try {
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return true;
+    } catch (e) {
+      console.error("Web export failed:", e);
+      return false;
+    }
+  }
+};
 
 export const storage = {
   init: async () => {
@@ -231,11 +286,10 @@ export const storage = {
     if (!program) return;
   
     await (db as any).transaction('rw', db.aiPrograms, db.scheduledActivities, db.userMissions, async () => {
-      // 1. Delete future, non-completed scheduled activities for this program
-      const today = new Date().toISOString().split('T')[0];
+      // 1. Delete non-completed scheduled activities for this program
       const activitiesToDelete = await db.scheduledActivities
         .where('programId').equals(programId)
-        .filter(act => !act.isCompleted && act.date >= today)
+        .filter(act => !act.isCompleted)
         .primaryKeys();
   
       if (activitiesToDelete.length > 0) {
@@ -258,9 +312,28 @@ export const storage = {
   importFullBackup: async (backup: { data: any }) => {
     await importDatabase(backup.data);
   },
+
+  // --- NYA EXPORT-FUNKTIONER FÖR NATIVE & WEBB ---
+  
+  exportFullBackup: async (): Promise<boolean> => {
+    try {
+      const allData = await exportDatabase();
+      const backupObject = {
+          timestamp: new Date().toISOString(),
+          device: Capacitor.getPlatform(),
+          data: allData
+      };
+      const fileName = `morphfit_backup_${new Date().toISOString().split('T')[0]}.json`;
+      
+      return await saveJsonFile(fileName, backupObject);
+    } catch(err) {
+      console.error("Full backup export failed:", err);
+      return false;
+    }
+  },
 };
 
-export const exportExerciseLibrary = async () => {
+export const exportExerciseLibrary = async (): Promise<boolean> => {
   try {
     const allExercises = await db.exercises.toArray();
     
@@ -272,18 +345,8 @@ export const exportExerciseLibrary = async () => {
       exercises: allExercises
     };
 
-    const blob = new Blob([JSON.stringify(libraryData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `exercise-library-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    return true;
+    const fileName = `exercise-library-${new Date().toISOString().split('T')[0]}.json`;
+    return await saveJsonFile(fileName, libraryData);
   } catch (error) {
     console.error("Export of library failed:", error);
     return false;

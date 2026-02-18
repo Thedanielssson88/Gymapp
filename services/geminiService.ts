@@ -1,10 +1,11 @@
 
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone, ProgressionRate } from "../types";
+import { UserProfile, WorkoutSession, Exercise, MovementPattern, MuscleGroup, AIProgram, AIPlanResponse, Equipment, PlannedExercise, Zone, ProgressionRate, BiometricLog, UserMission, MagazineTone } from "../types";
 import { ALL_MUSCLE_GROUPS } from '../utils/recovery';
 import { storage } from './storage';
 import { ProgressionRules } from "../utils/progression";
+import { calculateVolumeByMuscleGroup, analyzeConsistency } from '../utils/analysis';
+import { calculate1RM } from "../utils/fitness";
 
 export interface ExerciseRecommendation {
   existingId?: string;
@@ -524,3 +525,127 @@ export async function generateWorkoutFromPrompt(
     throw new Error("Kunde inte generera ett AI-pass.");
   }
 }
+
+// --- NEW ENHANCED MAGAZINE ARTICLE GENERATOR ---
+
+export const generateMagazineArticle = async (
+    history: WorkoutSession[],
+    biometrics: BiometricLog[],
+    missions: UserMission[],
+    profile: UserProfile,
+    programs: AIProgram[],
+    allExercises: Exercise[]
+): Promise<any> => {
+    try {
+        const apiKey = await getApiKey();
+        const ai = new GoogleGenAI({ apiKey });
+
+        const historySummary = history.map(s => ({
+            date: s.date,
+            name: s.name,
+            rpe: s.rpe,
+            feeling: s.feeling,
+            exerciseCount: s.exercises.length,
+            exercises: s.exercises.map(e => ({ 
+              name: allExercises.find(ex => ex.id === e.exerciseId)?.name,
+              max1RM: Math.max(...e.sets.map(set => calculate1RM(set.weight, set.reps)))
+            }))
+        }));
+
+        const biometricsSummary = biometrics.map(b => ({ date: b.date, weight: b.weight }));
+        const consistency = analyzeConsistency(history);
+        const volume = calculateVolumeByMuscleGroup(history, allExercises);
+        
+        const toneMapping = {
+            friend: "en peppig, stöttande och glad träningskompis.",
+            coach: "en stenhård, no-nonsense 'drill sergeant'-coach som kräver disciplin.",
+            scientist: "en datadriven, vetenskaplig analytiker som fokuserar på biomekanik och fysiologi."
+        };
+        const selectedTone = toneMapping[profile.settings?.magazineTone || 'friend'];
+
+        const contents = `
+          ANVÄNDARDATA (senaste 30d):
+          - Profil: ${JSON.stringify({ name: profile.name, goal: profile.goal })}
+          - Pass: ${JSON.stringify(historySummary)}
+          - Viktlogg: ${JSON.stringify(biometricsSummary)}
+          - Mål & Program: ${JSON.stringify({ missions, programs })}
+          - Träningsfrekvens: ${JSON.stringify(consistency)}
+          - Total Volym per Muskelgrupp (kg): ${JSON.stringify(volume)}
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: contents,
+            config: {
+              systemInstruction: `Du är en expert-redaktör för den personliga träningstidningen "MorphFit Magazine". Din ton ska vara som ${selectedTone}.
+              UPPGIFT: Analysera datan och generera en engagerande, personlig artikel. Svara ENDAST med ett JSON-objekt enligt schemat.
+              
+              REGLER:
+              1. Var specifik. Använd siffror från datan.
+              2. Hitta "Månadens MVP": den övning med störst %-ökning i 1RM. Om ingen ökning, välj den mest tränade övningen.
+              3. "Quick Fix" ska vara ett konkret, kort tips baserat på en svaghet (t.ex. oregelbunden träning, obalans i volym).
+              4. Var kreativ och insiktsfull. Koppla samman olika datapunkter (t.ex. viktmål och träningsfrekvens).
+              5. Den interaktiva frågan ska vara öppen och uppmuntra till reflektion.`,
+              responseMimeType: "application/json",
+              responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                      title: { type: Type.STRING, description: "En personlig, catchy rubrik (max 8 ord)." },
+                      ingress: { type: Type.STRING, description: "En kort, peppande inledning (2-3 meningar)." },
+                      statusQuo: {
+                          type: Type.OBJECT,
+                          properties: {
+                              title: { type: Type.STRING, default: "Status: Nulägesanalys" },
+                              analysis: { type: Type.STRING, description: "Analys av träningsfrekvens och regelbundenhet." },
+                              tip: { type: Type.STRING, description: "Ett konkret tips baserat på frekvensanalysen." }
+                          }
+                      },
+                      deepDive: {
+                          type: Type.OBJECT,
+                          properties: {
+                              title: { type: Type.STRING, default: "Statistik-dykning" },
+                              analysis: { type: Type.STRING, description: "En insikt om volymfördelning mellan muskelgrupper eller progression mot mål." }
+                          }
+                      },
+                      mvpExercise: {
+                          type: Type.OBJECT,
+                          properties: {
+                              title: { type: Type.STRING, default: "Månadens MVP" },
+                              name: { type: Type.STRING, description: "Namnet på övningen." },
+                              reason: { type: Type.STRING, description: "Varför den är MVP (t.ex. '+5% i 1RM')." }
+                          }
+                      },
+                      quickFix: {
+                          type: Type.OBJECT,
+                          properties: {
+                              title: { type: Type.STRING, default: "Coachens Quick Fix" },
+                              tip: { type: Type.STRING, description: "Ett kort, konkret tips för att fixa en svaghet." }
+                          }
+                      },
+                      coachsCorner: {
+                          type: Type.OBJECT,
+                          properties: {
+                              title: { type: Type.STRING, default: "Coachens Hörn" },
+                              advice: { type: Type.STRING, description: "Ett personligt råd som kopplar ihop mål, biometri och träning." }
+                          }
+                      },
+                      closingQuote: { type: Type.STRING, description: "Ett kort, inspirerande citat." },
+                      interactiveQuestion: { type: Type.STRING, description: "En öppen fråga för användaren att reflektera över." }
+                  },
+                  required: ["title", "ingress", "statusQuo", "deepDive", "mvpExercise", "quickFix", "coachsCorner", "closingQuote", "interactiveQuestion"]
+              }
+            },
+        });
+        
+        const jsonText = response.text;
+        if (!jsonText) throw new Error("Tomt svar från AI:n.");
+        return JSON.parse(jsonText.trim());
+
+    } catch (error) {
+        console.error("Magazine generation error", error);
+        if (error instanceof Error && error.message.includes("Ingen API-nyckel hittad")) {
+            throw error;
+        }
+        throw new Error("AI-redaktören kunde inte skapa en artikel.");
+    }
+};

@@ -1,5 +1,4 @@
 
-
 export enum MovementPattern {
   SQUAT = 'Knäböj',
   HINGE = 'Höftfällning',
@@ -21,6 +20,8 @@ export type TrackingType = 'reps_weight' | 'time_distance' | 'time_only' | 'reps
 export type ExerciseTier = 'tier_1' | 'tier_2' | 'tier_3';
 
 export type ProgressionRate = 'conservative' | 'normal' | 'aggressive';
+
+export type MagazineTone = 'friend' | 'coach' | 'scientist';
 
 export type MuscleGroup = 
   | 'Mage' 
@@ -169,6 +170,7 @@ export interface UserSettings {
   restoreOnStartup?: boolean;
   lastCloudSync?: string;
   geminiApiKey?: string;
+  magazineTone?: MagazineTone;
 }
 
 export interface UserProfile {
